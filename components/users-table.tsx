@@ -8,6 +8,7 @@ import { Edit, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
 
 interface User {
   id: string
@@ -19,8 +20,9 @@ interface User {
   created_at: string
 }
 
-export function UsersTable({ users }: { users: User[] }) {
+export function UsersTable({ users, userRole }: { users: User[]; userRole?: string }) {
   const router = useRouter()
+  const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
 
   const filteredUsers = users.filter(
@@ -38,8 +40,16 @@ export function UsersTable({ users }: { users: User[] }) {
     const { error } = await supabase.from("profiles").update({ is_active: false }).eq("id", id)
 
     if (error) {
-      alert("Error deactivating user: " + error.message)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error deactivating user: " + error.message,
+      })
     } else {
+      toast({
+        title: "User deactivated",
+        description: "The user has been deactivated successfully.",
+      })
       router.refresh()
     }
   }
@@ -50,6 +60,8 @@ export function UsersTable({ users }: { users: User[] }) {
         return "bg-purple-100 text-purple-700"
       case "admin":
         return "bg-blue-100 text-blue-700"
+      case "manager":
+        return "bg-amber-100 text-amber-700"
       case "accountant":
         return "bg-green-100 text-green-700"
       default:
@@ -77,7 +89,7 @@ export function UsersTable({ users }: { users: User[] }) {
             <TableHead>Role</TableHead>
             <TableHead>Organization</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            {userRole === "admin" && <TableHead className="text-right">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -103,23 +115,25 @@ export function UsersTable({ users }: { users: User[] }) {
                     {user.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Link href={`/dashboard/users/${user.id}/edit`}>
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4" />
+                {userRole === "admin" && (
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Link href={`/dashboard/users/${user.id}/edit`}>
+                        <Button variant="ghost" size="sm">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(user.id, user.full_name)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
-                    </Link>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(user.id, user.full_name)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
+                    </div>
+                  </TableCell>
+                )}
               </TableRow>
             ))
           )}

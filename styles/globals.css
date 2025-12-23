@@ -3,8 +3,16 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Override Tailwind v4 lab() colors with RGB fallbacks for compatibility */
+@supports not (color: lab(0% 0 0)) {
+  :root, :host {
+    color-scheme: light;
+  }
+}
+
 :root {
   --background: oklch(1 0 0);
+
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);

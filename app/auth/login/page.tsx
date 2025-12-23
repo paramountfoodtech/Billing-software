@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Spinner } from "@/components/ui/spinner"
+import { useToast } from "@/hooks/use-toast"
+import { FileText, Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -14,15 +17,15 @@ import { useState } from "react"
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+  const { toast } = useToast()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     const supabase = createClient()
     setIsLoading(true)
-    setError(null)
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -30,27 +33,54 @@ export default function LoginPage() {
         password,
       })
       if (error) throw error
-      router.push("/dashboard")
+      
+      // Get user profile to determine redirect based on role
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .single()
+      
+      toast({
+        title: "Welcome back!",
+        description: "You have successfully signed in.",
+      })
+      
+      // Redirect based on role
+      if (profile?.role === "accountant") {
+        router.push("/dashboard/clients")
+      } else {
+        // Admin and manager go to dashboard
+        router.push("/dashboard")
+      }
       router.refresh()
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      toast({
+        variant: "destructive",
+        title: "Sign in failed",
+        description: error instanceof Error ? error.message : "Invalid email or password",
+      })
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10 bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
-          <div className="flex flex-col items-center gap-2 text-center">
-            <h1 className="text-3xl font-bold tracking-tight">Invoice Pro</h1>
-            <p className="text-sm text-muted-foreground">Professional billing management system</p>
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center">
+              <FileText className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Invoice Pro</h1>
+              <p className="text-sm text-muted-foreground mt-1">Professional billing management</p>
+            </div>
           </div>
-          <Card>
+          <Card className="border-slate-200 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-2xl">Login</CardTitle>
-              <CardDescription>Enter your email and password to access your account</CardDescription>
+              <CardTitle className="text-2xl">Sign In</CardTitle>
+              <CardDescription>Enter your credentials to access your account</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleLogin}>
@@ -64,27 +94,49 @@ export default function LoginPage() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      disabled={isLoading}
+                      className="h-11"
                     />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                    />
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Enter your password"
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        disabled={isLoading}
+                        className="h-11 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        disabled={isLoading}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
-                  {error && <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>}
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Signing in..." : "Sign in"}
+                  <Button type="submit" className="w-full h-11" disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Spinner className="mr-2" />
+                        Signing in...
+                      </>
+                    ) : (
+                      "Sign In"
+                    )}
                   </Button>
                 </div>
-                <div className="mt-4 text-center text-sm">
+                <div className="mt-6 text-center text-sm text-muted-foreground">
                   Don't have an account?{" "}
-                  <Link href="/auth/sign-up" className="underline underline-offset-4 font-medium">
-                    Sign up
+                  <Link href="#" className="text-blue-600 hover:underline font-medium">
+                    Contact your administrator
                   </Link>
                 </div>
               </form>

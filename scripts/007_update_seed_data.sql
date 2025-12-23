@@ -1,14 +1,3 @@
--- Insert demo organizations
-INSERT INTO public.organizations (id, name, email, phone) VALUES
-  ('11111111-1111-1111-1111-111111111111', 'Acme Corporation', 'contact@acme.com', '555-0100'),
-  ('22222222-2222-2222-2222-222222222222', 'Beta Industries', 'info@beta.com', '555-0200')
-ON CONFLICT DO NOTHING;
-
--- Update existing profiles to have organization_id
--- This assumes profiles already exist from sign up
-
--- Update seed data to include organization_id
-UPDATE public.clients SET organization_id = '11111111-1111-1111-1111-111111111111' WHERE organization_id IS NULL;
-UPDATE public.products SET organization_id = '11111111-1111-1111-1111-111111111111' WHERE organization_id IS NULL;
-UPDATE public.invoices SET organization_id = '11111111-1111-1111-1111-111111111111' WHERE organization_id IS NULL;
-UPDATE public.payments SET organization_id = '11111111-1111-1111-1111-111111111111' WHERE organization_id IS NULL;
+-- This file is deprecated and not needed
+-- Organizations are created automatically when users sign up
+-- See scripts/006_add_organizations.sql for the handle_new_user() trigger

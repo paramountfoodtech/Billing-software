@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface Organization {
   id: string
@@ -21,6 +22,7 @@ interface Organization {
 
 export function SettingsForm({ organization }: { organization: Organization | null }) {
   const router = useRouter()
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: organization?.name || "",
@@ -41,10 +43,17 @@ export function SettingsForm({ organization }: { organization: Organization | nu
 
       if (error) throw error
 
-      alert("Settings updated successfully!")
+      toast({
+        title: "Success",
+        description: "Settings updated successfully!",
+      })
       router.refresh()
     } catch (error: any) {
-      alert("Error updating settings: " + error.message)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error updating settings: " + error.message,
+      })
     } finally {
       setLoading(false)
     }

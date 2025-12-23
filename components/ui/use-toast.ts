@@ -139,8 +139,30 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, 'id'>
 
+const ensureContent = (variant: ToasterToast['variant'], title?: ToasterToast['title'], description?: ToasterToast['description']) => {
+  const isString = (val: unknown): val is string => typeof val === 'string'
+  const titleText = isString(title) ? title.trim() : title
+  const descText = isString(description) ? description.trim() : description
+
+  const safeTitle = titleText && (isString(titleText) ? titleText.length > 0 : true)
+    ? titleText
+    : variant === 'destructive'
+      ? 'Error'
+      : 'Notice'
+
+  const safeDescription = descText && (isString(descText) ? descText.length > 0 : true)
+    ? descText
+    : variant === 'destructive'
+      ? 'Something went wrong.'
+      : 'Action completed.'
+
+  return { title: safeTitle, description: safeDescription }
+}
+
 function toast({ ...props }: Toast) {
   const id = genId()
+
+  const { title, description } = ensureContent(props.variant, props.title, props.description)
 
   const update = (props: ToasterToast) =>
     dispatch({
@@ -153,6 +175,8 @@ function toast({ ...props }: Toast) {
     type: 'ADD_TOAST',
     toast: {
       ...props,
+      title,
+      description,
       id,
       open: true,
       onOpenChange: (open) => {

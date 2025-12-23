@@ -16,10 +16,10 @@ export default async function UsersPage() {
     redirect("/auth/login")
   }
 
-  // Check if user is super admin
+  // Check role (admin full, manager view-only)
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
-  if (profile?.role !== "super_admin") {
+  if (!profile || (profile.role !== "admin" && profile.role !== "manager")) {
     redirect("/dashboard")
   }
 
@@ -29,6 +29,8 @@ export default async function UsersPage() {
     .select("*, organizations(name)")
     .order("created_at", { ascending: false })
 
+  const userRole = profile.role
+
   return (
     <div className="p-8">
       <div className="flex justify-between items-center mb-6">
@@ -36,15 +38,17 @@ export default async function UsersPage() {
           <h1 className="text-3xl font-bold text-slate-900">User Management</h1>
           <p className="text-slate-500 mt-1">Manage system users and their roles</p>
         </div>
-        <Link href="/dashboard/users/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Add User
-          </Button>
-        </Link>
+        {userRole === "admin" && (
+          <Link href="/dashboard/users/new">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add User
+            </Button>
+          </Link>
+        )}
       </div>
 
-      <UsersTable users={users || []} />
+      <UsersTable users={users || []} userRole={userRole} />
     </div>
   )
 }

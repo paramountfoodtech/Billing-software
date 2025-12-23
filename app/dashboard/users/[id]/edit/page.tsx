@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { UserForm } from "@/components/user-form"
 
-export default async function EditUserPage({ params }: { params: { id: string } }) {
+export default async function EditUserPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
 
   const {
@@ -13,10 +13,10 @@ export default async function EditUserPage({ params }: { params: { id: string } 
     redirect("/auth/login")
   }
 
-  // Check if user is super admin
+  // Check if user is admin
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
-  if (profile?.role !== "super_admin") {
+  if (profile?.role !== "admin") {
     redirect("/dashboard")
   }
 

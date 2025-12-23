@@ -2,7 +2,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create enum types for user roles and invoice statuses
-CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'accountant');
+CREATE TYPE user_role AS ENUM ('admin', 'accountant');
 CREATE TYPE invoice_status AS ENUM ('draft', 'sent', 'paid', 'overdue', 'cancelled');
 CREATE TYPE payment_status AS ENUM ('pending', 'completed', 'failed', 'refunded');
 CREATE TYPE payment_method AS ENUM ('cash', 'bank_transfer', 'check', 'credit_card', 'other');
@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS public.clients (
   zip_code TEXT,
   country TEXT DEFAULT 'USA',
   notes TEXT,
+  value_per_bird DECIMAL(10,2) DEFAULT 0,
   created_by UUID NOT NULL REFERENCES public.profiles(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

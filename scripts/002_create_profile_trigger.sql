@@ -6,12 +6,14 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email, full_name, role)
+  INSERT INTO public.profiles (id, email, full_name, role, is_active, organization_id)
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
-    COALESCE((NEW.raw_user_meta_data->>'role')::user_role, 'accountant')
+    COALESCE((NEW.raw_user_meta_data->>'role')::user_role, 'accountant'),
+    COALESCE((NEW.raw_user_meta_data->>'is_active')::boolean, true),
+    COALESCE((NEW.raw_user_meta_data->>'organization_id')::uuid, NULL)
   )
   ON CONFLICT (id) DO NOTHING;
   

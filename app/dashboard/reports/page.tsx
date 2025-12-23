@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -7,6 +8,19 @@ import { TrendingUp, DollarSign, FileText, Users, Clock, CheckCircle, AlertCircl
 
 export default async function ReportsPage() {
   const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/auth/login")
+  }
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+  if (!profile || (profile.role !== "admin" && profile.role !== "manager")) {
+    redirect("/dashboard")
+  }
 
   // Fetch all necessary data for reports
   const [invoicesResult, paymentsResult, clientsResult] = await Promise.all([
@@ -88,7 +102,7 @@ export default async function ReportsPage() {
             <DollarSign className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">₹{totalRevenue.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground mt-1">All-time payments received</p>
           </CardContent>
         </Card>
@@ -99,7 +113,7 @@ export default async function ReportsPage() {
             <FileText className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalInvoiced.toFixed(2)}</div>
+            <div className="text-2xl font-bold">₹{totalInvoiced.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground mt-1">{invoices.length} invoices created</p>
           </CardContent>
         </Card>
@@ -110,7 +124,7 @@ export default async function ReportsPage() {
             <AlertCircle className="h-4 w-4 text-orange-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalOutstanding.toFixed(2)}</div>
+            <div className="text-2xl font-bold">₹{totalOutstanding.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground mt-1">Pending payment collection</p>
           </CardContent>
         </Card>
@@ -194,7 +208,7 @@ export default async function ReportsPage() {
                     <div key={month} className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
                         <span className="font-medium">{monthName}</span>
-                        <span className="text-muted-foreground">${revenue.toFixed(2)}</span>
+                        <span className="text-muted-foreground">₹{revenue.toFixed(2)}</span>
                       </div>
                       <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                         <div
@@ -234,9 +248,9 @@ export default async function ReportsPage() {
                   {topClients.map(([clientName, data]) => (
                     <TableRow key={clientName}>
                       <TableCell className="font-medium">{clientName}</TableCell>
-                      <TableCell className="text-right">${data.total.toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-green-600">${data.paid.toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-orange-600">${data.outstanding.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">₹{data.total.toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-green-600">₹{data.paid.toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-orange-600">₹{data.outstanding.toFixed(2)}</TableCell>
                       <TableCell className="text-right">{data.invoiceCount}</TableCell>
                     </TableRow>
                   ))}
@@ -265,7 +279,7 @@ export default async function ReportsPage() {
                         <p className="text-xs text-muted-foreground">{invoice.clients.name}</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium">${Number(invoice.total_amount).toFixed(2)}</span>
+                        <span className="text-sm font-medium">₹{Number(invoice.total_amount).toFixed(2)}</span>
                         <Badge
                           variant="secondary"
                           className={
@@ -304,7 +318,7 @@ export default async function ReportsPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium text-green-600">${Number(payment.amount).toFixed(2)}</span>
+                        <span className="text-sm font-medium text-green-600">₹{Number(payment.amount).toFixed(2)}</span>
                         <Badge
                           variant="secondary"
                           className={
@@ -362,11 +376,11 @@ export default async function ReportsPage() {
             <div className="grid grid-cols-2 gap-4 pt-2">
               <div className="text-center p-3 bg-green-50 rounded-lg">
                 <p className="text-xs text-muted-foreground">Collected</p>
-                <p className="text-lg font-bold text-green-700">${totalRevenue.toFixed(2)}</p>
+                <p className="text-lg font-bold text-green-700">₹{totalRevenue.toFixed(2)}</p>
               </div>
               <div className="text-center p-3 bg-orange-50 rounded-lg">
                 <p className="text-xs text-muted-foreground">Pending</p>
-                <p className="text-lg font-bold text-orange-700">${totalOutstanding.toFixed(2)}</p>
+                <p className="text-lg font-bold text-orange-700">₹{totalOutstanding.toFixed(2)}</p>
               </div>
             </div>
           </div>

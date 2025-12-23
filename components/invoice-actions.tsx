@@ -6,6 +6,7 @@ import { MoreVertical, Send, CheckCircle, XCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { useToast } from "@/hooks/use-toast"
 
 interface InvoiceActionsProps {
   invoiceId: string
@@ -14,6 +15,7 @@ interface InvoiceActionsProps {
 
 export function InvoiceActions({ invoiceId, currentStatus }: InvoiceActionsProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [isUpdating, setIsUpdating] = useState(false)
 
   const updateStatus = async (newStatus: string) => {
@@ -23,9 +25,16 @@ export function InvoiceActions({ invoiceId, currentStatus }: InvoiceActionsProps
     const { error } = await supabase.from("invoices").update({ status: newStatus }).eq("id", invoiceId)
 
     if (error) {
-      console.error("Error updating status:", error)
-      alert("Failed to update invoice status")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update invoice status",
+      })
     } else {
+      toast({
+        title: "Success",
+        description: "Invoice status updated successfully.",
+      })
       router.refresh()
     }
 

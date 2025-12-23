@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createClient } from "@/lib/supabase/client"
+import { createUser, updateUser } from "@/app/actions/create-user"
+import { useToast } from "@/hooks/use-toast"
 
 interface Organization {
   id: string
@@ -29,6 +30,7 @@ interface UserFormProps {
 
 export function UserForm({ organizations, initialData }: UserFormProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     email: initialData?.email || "",
@@ -43,36 +45,46 @@ export function UserForm({ organizations, initialData }: UserFormProps) {
     e.preventDefault()
     setLoading(true)
 
-    const supabase = createClient()
-
     try {
+      let result
+
       if (initialData) {
         // Update existing user
-        const { error } = await supabase
-          .from("profiles")
-          .update({
-            full_name: formData.full_name,
-            role: formData.role,
-            organization_id: formData.organization_id,
-            is_active: formData.is_active,
-          })
-          .eq("id", initialData.id)
-
-        if (error) throw error
+        result = await updateUser(initialData.id, {
+          full_name: formData.full_name,
+          role: formData.role,
+          is_active: formData.is_active,
+        })
       } else {
-        // Create new user - Note: This requires super admin privileges
-        // In production, you'd typically use a server action or admin API
-        alert(
-          "Creating new users requires backend admin API. For now, users should sign up via the signup page and then be assigned roles by super admin.",
-        )
-        router.push("/dashboard/users")
-        return
+        // Create new user
+        result = await createUser({
+          email: formData.email,
+          password: formData.password,
+          full_name: formData.full_name,
+          role: formData.role,
+        })
       }
 
-      router.push("/dashboard/users")
-      router.refresh()
+      if (result.error) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: result.error,
+        })
+      } else {
+        toast({
+          title: "Success",
+          description: initialData ? "User updated successfully." : "User created successfully.",
+        })
+        router.push("/dashboard/users")
+        router.refresh()
+      }
     } catch (error: any) {
-      alert("Error: " + error.message)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      })
     } finally {
       setLoading(false)
     }
@@ -124,30 +136,14 @@ export function UserForm({ organizations, initialData }: UserFormProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="super_admin">Super Admin</SelectItem>
               <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="manager">Manager</SelectItem>
               <SelectItem value="accountant">Accountant</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-
-        <div>
-          <Label htmlFor="organization_id">Organization</Label>
-          <Select
-            value={formData.organization_id}
-            onValueChange={(value) => setFormData({ ...formData, organization_id: value })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select organization" />
-            </SelectTrigger>
-            <SelectContent>
-              {organizations.map((org) => (
-                <SelectItem key={org.id} value={org.id}>
-                  {org.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Admin: Full access | Manager: View-only for admin areas, full access where accountants have access | Accountant: Limited to invoices, products, prices, payments, clients
+          </p>
         </div>
 
         {initialData && (

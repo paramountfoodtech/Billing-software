@@ -3,9 +3,16 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import Link from "next/link"
 import { InvoicesTable } from "@/components/invoices-table"
+import { InvoicesPageClient } from "./invoices-page-client"
 
 export default async function InvoicesPage() {
   const supabase = await createClient()
+
+  // Get all clients for selector
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("id, name")
+    .order("name", { ascending: true })
 
   const { data: invoices } = await supabase
     .from("invoices")
@@ -33,7 +40,7 @@ export default async function InvoicesPage() {
         </Button>
       </div>
 
-      <InvoicesTable invoices={invoices || []} />
+      <InvoicesPageClient clients={clients || []} invoices={invoices || []} />
     </div>
   )
 }

@@ -7,10 +7,23 @@ import { ClientsTable } from "@/components/clients-table"
 export default async function ClientsPage() {
   const supabase = await createClient()
 
+  // Get user profile for role-based UI
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user?.id || "")
+    .single()
+
   const { data: clients } = await supabase
     .from("clients")
     .select("*, profiles!clients_created_by_fkey(full_name)")
     .order("created_at", { ascending: false })
+
+  const userRole = profile?.role || "accountant"
 
   return (
     <div className="p-6 lg:p-8">
@@ -27,7 +40,7 @@ export default async function ClientsPage() {
         </Button>
       </div>
 
-      <ClientsTable clients={clients || []} />
+  <ClientsTable clients={clients || []} />
     </div>
   )
 }

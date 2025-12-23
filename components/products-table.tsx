@@ -3,29 +3,18 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Pencil, Trash2 } from "lucide-react"
+import { Pencil, Trash2, Download } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
+import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
 
 interface Product {
   id: string
   name: string
   description: string | null
-  unit_price: string
-  unit: string | null
-  tax_rate: string
   is_active: boolean
   created_at: string
   profiles?: {
@@ -39,28 +28,48 @@ interface ProductsTableProps {
 
 export function ProductsTable({ products }: ProductsTableProps) {
   const router = useRouter()
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [productToDelete, setProductToDelete] = useState<string | null>(null)
+  const { toast } = useToast()
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const handleDelete = async () => {
-    if (!productToDelete) return
-
+  const handleDelete = async (id: string) => {
     setIsDeleting(true)
     const supabase = createClient()
 
-    const { error } = await supabase.from("products").delete().eq("id", productToDelete)
+    const { error } = await supabase.from("products").delete().eq("id", id)
 
     if (error) {
-      console.error("Error deleting product:", error)
-      alert("Failed to delete product. It may be used in existing invoices.")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete product. It may be used in existing invoices.",
+      })
     } else {
+      toast({
+        title: "Product deleted",
+        description: "The product has been deleted successfully.",
+      })
       router.refresh()
     }
 
     setIsDeleting(false)
-    setDeleteDialogOpen(false)
-    setProductToDelete(null)
+  }
+
+  const handleExport = () => {
+    const columns: ExportColumn[] = [
+      { key: "name", label: "Product Name" },
+      { key: "description", label: "Description" },
+      {
+        key: "is_active",
+        label: "Active",
+        formatter: (val) => (val ? "Yes" : "No"),
+      },
+    ]
+
+    exportToCSV(products, columns, `products-${getTimestamp()}.csv`)
+    toast({
+      title: "Exported",
+      description: "Products exported to CSV successfully.",
+    })
   }
 
   if (products.length === 0) {
@@ -73,14 +82,18 @@ export function ProductsTable({ products }: ProductsTableProps) {
 
   return (
     <>
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-semibold">Products</h3>
+        <Button onClick={handleExport} size="sm" variant="outline" title="Export to CSV">
+          <Download className="h-4 w-4" />
+        </Button>
+      </div>
       <div className="rounded-lg border bg-white">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Description</TableHead>
-              <TableHead>Unit Price</TableHead>
-              <TableHead>Tax Rate</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -92,11 +105,6 @@ export function ProductsTable({ products }: ProductsTableProps) {
                 <TableCell className="max-w-xs truncate">
                   {product.description || <span className="text-muted-foreground">-</span>}
                 </TableCell>
-                <TableCell>
-                  ${Number(product.unit_price).toFixed(2)}
-                  {product.unit && <span className="text-muted-foreground text-xs ml-1">/ {product.unit}</span>}
-                </TableCell>
-                <TableCell>{Number(product.tax_rate).toFixed(2)}%</TableCell>
                 <TableCell>
                   {product.is_active ? (
                     <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
@@ -117,8 +125,9 @@ export function ProductsTable({ products }: ProductsTableProps) {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        setProductToDelete(product.id)
-                        setDeleteDialogOpen(true)
+                        if (confirm("Are you sure you want to delete this product?")) {
+                          handleDelete(product.id)
+                        }
                       }}
                     >
                       <Trash2 className="h-4 w-4 text-red-600" />
@@ -131,22 +140,6 @@ export function ProductsTable({ products }: ProductsTableProps) {
         </Table>
       </div>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete this product from the system.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-red-600 hover:bg-red-700">
-              {isDeleting ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   )
 }

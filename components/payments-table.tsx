@@ -3,32 +3,27 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Trash2 } from "lucide-react"
+import { Trash2, Download } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
+import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
 
 interface Payment {
   id: string
+  invoice_id: string
   amount: string
   payment_date: string
   payment_method: string
   reference_number: string | null
   status: string
   invoices: {
+    id: string
     invoice_number: string
     total_amount: string
+    amount_paid: string
     clients: {
       name: string
     }
@@ -48,28 +43,61 @@ const statusConfig = {
 
 export function PaymentsTable({ payments }: PaymentsTableProps) {
   const router = useRouter()
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null)
+  const { toast } = useToast()
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const handleDelete = async () => {
-    if (!paymentToDelete) return
-
+  const handleDelete = async (id: string) => {
     setIsDeleting(true)
     const supabase = createClient()
 
-    const { error } = await supabase.from("payments").delete().eq("id", paymentToDelete)
+    const { error } = await supabase.from("payments").delete().eq("id", id)
 
     if (error) {
-      console.error("Error deleting payment:", error)
-      alert("Failed to delete payment.")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete payment.",
+      })
     } else {
+      toast({
+        title: "Payment deleted",
+        description: "The payment has been deleted successfully.",
+      })
       router.refresh()
     }
 
     setIsDeleting(false)
-    setDeleteDialogOpen(false)
-    setPaymentToDelete(null)
+  }
+
+  const handleExport = () => {
+    const columns: ExportColumn[] = [
+      { key: "invoices", label: "Invoice Number", formatter: (inv) => inv?.invoice_number || "" },
+      { key: "invoices", label: "Client", formatter: (inv) => inv?.clients?.name || "" },
+      {
+        key: "amount",
+        label: "Amount",
+        formatter: (amount) => Number(amount).toFixed(2),
+      },
+      {
+        key: "payment_date",
+        label: "Payment Date",
+        formatter: (date) =>
+          new Date(date).toLocaleDateString("en-IN", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }),
+      },
+      { key: "payment_method", label: "Payment Method" },
+      { key: "reference_number", label: "Reference Number" },
+      { key: "status", label: "Status", formatter: (status) => statusConfig[status as keyof typeof statusConfig]?.label || status },
+    ]
+
+    exportToCSV(payments, columns, `payments-${getTimestamp()}.csv`)
+    toast({
+      title: "Exported",
+      description: "Payments exported to CSV successfully.",
+    })
   }
 
   if (payments.length === 0) {
@@ -82,6 +110,12 @@ export function PaymentsTable({ payments }: PaymentsTableProps) {
 
   return (
     <>
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-semibold">Payments</h3>
+        <Button onClick={handleExport} size="sm" variant="outline" title="Export to CSV">
+          <Download className="h-4 w-4" />
+        </Button>
+      </div>
       <div className="rounded-lg border bg-white">
         <Table>
           <TableHeader>
@@ -89,7 +123,7 @@ export function PaymentsTable({ payments }: PaymentsTableProps) {
               <TableHead>Date</TableHead>
               <TableHead>Invoice</TableHead>
               <TableHead>Client</TableHead>
-              <TableHead>Amount</TableHead>
+              <TableHead>Payment</TableHead>
               <TableHead>Method</TableHead>
               <TableHead>Reference</TableHead>
               <TableHead>Status</TableHead>
@@ -102,17 +136,25 @@ export function PaymentsTable({ payments }: PaymentsTableProps) {
 
               return (
                 <TableRow key={payment.id}>
-                  <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    {new Date(payment.payment_date).toLocaleDateString('en-IN', { 
+                      year: 'numeric', 
+                      month: 'short', 
+                      day: 'numeric' 
+                    })}
+                  </TableCell>
                   <TableCell>
                     <Link
-                      href={`/dashboard/invoices/${payment.invoices}`}
+                      href={`/dashboard/invoices/${payment.invoice_id}`}
                       className="font-medium hover:underline text-blue-600"
                     >
                       {payment.invoices.invoice_number}
                     </Link>
                   </TableCell>
                   <TableCell>{payment.invoices.clients.name}</TableCell>
-                  <TableCell className="font-medium">${Number(payment.amount).toFixed(2)}</TableCell>
+                  <TableCell className="font-semibold text-green-600">
+                    ₹{Number(payment.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
                   <TableCell className="capitalize">{payment.payment_method.replace("_", " ")}</TableCell>
                   <TableCell className="text-muted-foreground">{payment.reference_number || "-"}</TableCell>
                   <TableCell>
@@ -126,8 +168,9 @@ export function PaymentsTable({ payments }: PaymentsTableProps) {
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          setPaymentToDelete(payment.id)
-                          setDeleteDialogOpen(true)
+                          if (confirm("Are you sure you want to delete this payment?")) {
+                            handleDelete(payment.id)
+                          }
                         }}
                       >
                         <Trash2 className="h-4 w-4 text-red-600" />
@@ -141,23 +184,6 @@ export function PaymentsTable({ payments }: PaymentsTableProps) {
         </Table>
       </div>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete this payment record and update the invoice
-              balance.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-red-600 hover:bg-red-700">
-              {isDeleting ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   )
 }

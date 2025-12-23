@@ -1,6 +1,20 @@
+import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 import { ProductForm } from "@/components/product-form"
 
-export default function NewProductPage() {
+export default async function NewProductPage() {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/auth/login")
+  }
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+
   return (
     <div className="p-6 lg:p-8">
       <div className="mb-6">
@@ -9,7 +23,7 @@ export default function NewProductPage() {
       </div>
 
       <div className="max-w-2xl">
-        <ProductForm />
+        <ProductForm userRole={profile?.role} />
       </div>
     </div>
   )

@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { Spinner } from "@/components/ui/spinner"
+import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -16,34 +18,28 @@ interface Product {
   id: string
   name: string
   description: string | null
-  unit_price: string
-  unit: string | null
-  tax_rate: string
   is_active: boolean
 }
 
 interface ProductFormProps {
   product?: Product
+  userRole?: string
 }
 
-export function ProductForm({ product }: ProductFormProps) {
+export function ProductForm({ product, userRole }: ProductFormProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     name: product?.name || "",
     description: product?.description || "",
-    unit_price: product?.unit_price || "",
-    unit: product?.unit || "unit",
-    tax_rate: product?.tax_rate || "0",
     is_active: product?.is_active ?? true,
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    setError(null)
 
     const supabase = createClient()
 
@@ -52,31 +48,86 @@ export function ProductForm({ product }: ProductFormProps) {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) {
-      setError("You must be logged in")
+      toast({
+        variant: "destructive",
+        title: "Authentication required",
+        description: "You must be logged in to perform this action.",
+      })
       setIsLoading(false)
       return
     }
 
     try {
+      // Get user's organization
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", user.id)
+        .single()
+
+      if (!profile?.organization_id) {
+        throw new Error("User must belong to an organization")
+      }
+
       if (product) {
-        // Update existing product
-        const { error } = await supabase.from("products").update(formData).eq("id", product.id)
+        // Update existing product (only fields in use)
+        const { error } = await supabase
+          .from("products")
+          .update({
+            name: formData.name,
+            description: formData.description,
+            is_active: formData.is_active,
+          })
+          .eq("id", product.id)
 
         if (error) throw error
+        
+        toast({
+          title: "Product updated",
+          description: "Product information has been updated successfully.",
+        })
       } else {
-        // Create new product
+        // Create new product (defaults for deprecated pricing fields)
         const { error } = await supabase.from("products").insert({
-          ...formData,
+          name: formData.name,
+          description: formData.description,
+          is_active: formData.is_active,
+          unit_price: 0,
+          paper_price: 0,
+          unit: "unit",
+          tax_rate: 0,
           created_by: user.id,
+          organization_id: profile.organization_id,
         })
 
         if (error) throw error
+        
+        toast({
+          title: "Product created",
+          description: `${formData.name} has been added successfully.`,
+        })
       }
 
       router.push("/dashboard/products")
       router.refresh()
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      let errorMessage = "An unexpected error occurred. Please try again."
+      
+      if (error instanceof Error) {
+        if (error.message.includes('duplicate') || error.message.includes('unique')) {
+          errorMessage = "A product with this name already exists."
+        } else if (error.message.includes('organization')) {
+          errorMessage = "Organization error: Please contact support."
+        } else {
+          errorMessage = error.message
+        }
+      }
+      
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: errorMessage,
+      })
     } finally {
       setIsLoading(false)
     }
@@ -87,15 +138,13 @@ export function ProductForm({ product }: ProductFormProps) {
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="name">
-              Product/Service Name <span className="text-red-500">*</span>
-            </Label>
+            <Label htmlFor="name">Product Name</Label>
             <Input
               id="name"
-              required
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Web Development Services"
+              placeholder="Enter product name"
+              required
             />
           </div>
 
@@ -105,58 +154,13 @@ export function ProductForm({ product }: ProductFormProps) {
               id="description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Detailed description of the product or service..."
-              rows={3}
+              placeholder="Optional description"
             />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="unit_price">
-                Unit Price <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="unit_price"
-                type="number"
-                step="0.01"
-                min="0"
-                required
-                value={formData.unit_price}
-                onChange={(e) => setFormData({ ...formData, unit_price: e.target.value })}
-                placeholder="99.99"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="unit">Unit</Label>
-              <Input
-                id="unit"
-                value={formData.unit}
-                onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                placeholder="hour, piece, etc."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="tax_rate">Tax Rate (%)</Label>
-              <Input
-                id="tax_rate"
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={formData.tax_rate}
-                onChange={(e) => setFormData({ ...formData, tax_rate: e.target.value })}
-                placeholder="0.00"
-              />
-            </div>
           </div>
 
           <div className="flex items-center justify-between rounded-lg border p-4">
             <div className="space-y-0.5">
-              <Label htmlFor="is_active" className="text-base">
-                Active Status
-              </Label>
+              <Label htmlFor="is_active" className="text-base">Active Status</Label>
               <p className="text-sm text-muted-foreground">Make this product available for invoicing</p>
             </div>
             <Switch
@@ -166,13 +170,18 @@ export function ProductForm({ product }: ProductFormProps) {
             />
           </div>
 
-          {error && <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>}
-
-          <div className="flex gap-4">
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Saving..." : product ? "Update Product" : "Create Product"}
+          <div className="flex gap-4 pt-4">
+            <Button type="submit" disabled={isLoading} className="min-w-32">
+              {isLoading ? (
+                <>
+                  <Spinner className="mr-2" />
+                  {product ? "Updating..." : "Creating..."}
+                </>
+              ) : (
+                <>{product ? "Update Product" : "Create Product"}</>
+              )}
             </Button>
-            <Button type="button" variant="outline" onClick={() => router.back()}>
+            <Button type="button" variant="outline" onClick={() => router.back()} disabled={isLoading}>
               Cancel
             </Button>
           </div>

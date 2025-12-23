@@ -1,9 +1,27 @@
 import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, FileText, DollarSign, TrendingUp } from "lucide-react"
 
 export default async function DashboardPage() {
   const supabase = await createClient()
+
+  // Check authentication and role
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/auth/login")
+  }
+
+  // Get user's role
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+
+  // Redirect accountants to clients page (managers and admins can view dashboard)
+  if (profile?.role === "accountant") {
+    redirect("/dashboard/clients")
+  }
 
   // Fetch summary statistics
   const [clientsResult, invoicesResult, paymentsResult] = await Promise.all([
@@ -61,7 +79,7 @@ export default async function DashboardPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalRevenue}</div>
+            <div className="text-2xl font-bold">₹{totalRevenue}</div>
             <p className="text-xs text-muted-foreground mt-1">All-time payments received</p>
           </CardContent>
         </Card>
@@ -72,7 +90,7 @@ export default async function DashboardPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${pendingAmount}</div>
+            <div className="text-2xl font-bold">₹{pendingAmount}</div>
             <p className="text-xs text-muted-foreground mt-1">Outstanding invoices</p>
           </CardContent>
         </Card>
