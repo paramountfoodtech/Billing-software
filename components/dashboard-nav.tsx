@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -125,9 +126,21 @@ export function DashboardNav({ profile }: DashboardNavProps) {
         )}
       >
         <div className="p-6 border-b border-slate-200">
-          <h1 className="text-2xl font-bold text-slate-900">Invoice Pro</h1>
-          <p className="text-sm text-slate-500 mt-1">{profile?.full_name}</p>
-          <p className="text-xs text-slate-400 capitalize">{profile?.role?.replace("_", " ")}</p>
+          <div className="flex items-center gap-3">
+            <Image
+              src="/BS%20Logo.jpeg"
+              alt="Billing Management System logo"
+              width={44}
+              height={44}
+              className="h-11 w-11 rounded-lg object-cover shadow-sm"
+              priority
+            />
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Invoice Pro</h1>
+              <p className="text-sm text-slate-500 mt-1">{profile?.full_name}</p>
+              <p className="text-xs text-slate-400 capitalize">{profile?.role?.replace("_", " ")}</p>
+            </div>
+          </div>
         </div>
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">

@@ -60,7 +60,7 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
     company_address: "123 Business Street, City, State 12345",
     company_phone: "+91 00000 00000",
     company_email: "info@company.com",
-    company_logo_url: null,
+    company_logo_url: "/BS%20Logo.jpeg",
     company_logo_file: null,
     tax_label: "GST",
     terms_and_conditions: "Payment is due within 30 days. Late payments may incur additional charges.",

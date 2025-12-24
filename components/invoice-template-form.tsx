@@ -25,12 +25,14 @@ interface InvoiceTemplateFormProps {
   existingTemplate?: InvoiceTemplate | null
 }
 
+const DEFAULT_LOGO_URL = "/BS%20Logo.jpeg"
+
 export function InvoiceTemplateForm({ existingTemplate }: InvoiceTemplateFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(
-    existingTemplate?.company_logo_file || existingTemplate?.company_logo_url || null
+    existingTemplate?.company_logo_file || existingTemplate?.company_logo_url || DEFAULT_LOGO_URL
   )
 
   const [formData, setFormData] = useState<InvoiceTemplate>({
@@ -38,7 +40,7 @@ export function InvoiceTemplateForm({ existingTemplate }: InvoiceTemplateFormPro
     company_address: existingTemplate?.company_address || "",
     company_phone: existingTemplate?.company_phone || "",
     company_email: existingTemplate?.company_email || "",
-    company_logo_url: existingTemplate?.company_logo_url || "",
+    company_logo_url: existingTemplate?.company_logo_url || (existingTemplate?.company_logo_file ? "" : DEFAULT_LOGO_URL),
     company_logo_file: existingTemplate?.company_logo_file || null,
     tax_label: existingTemplate?.tax_label || "GST",
     terms_and_conditions: existingTemplate?.terms_and_conditions || "Payment is due within 30 days. Late payments may incur additional charges.",

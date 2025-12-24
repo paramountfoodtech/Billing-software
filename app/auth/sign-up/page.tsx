@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertCircle } from "lucide-react"
+import Image from "next/image"
 import Link from "next/link"
 
 export default function SignUpPage() {
@@ -10,8 +11,18 @@ export default function SignUpPage() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center gap-2 text-center">
-            <h1 className="text-3xl font-bold tracking-tight">Invoice Pro</h1>
-            <p className="text-sm text-muted-foreground">Professional billing management system</p>
+            <Image
+              src="/BS%20Logo.jpeg"
+              alt="Billing Management System logo"
+              width={56}
+              height={56}
+              className="h-14 w-14 rounded-xl object-cover shadow-sm"
+              priority
+            />
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Invoice Pro</h1>
+              <p className="text-sm text-muted-foreground">Professional billing management system</p>
+            </div>
           </div>
           <Card>
             <CardHeader>

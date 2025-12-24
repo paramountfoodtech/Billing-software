@@ -1,3 +1,4 @@
+import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { FileText, Users, DollarSign, TrendingUp, ArrowRight, CheckCircle2, Shield, Zap } from "lucide-react"
@@ -9,9 +10,14 @@ export default function HomePage() {
       <nav className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-              <FileText className="h-5 w-5 text-white" />
-            </div>
+            <Image
+              src="/BS%20Logo.jpeg"
+              alt="Billing Management System logo"
+              width={36}
+              height={36}
+              className="h-9 w-9 rounded-md object-cover"
+              priority
+            />
             <span className="text-xl font-bold">Invoice Pro</span>
           </div>
           <div className="flex items-center gap-4">

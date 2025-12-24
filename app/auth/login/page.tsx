@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
-import { FileText, Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff } from "lucide-react"
+import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -69,9 +70,14 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center gap-3 text-center">
-            <div className="h-12 w-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center">
-              <FileText className="h-6 w-6 text-white" />
-            </div>
+            <Image
+              src="/BS%20Logo.jpeg"
+              alt="Billing Management System logo"
+              width={56}
+              height={56}
+              className="h-14 w-14 rounded-xl object-cover shadow-sm"
+              priority
+            />
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Invoice Pro</h1>
               <p className="text-sm text-muted-foreground mt-1">Professional billing management</p>
