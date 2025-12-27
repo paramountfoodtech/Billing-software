@@ -25,6 +25,7 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useState } from "react"
+import { NotificationBell } from "@/components/notification-bell"
 
 interface Profile {
   id: string
@@ -77,34 +78,48 @@ export function DashboardNav({ profile }: DashboardNavProps) {
 
   const getNavItemsForRole = (role: string | undefined) => {
     const allNavItems = [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "manager"] },
-      { href: "/dashboard/users", label: "Team", icon: Users, roles: ["admin", "manager"] },
-      { href: "/dashboard/clients", label: "Clients", icon: Briefcase, roles: ["admin", "accountant", "manager"] },
-      { href: "/dashboard/products", label: "Products", icon: Package, roles: ["admin", "accountant", "manager"] },
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["super_admin", "admin"] },
+      { href: "/dashboard/users", label: "Team", icon: Users, roles: ["super_admin", "admin"] },
+      { href: "/dashboard/clients", label: "Clients", icon: Briefcase, roles: ["super_admin", "admin", "accountant"] },
+      { href: "/dashboard/products", label: "Products", icon: Package, roles: ["super_admin", "admin", "accountant"] },
       {
         href: "/dashboard/prices",
         label: "Prices",
         icon: Tag,
-        roles: ["admin", "accountant", "manager"],
+        roles: ["super_admin", "admin", "accountant"],
       },
       {
         href: "/dashboard/client-pricing",
         label: "Pricing Rules",
         icon: CreditCard,
-        roles: ["admin", "manager"],
+        roles: ["super_admin", "admin"],
       },
-      { href: "/dashboard/invoices", label: "Invoices", icon: FileText, roles: ["admin", "accountant", "manager"] },
+      { href: "/dashboard/invoices", label: "Invoices", icon: FileText, roles: ["super_admin", "admin", "accountant"] },
       {
         href: "/dashboard/payments",
         label: "Payments",
         icon: Banknote,
-        roles: ["admin", "accountant", "manager"],
+        roles: ["super_admin", "admin", "accountant"],
       },
-      { href: "/dashboard/reports", label: "Reports", icon: BarChart3, roles: ["admin", "manager"] },
-      { href: "/dashboard/settings", label: "Settings", icon: Settings, roles: ["admin", "manager"] },
+      { href: "/dashboard/reports", label: "Reports", icon: BarChart3, roles: ["super_admin", "admin"] },
+      { href: "/dashboard/settings", label: "Settings", icon: Settings, roles: ["super_admin", "admin"] },
     ]
 
-    return allNavItems.filter((item) => item.roles.includes(role || "accountant"))
+    const filtered = allNavItems.filter((item) => item.roles.includes(role || "accountant"))
+    // For accountants, point Prices to Update Prices and move it to top
+    if ((role || "accountant") === "accountant") {
+      const adjusted = filtered.map((item) =>
+        item.href === "/dashboard/prices" ? { ...item, href: "/dashboard/prices/new" } : item,
+      )
+      return adjusted.sort((a, b) => {
+        const aIsPrices = a.href === "/dashboard/prices" || a.href === "/dashboard/prices/new"
+        const bIsPrices = b.href === "/dashboard/prices" || b.href === "/dashboard/prices/new"
+        if (aIsPrices && !bIsPrices) return -1
+        if (!aIsPrices && bIsPrices) return 1
+        return 0
+      })
+    }
+    return filtered
   }
 
   const navItems = getNavItemsForRole(profile?.role)
@@ -136,10 +151,13 @@ export function DashboardNav({ profile }: DashboardNavProps) {
               className="h-11 w-11 rounded-lg object-cover shadow-sm"
               priority
             />
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">Invoice Pro</h1>
-              <p className="text-sm text-slate-500 mt-1">{profile?.full_name}</p>
-              <p className="text-xs text-slate-400 capitalize">{profile?.role?.replace("_", " ")}</p>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl font-bold text-slate-900 leading-tight">Invoice Pro</h1>
+              <p className="text-sm text-slate-500 mt-1 truncate">{profile?.full_name}</p>
+              <p className="text-xs text-slate-400 capitalize truncate">{profile?.role?.replace("_", " ")}</p>
+            </div>
+            <div className="flex-shrink-0 ml-2">
+              <NotificationBell userId={profile?.id || ""} />
             </div>
           </div>
         </div>

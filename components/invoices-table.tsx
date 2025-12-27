@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
-import { Eye, Pencil, Trash2, Download } from "lucide-react"
+import { Eye, Pencil, Trash2, Download, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
+import { Input } from "@/components/ui/input"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +56,110 @@ export function InvoicesTable({ invoices }: InvoicesTableProps) {
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Filter state
+  const [filters, setFilters] = useState({
+    invoice_number: '',
+    client: '',
+    status: '',
+  })
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const handleFilterChange = (column: string, value: string) => {
+    setFilters(prev => ({ ...prev, [column]: value }))
+  }
+
+  // Apply filtering and sorting
+  const processedInvoices = useMemo(() => {
+    let filtered = [...invoices]
+
+    // Apply filters
+    if (filters.invoice_number) {
+      filtered = filtered.filter(inv => 
+        inv.invoice_number.toLowerCase().includes(filters.invoice_number.toLowerCase())
+      )
+    }
+    if (filters.client) {
+      filtered = filtered.filter(inv => 
+        inv.clients.name.toLowerCase().includes(filters.client.toLowerCase())
+      )
+    }
+    if (filters.status) {
+      filtered = filtered.filter(inv => 
+        inv.status.toLowerCase().includes(filters.status.toLowerCase())
+      )
+    }
+
+    // Apply sorting
+    if (sortColumn) {
+      filtered.sort((a, b) => {
+        let aVal: any
+        let bVal: any
+
+        switch (sortColumn) {
+          case 'invoice_number':
+            aVal = a.invoice_number
+            bVal = b.invoice_number
+            break
+          case 'client':
+            aVal = a.clients.name
+            bVal = b.clients.name
+            break
+          case 'issue_date':
+            aVal = new Date(a.issue_date).getTime()
+            bVal = new Date(b.issue_date).getTime()
+            break
+          case 'due_date':
+            aVal = new Date(a.due_date).getTime()
+            bVal = new Date(b.due_date).getTime()
+            break
+          case 'total_amount':
+            aVal = Number(a.total_amount)
+            bVal = Number(b.total_amount)
+            break
+          case 'amount_paid':
+            aVal = Number(a.amount_paid)
+            bVal = Number(b.amount_paid)
+            break
+          case 'due_amount':
+            aVal = Number(a.total_amount) - Number(a.amount_paid)
+            bVal = Number(b.total_amount) - Number(b.amount_paid)
+            break
+          case 'status':
+            aVal = a.status
+            bVal = b.status
+            break
+          default:
+            return 0
+        }
+
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
+        return 0
+      })
+    }
+
+    return filtered
+  }, [invoices, filters, sortColumn, sortDirection])
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="ml-2 h-4 w-4 inline" />
+      : <ArrowDown className="ml-2 h-4 w-4 inline" />
+  }
+
   const handleDelete = async () => {
     if (!invoiceToDelete) return
 
@@ -84,7 +189,7 @@ export function InvoicesTable({ invoices }: InvoicesTableProps) {
 
   const handleExport = () => {
     // Enrich invoices with due amount calculation
-    const enrichedInvoices = invoices.map(invoice => ({
+    const enrichedInvoices = processedInvoices.map(invoice => ({
       ...invoice,
       due_amount: (Number(invoice.total_amount) - Number(invoice.amount_paid)).toFixed(2)
     }))
@@ -141,7 +246,7 @@ export function InvoicesTable({ invoices }: InvoicesTableProps) {
     exportToCSV(enrichedInvoices, columns, `invoices-${getTimestamp()}.csv`)
     toast({
       title: "Exported",
-      description: "Invoices exported to CSV successfully.",
+      description: `${enrichedInvoices.length} invoice(s) exported to CSV successfully.`,
     })
   }
 
@@ -155,8 +260,7 @@ export function InvoicesTable({ invoices }: InvoicesTableProps) {
 
   return (
     <>
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">Invoices</h3>
+      <div className="flex justify-end items-center mb-4">
         <Button onClick={handleExport} size="sm" variant="outline" title="Export to CSV">
           <Download className="h-4 w-4" />
         </Button>
@@ -165,21 +269,96 @@ export function InvoicesTable({ invoices }: InvoicesTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Invoice #</TableHead>
-              <TableHead>Client</TableHead>
-              <TableHead>Issue Date</TableHead>
-              <TableHead>Due Date</TableHead>
-              <TableHead>Total Amount</TableHead>
-              <TableHead>Paid</TableHead>
-              <TableHead>Due Amount</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('invoice_number')}>
+                Invoice #<SortIcon column="invoice_number" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('client')}>
+                Client<SortIcon column="client" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('issue_date')}>
+                Issue Date<SortIcon column="issue_date" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('due_date')}>
+                Due Date<SortIcon column="due_date" />
+              </TableHead>
+              <TableHead>Overdue</TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_amount')}>
+                Total Amount<SortIcon column="total_amount" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('amount_paid')}>
+                Paid<SortIcon column="amount_paid" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('due_amount')}>
+                Due Amount<SortIcon column="due_amount" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('status')}>
+                Status<SortIcon column="status" />
+              </TableHead>
               <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+            <TableRow>
+              <TableHead>
+                <Input
+                  placeholder="Filter..."
+                  value={filters.invoice_number}
+                  onChange={(e) => handleFilterChange('invoice_number', e.target.value)}
+                  className="h-8"
+                />
+              </TableHead>
+              <TableHead>
+                <Input
+                  placeholder="Filter..."
+                  value={filters.client}
+                  onChange={(e) => handleFilterChange('client', e.target.value)}
+                  className="h-8"
+                />
+              </TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+              <TableHead>
+                <Input
+                  placeholder="Filter..."
+                  value={filters.status}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                  className="h-8"
+                />
+              </TableHead>
+              <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {invoices.map((invoice) => {
+            {processedInvoices.map((invoice) => {
               const config = statusConfig[invoice.status as keyof typeof statusConfig]
               const balance = Number(invoice.total_amount) - Number(invoice.amount_paid)
+
+              // Overdue categorization
+              const dueDate = new Date(invoice.due_date)
+              const today = new Date()
+              const msInDay = 1000 * 60 * 60 * 24
+              const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / msInDay)
+              const isOverdue = balance > 0 && daysOverdue > 0
+              let overdueLabel = "On time"
+              let overdueClass = "bg-emerald-100 text-emerald-800"
+
+              if (isOverdue) {
+                if (daysOverdue <= 7) {
+                  overdueLabel = "1 week"
+                  overdueClass = "bg-amber-100 text-amber-800"
+                } else if (daysOverdue <= 14) {
+                  overdueLabel = "2 weeks"
+                  overdueClass = "bg-orange-100 text-orange-800"
+                } else if (daysOverdue <= 21) {
+                  overdueLabel = "3 weeks"
+                  overdueClass = "bg-red-100 text-red-800"
+                } else {
+                  overdueLabel = "3+ weeks"
+                  overdueClass = "bg-red-200 text-red-900"
+                }
+              }
 
               return (
                 <TableRow key={invoice.id}>
@@ -192,6 +371,9 @@ export function InvoicesTable({ invoices }: InvoicesTableProps) {
                   </TableCell>
                   <TableCell>{new Date(invoice.issue_date).toLocaleDateString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit' })}</TableCell>
                   <TableCell>{new Date(invoice.due_date).toLocaleDateString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit' })}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className={overdueClass}>{overdueLabel}</Badge>
+                  </TableCell>
                   <TableCell className="font-medium">
                     ₹{Number(invoice.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>

@@ -2,6 +2,7 @@ import type React from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DashboardNav } from "@/components/dashboard-nav"
+import { PageTitleProvider } from "@/app/dashboard/page-title-context"
 import { Suspense } from "react"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -33,22 +34,26 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <DashboardNav profile={profile} />
-      <main className="flex-1 overflow-auto">
-        <Suspense 
-          fallback={
-            <div className="w-full h-full bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100" 
-              style={{
-                animation: 'shimmerContent 2s infinite',
-                backgroundSize: '200% 100%'
-              }}
-            />
-          }
-        >
-          {children}
-        </Suspense>
-      </main>
-    </div>
+    <PageTitleProvider>
+      <div className="flex min-h-screen bg-slate-50">
+        <DashboardNav profile={profile} />
+        <main className="flex-1 flex flex-col overflow-auto">
+          <div className="flex-1 overflow-auto">
+            <Suspense 
+              fallback={
+                <div className="w-full h-full bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100" 
+                  style={{
+                    animation: 'shimmerContent 2s infinite',
+                    backgroundSize: '200% 100%'
+                  }}
+                />
+              }
+            >
+              {children}
+            </Suspense>
+          </div>
+        </main>
+      </div>
+    </PageTitleProvider>
   )
 }

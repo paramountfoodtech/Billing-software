@@ -51,7 +51,7 @@ export default function LoginPage() {
       if (profile?.role === "accountant") {
         router.push("/dashboard/clients")
       } else {
-        // Admin and manager go to dashboard
+        // Super Admin and Admin go to dashboard
         router.push("/dashboard")
       }
       // Note: setIsLoading(false) is intentionally not called here

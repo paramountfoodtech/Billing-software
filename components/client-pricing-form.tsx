@@ -315,34 +315,36 @@ export function ClientPricingForm({ clients, products, existingRule, priceCatego
                         Click on a category to use its daily price as the base for this product
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
-                        {categoriesWithPrice.map((category) => (
+                        {(() => {
+                          const isEggProduct = /egg/i.test(product.name)
+                          const filtered = categoriesWithPrice.filter((category) => {
+                            const isEggCategory = /egg/i.test(category.name)
+                            return isEggProduct ? isEggCategory : !isEggCategory
+                          })
+                          return filtered.map((category) => (
                           <button
                             key={category.id}
                             type="button"
                             onClick={() => updateProductRule({ price_category_id: category.id })}
-                            className={`rounded-lg border p-4 text-left transition-all hover:shadow-md ${
+                            className={`rounded-lg border p-3 text-center transition-all hover:shadow-md ${
                               category.id === rule.price_category_id
                                 ? "bg-blue-50 border-blue-400 ring-2 ring-blue-300 shadow-sm"
                                 : "bg-white border-gray-200 hover:border-blue-200"
                             }`}
                           >
-                            <p className={`text-sm font-semibold mb-1 ${
+                            <p className={`text-base font-semibold ${
                               category.id === rule.price_category_id ? "text-blue-900" : "text-gray-700"
                             }`}>
                               {category.name}
                             </p>
-                            <p className={`text-2xl font-bold mb-1 ${
-                              category.id === rule.price_category_id ? "text-blue-700" : "text-gray-900"
-                            }`}>
-                              {typeof category.currentPrice === "number" ? `₹${category.currentPrice.toFixed(2)}` : "No price"}
-                            </p>
-                            <p className={`text-xs ${
+                            <p className={`text-xs mt-1 ${
                               category.id === rule.price_category_id ? "text-blue-600 font-medium" : "text-gray-500"
                             }`}>
                               {category.id === rule.price_category_id ? "✓ Selected" : "Click to select"}
                             </p>
                           </button>
-                        ))}
+                          ))
+                        })()}
                       </div>
                     </div>
 

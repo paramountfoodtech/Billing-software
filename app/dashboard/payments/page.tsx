@@ -45,23 +45,24 @@ export default async function PaymentsPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
-          <p className="text-muted-foreground mt-1">Track and manage payment records</p>
+    <div className="lg:p-8">
+      <div className="px-6 pb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-slate-900">Payments</h1>
+        <div className="flex items-center gap-2">
+          <Button asChild>
+            <Link href="/dashboard/payments/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Record Payment
+            </Link>
+          </Button>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/payments/new">
-            <Plus className="h-4 w-4 mr-2" />
-            Record Payment
-          </Link>
-        </Button>
       </div>
 
-      <Suspense fallback={<LoadingOverlay />}>
-        <PaymentsPageClient clients={clients || []} payments={payments || []} clientInvoices={clientInvoices} />
-      </Suspense>
+        <Suspense fallback={<LoadingOverlay />}>
+          <div className="px-6">
+            <PaymentsPageClient clients={clients || []} payments={payments || []} clientInvoices={clientInvoices} />
+          </div>
+        </Suspense>
     </div>
   )
 }

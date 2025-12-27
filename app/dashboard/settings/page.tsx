@@ -27,14 +27,14 @@ export default async function SettingsPage() {
     redirect("/auth/login")
   }
 
-  // Check role (admin full, manager view-only)
+  // Check role (super_admin full, admin view-only)
   const { data: profile } = await supabase.from("profiles").select("role, organization_id").eq("id", user.id).single()
 
-  if (!profile || (profile.role !== "admin" && profile.role !== "manager")) {
+  if (!profile || (profile.role !== "super_admin" && profile.role !== "admin")) {
     redirect("/dashboard")
   }
 
-  const isManagerViewOnly = profile.role === "manager"
+  const isManagerViewOnly = profile.role === "admin"
 
   // Get organization settings
   const { data: organization } = await supabase
@@ -44,16 +44,15 @@ export default async function SettingsPage() {
     .single()
 
   return (
-    <div className="p-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-slate-900">System Settings</h1>
-        <p className="text-slate-500 mt-1">Configure tax rules, invoice templates, and system settings</p>
+    <div className="lg:p-8 space-y-6">
+      <div className="px-6 pb-2">
+        <h1 className="text-2xl font-semibold text-slate-900">System Settings</h1>
         {isManagerViewOnly && (
           <p className="text-sm text-amber-700 mt-2">View-only access. Contact an admin to make changes.</p>
         )}
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-6 px-6">
         <Card className={isManagerViewOnly ? "pointer-events-none opacity-60" : ""}>
           <CardHeader>
             <CardTitle>Organization Settings</CardTitle>

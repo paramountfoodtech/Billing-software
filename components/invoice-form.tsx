@@ -4,12 +4,14 @@ import type React from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Trash2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
@@ -130,6 +132,7 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
 
   const [formData, setFormData] = useState({
     client_id: initialInvoice?.client_id || "",
+    invoice_number: initialInvoice?.invoice_number || "",
     issue_date: initialInvoice?.issue_date || today,
     due_date: initialInvoice?.due_date || defaultDue,
     notes: initialInvoice?.notes || "",
@@ -221,7 +224,13 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
             priced = basePrice
         }
 
-        return Math.max(0, priced)
+        // Eggs category pricing is entered per 100; for egg products, unit price is per egg
+        const selectedCategory = priceCategories.find((c) => c.id === pricingRule.price_category_id)
+        const isEggCategory = selectedCategory ? /egg/i.test(selectedCategory.name) : false
+        const isEggProduct = /egg/i.test(product.name)
+        const adjusted = isEggCategory && isEggProduct ? priced / 100 : priced
+
+        return Math.max(0, adjusted)
       }
     }
 
@@ -279,6 +288,15 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
           ruleLabel = "Category base"
           ruleValueDisplay = null
           afterRule = basePrice
+      }
+
+      // For Eggs category, price is per 100; show unit price after dividing by 100 for egg products
+      const selectedCategory = priceCategories.find((c) => c.id === pricingRule.price_category_id)
+      const isEggCategory = selectedCategory ? /egg/i.test(selectedCategory.name) : false
+      const isEggProduct = /egg/i.test(product.name)
+      if (isEggCategory && isEggProduct) {
+        // Keep basePrice as category price (per 100) but unit price should reflect per-egg
+        afterRule = afterRule / 100
       }
     }
 
@@ -364,37 +382,39 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
   }
 
   // Recalculate totals whenever items or invoice-level rates change
-  // Order: Subtotal → Add Tax → Apply Discount
+  // Order: Sum line totals → Add invoice-level Tax → Apply invoice-level Discount
   useEffect(() => {
-    const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0)
+    // Use line_total which includes per-bird adjustments
+    const subtotalFromLineTotals = items.reduce((sum, item) => sum + item.line_total, 0)
+    
+    // For invoice-level rates, we still need the base subtotal (before line taxes/discounts/per-bird)
+    const baseSubtotal = items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0)
 
-    // Calculate line-item taxes
+    // Calculate line-item taxes (already included in line_total)
     const line_tax_amount = items.reduce((sum, item) => {
       const itemSubtotal = item.quantity * item.unit_price
       return sum + (itemSubtotal * item.tax_rate) / 100
     }, 0)
 
-    // Add subtotal + line taxes
-    const subtotal_with_line_tax = subtotal + line_tax_amount
-
-    // Calculate and add invoice-level tax on subtotal
-    const invoice_tax_amount = (subtotal * (invoiceRates.tax_percent || 0)) / 100
-    const total_with_all_taxes = subtotal_with_line_tax + invoice_tax_amount
-
-    // Now apply discounts to the amount with taxes
+    // Calculate line-item discounts (already included in line_total)
     const line_discount_amount = items.reduce(
       (sum, item) => sum + (item.quantity * item.unit_price * item.discount) / 100,
       0,
     )
 
-    const invoice_discount_amount = (subtotal * (invoiceRates.discount_percent || 0)) / 100
+    // Invoice-level tax on base subtotal
+    const invoice_tax_amount = (baseSubtotal * (invoiceRates.tax_percent || 0)) / 100
+    
+    // Invoice-level discount on base subtotal
+    const invoice_discount_amount = (baseSubtotal * (invoiceRates.discount_percent || 0)) / 100
+
+    // Total starts with line totals (which include per-bird), then add/subtract invoice-level rates
+    const total_amount = subtotalFromLineTotals + invoice_tax_amount - invoice_discount_amount
+    const tax_amount = line_tax_amount + invoice_tax_amount
     const discount_amount = line_discount_amount + invoice_discount_amount
 
-    const total_amount = total_with_all_taxes - discount_amount
-    const tax_amount = line_tax_amount + invoice_tax_amount
-
     setTotals({
-      subtotal,
+      subtotal: baseSubtotal,
       tax_amount,
       discount_amount,
       total_amount,
@@ -414,16 +434,49 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
     )
   }
 
+  // Check if product is in Live category and named Whole bird
+  const isLiveWholeBird = (productId: string, clientId: string) => {
+    if (!clientId) return false
+    
+    const product = products.find((p) => p.id === productId)
+    if (!product) return false
+    
+    // Check if product name contains "Whole bird" (case insensitive)
+    const nameLower = product.name.toLowerCase()
+    if (!nameLower.includes('whole bird')) return false
+    
+    // Check if pricing rule uses "Live" category
+    const pricingRule = clientPricingRules.find(
+      (rule) => rule.product_id === productId && rule.client_id === clientId
+    )
+    
+    if (!pricingRule?.price_category_id) return false
+    
+    const category = priceCategories.find((c) => c.id === pricingRule.price_category_id)
+    return category?.name.toLowerCase() === 'live'
+  }
+
   const handleProductToggle = (productId: string, enabled: boolean) => {
     setItems((prev) => {
       const existingIndex = prev.findIndex((item) => item.product_id === productId)
 
       if (enabled) {
+        // Prevent enabling selection if no pricing rule exists for the selected client
+        if (formData.client_id) {
+          const hasRule = clientPricingRules.some(
+            (rule) => rule.product_id === productId && rule.client_id === formData.client_id
+          )
+          if (!hasRule) {
+            return prev
+          }
+        }
         const product = products.find((p) => p.id === productId)
         if (!product) return prev
 
         const existing = existingIndex >= 0 ? prev[existingIndex] : undefined
-        const applyPerBird = !!existing?.use_per_bird
+        // Enable per-bird by default for Live category Whole bird products
+        const shouldEnablePerBird = isLiveWholeBird(productId, formData.client_id)
+        const applyPerBird = existing?.use_per_bird !== undefined ? !!existing.use_per_bird : shouldEnablePerBird
         const birdCount = applyPerBird ? Math.max(1, existing?.bird_count || 1) : 1
         const unitPrice = calculateClientPrice(
           productId,
@@ -561,14 +614,30 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
       let invoiceId = initialInvoice?.id
       
       if (!invoiceId) {
-        // Generate invoice number
-        const invoiceNumber = `INV-${Date.now()}`
+        // Use manual invoice number from form
+        const invoiceNumber = formData.invoice_number
+        // Generate reference number with REF. prefix
+        const referenceNumber = `REF-${Date.now()}`
+
+          // Check for duplicate invoice number
+          const { data: existingInvoice } = await supabase
+            .from("invoices")
+            .select("id")
+            .eq("invoice_number", invoiceNumber)
+            .single()
+
+          if (existingInvoice) {
+            setError(`Invoice number "${invoiceNumber}" already exists. Please use a different invoice number.`)
+            setIsLoading(false)
+            return
+          }
 
         // Insert invoice (create mode)
         const { data: invoice, error: invoiceError } = await supabase
           .from("invoices")
           .insert({
             invoice_number: invoiceNumber,
+            reference_number: referenceNumber,
             client_id: formData.client_id,
             issue_date: formData.issue_date,
             due_date: formData.due_date,
@@ -611,16 +680,25 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
       // Insert invoice items
       const itemsToInsert = items
         .filter((item) => item.product_id)
-        .map((item) => ({
-          invoice_id: invoiceId,
-          product_id: item.product_id,
-          description: item.description,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          tax_rate: item.tax_rate,
-          discount: item.discount,
-          line_total: item.line_total,
-        }))
+        .map((item) => {
+          // Calculate per-bird adjustment if applicable
+          const perBirdAdj = item.use_per_bird && formData.client_id 
+            ? getClientAdjustment(formData.client_id) * Math.max(1, item.bird_count || 1)
+            : null
+          
+          return {
+            invoice_id: invoiceId,
+            product_id: item.product_id,
+            description: item.description,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            tax_rate: item.tax_rate,
+            discount: item.discount,
+            line_total: item.line_total,
+            bird_count: item.use_per_bird ? item.bird_count : null,
+            per_bird_adjustment: perBirdAdj,
+          }
+        })
 
       if (itemsToInsert.length > 0) {
         const { error: itemsError } = await supabase.from("invoice_items").insert(itemsToInsert)
@@ -643,14 +721,15 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
           <CardTitle>Invoice Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2 md:col-span-1">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
               <Label htmlFor="client_id">
                 Client <span className="text-red-500">*</span>
               </Label>
               <Select
                 value={formData.client_id}
                 onValueChange={(value) => handleClientChange(value)}
+                disabled={!!initialInvoice?.id}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a client" />
@@ -665,7 +744,26 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
               </Select>
             </div>
 
+              <div className="space-y-2 md:col-span-1">
+              <Label htmlFor="invoice_number">
+                Invoice Number <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="invoice_number"
+                required
+                value={formData.invoice_number}
+                onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
+                placeholder="e.g., INV-001, INV-002"
+                disabled={!!initialInvoice?.id}
+              />
+              <p className="text-xs text-muted-foreground">
+                {initialInvoice?.id ? "Invoice number cannot be changed" : "Enter a unique invoice number"}
+              </p>
+            </div>
 
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="issue_date">
                 Issue Date <span className="text-red-500">*</span>
@@ -701,7 +799,8 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
             </div>
           </div>
 
-          <div className="space-y-2">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea
               id="notes"
@@ -710,20 +809,89 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
               placeholder="Additional notes for this invoice..."
               rows={2}
             />
-          </div>
+              </div>
+            </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Line Items</CardTitle>
-          <p className="text-sm text-muted-foreground">Check products to add and edit their details.</p>
+          <p className="text-sm text-muted-foreground">Add products to this invoice.</p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Quick Add Product Dropdown */}
+          {formData.client_id && (
+            <div className="space-y-2 pb-4 border-b">
+              <Label htmlFor="add-product">Add Product</Label>
+              <Select
+                value=""
+                onValueChange={(productId) => {
+                  if (productId) {
+                    handleProductToggle(productId, true)
+                  }
+                }}
+              >
+                <SelectTrigger id="add-product">
+                  <SelectValue placeholder="Select a product to add..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {products
+                    .filter((p) => {
+                      // Show only products that aren't already added
+                      const alreadyAdded = items.some((item) => item.product_id === p.id)
+                      if (alreadyAdded) return false
+                      
+                      // Show only products with pricing rules for this client
+                      const hasRule = clientPricingRules.some(
+                        (rule) => rule.product_id === p.id && rule.client_id === formData.client_id
+                      )
+                      return hasRule
+                    })
+                    .map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name}
+                      </SelectItem>
+                    ))}
+                  {products.filter((p) => {
+                    const alreadyAdded = items.some((item) => item.product_id === p.id)
+                    if (alreadyAdded) return false
+                    const hasRule = clientPricingRules.some(
+                      (rule) => rule.product_id === p.id && rule.client_id === formData.client_id
+                    )
+                    return hasRule
+                  }).length === 0 && (
+                    <SelectItem value="_no_products" disabled>
+                      All available products added
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {items.length === 0 ? "Select products to add to this invoice" : `${items.length} product(s) added`}
+              </p>
+            </div>
+          )}
+
+          {!formData.client_id && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
+              Please select a client first to add products.
+            </div>
+          )}
+
+          {/* Existing Line Items */}
           <div className="space-y-4">
-            {products.map((product) => {
-              const item = items.find((entry) => entry.product_id === product.id)
-              const enabled = Boolean(item)
+            {items.length === 0 && formData.client_id && (
+              <div className="text-center py-8 text-sm text-muted-foreground border rounded-lg bg-slate-50">
+                No products added yet. Use the dropdown above to add products.
+              </div>
+            )}
+            {items.map((item) => {
+              if (!item.product_id) return null
+              const product = products.find((p) => p.id === item.product_id)
+              if (!product) return null
+
+              const enabled = true
               const applyPerBirdPreview = !!item?.use_per_bird
               const birdCountPreview = applyPerBirdPreview ? Math.max(1, item?.bird_count || 1) : 1
               const previewPrice = calculateClientPrice(
@@ -734,6 +902,7 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                 birdCountPreview,
               )
               const ruleInfo = formData.client_id ? getPricingRuleInfo(product.id, formData.client_id) : null
+              const showMissingRuleWarning = formData.client_id && !ruleInfo
               const clientAdj = formData.client_id ? getClientAdjustment(formData.client_id) : 0
               const breakdown = formData.client_id
                 ? getPriceBreakdown(
@@ -748,24 +917,38 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
               return (
                 <div key={product.id} className="space-y-3 rounded-lg border p-4">
                   <div className="flex items-start gap-3">
-                    <Checkbox
-                      checked={enabled}
-                      disabled={!formData.client_id}
-                      onCheckedChange={(checked) => handleProductToggle(product.id, Boolean(checked))}
-                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleProductToggle(product.id, false)}
+                      className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                     <div className="flex-1 space-y-1">
                       <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <p className="font-medium">{product.name}</p>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium">{product.name}</p>
+                            {ruleInfo && (
+                              <Badge className="text-xs px-2 py-0.5 border rounded bg-green-100 text-green-800 border-green-200">
+                                {ruleInfo}
+                              </Badge>
+                            )}
+                            {showMissingRuleWarning && (
+                              <Badge className="text-xs px-2 py-0.5 border rounded bg-red-100 text-red-800 border-red-200">Set pricing rule first</Badge>
+                            )}
+                          </div>
                           {product.description && (
                             <p className="text-xs text-muted-foreground">{product.description}</p>
                           )}
                         </div>
                         <div className="text-sm font-medium">₹{previewPrice.toFixed(2)}</div>
                       </div>
-                      {formData.client_id && (ruleInfo || item?.use_per_bird) && (
+                      {formData.client_id && item?.use_per_bird && clientAdj !== 0 && isLiveWholeBird(product.id, formData.client_id) && (
                         <p className="text-xs text-green-600">
-                          {`${ruleInfo || "Default price"}${clientAdj !== 0 ? ` (client adj ${clientAdj > 0 ? "+" : ""}₹${Math.abs(clientAdj).toFixed(2)}/bird)` : ""}`}
+                          {`client adj ${clientAdj > 0 ? "+" : "-"}₹${Math.abs(clientAdj).toFixed(2)}/bird`}
                         </p>
                       )}
                       {breakdown && (
@@ -783,7 +966,7 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                           )}
                           {item?.use_per_bird && (
                             <div className="text-amber-600 font-medium">
-                              Per-bird applied to line total: +₹{breakdown.birdAdj.toFixed(2)}
+                              Per-bird applied to sub total: +₹{breakdown.birdAdj.toFixed(2)}
                               {" "}({`₹${breakdown.perBirdValue.toFixed(2)}`} × {breakdown.birdCount})
                             </div>
                           )}
@@ -797,16 +980,18 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
 
                   {enabled && item && (
                     <div className={`grid gap-4 ${item.use_per_bird ? "md:grid-cols-8" : "md:grid-cols-7"}`}>
-                      <div className="space-y-2">
-                        <Label>Per-bird</Label>
-                        <div className="flex items-center gap-3 rounded-md border px-3 py-2">
-                          <Switch
-                            checked={!!item.use_per_bird}
-                            onCheckedChange={(checked) => handlePerBirdToggle(product.id, Boolean(checked))}
-                            disabled={!formData.client_id}
-                          />
+                      {isLiveWholeBird(product.id, formData.client_id) && (
+                        <div className="space-y-2">
+                          <Label>Per-bird</Label>
+                          <div className="flex items-center gap-3 rounded-md border px-3 py-2">
+                            <Switch
+                              checked={!!item.use_per_bird}
+                              onCheckedChange={(checked) => handlePerBirdToggle(product.id, Boolean(checked))}
+                              disabled={!formData.client_id}
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {item.use_per_bird && (
                         <div className="space-y-2">
@@ -938,7 +1123,7 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
       {error && <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>}
 
       <div className="flex gap-4">
-        <Button type="submit" disabled={isLoading || !formData.client_id}>
+        <Button type="submit" disabled={isLoading || !formData.client_id || !formData.invoice_number}>
           {isLoading ? "Creating..." : "Create Invoice"}
         </Button>
         <Button type="button" variant="outline" onClick={() => router.back()}>

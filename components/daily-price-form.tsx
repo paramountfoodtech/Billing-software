@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -33,6 +34,7 @@ interface DailyPriceFormProps {
 
 export function DailyPriceForm({ priceCategories, priceHistory, userRole }: DailyPriceFormProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [checkingInvoices, setCheckingInvoices] = useState(false)
@@ -40,9 +42,11 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
   const [updateExistingInvoices, setUpdateExistingInvoices] = useState(false)
   const [existingPricesCount, setExistingPricesCount] = useState(0)
   const today = new Date().toISOString().split("T")[0]
+  const initialDateParam = searchParams?.get("date") || undefined
+  const initialEffectiveDate = initialDateParam && initialDateParam <= today ? initialDateParam : today
   
   const [formData, setFormData] = useState({
-    effective_date: today,
+    effective_date: initialEffectiveDate,
     prices: priceCategories.reduce((acc, cat) => {
       // Get latest price for this category
       const latest = priceHistory

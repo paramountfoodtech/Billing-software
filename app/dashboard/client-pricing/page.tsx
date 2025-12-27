@@ -18,10 +18,10 @@ export default async function ClientPricingPage() {
     redirect("/auth/login")
   }
 
-  // Check role (admin full, manager view-only)
+  // Check role (super_admin full, admin view-only)
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
-  if (!profile || (profile.role !== "admin" && profile.role !== "manager")) {
+  if (!profile || (profile.role !== "super_admin" && profile.role !== "admin")) {
     redirect("/dashboard")
   }
 
@@ -47,30 +47,31 @@ export default async function ClientPricingPage() {
     .select("price_category_id, price, effective_date")
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Client-Specific Pricing</h1>
-          <p className="text-muted-foreground mt-1">Manage custom pricing rules for clients</p>
+    <div className="lg:p-8">
+      <div className="px-6 pb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-slate-900">Client-Specific Pricing</h1>
+        <div className="flex items-center gap-2">
+          {profile.role === "super_admin" && (
+            <Button asChild>
+              <Link href="/dashboard/client-pricing/new">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Pricing Rule
+              </Link>
+            </Button>
+          )}
         </div>
-        {profile.role === "admin" && (
-          <Button asChild>
-            <Link href="/dashboard/client-pricing/new">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Pricing Rule
-            </Link>
-          </Button>
-        )}
       </div>
 
-      <Suspense fallback={<LoadingOverlay />}>
-        <ClientPricingPageClient
-          pricingRules={pricingRules || []}
-          priceHistory={priceHistory || []}
-          clients={clients || []}
-          userRole={profile.role}
-        />
-      </Suspense>
+        <Suspense fallback={<LoadingOverlay />}>
+          <div className="px-6">
+            <ClientPricingPageClient
+              pricingRules={pricingRules || []}
+              priceHistory={priceHistory || []}
+              clients={clients || []}
+              userRole={profile.role}
+            />
+          </div>
+        </Suspense>
     </div>
   )
 }

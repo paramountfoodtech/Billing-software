@@ -11,7 +11,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     .from("invoices")
     .select(`
       *,
-      invoice_items (product_id, description, quantity, unit_price, tax_rate, discount, line_total)
+      invoice_items (product_id, description, quantity, unit_price, tax_rate, discount, line_total, bird_count, per_bird_adjustment)
     `)
     .eq("id", id)
     .single()
@@ -45,6 +45,8 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
         initialInvoice={{
           id: invoice.id,
           client_id: invoice.client_id,
+          invoice_number: invoice.invoice_number,
+          reference_number: invoice.reference_number,
           issue_date: invoice.issue_date,
           due_date: invoice.due_date,
           notes: invoice.notes,

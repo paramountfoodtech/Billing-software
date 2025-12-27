@@ -33,23 +33,24 @@ export default async function ClientsPage() {
   const userRole = profile?.role || "accountant"
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
-          <p className="text-muted-foreground mt-1">Manage your client information</p>
+    <div className="lg:p-8">
+      <div className="px-6 pb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-slate-900">Clients</h1>
+        <div className="flex items-center gap-2">
+          <Button asChild>
+            <Link href="/dashboard/clients/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Client
+            </Link>
+          </Button>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/clients/new">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Client
-          </Link>
-        </Button>
       </div>
 
-      <Suspense fallback={<LoadingOverlay />}>
-        <ClientsContent />
-      </Suspense>
+        <Suspense fallback={<LoadingOverlay />}>
+          <div className="px-6">
+            <ClientsContent />
+          </div>
+        </Suspense>
     </div>
   )
 }

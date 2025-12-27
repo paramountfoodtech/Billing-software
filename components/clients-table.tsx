@@ -2,13 +2,14 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { Pencil, Trash2, Mail, Phone, Download } from "lucide-react"
+import { Pencil, Trash2, Mail, Phone, Download, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
+import { Input } from "@/components/ui/input"
 
 interface Client {
   id: string
@@ -36,6 +37,102 @@ export function ClientsTable({ clients }: ClientsTableProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Filter state
+  const [filters, setFilters] = useState({
+    name: '',
+    email: '',
+    city: '',
+  })
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const handleFilterChange = (column: string, value: string) => {
+    setFilters(prev => ({ ...prev, [column]: value }))
+  }
+
+  // Apply filtering and sorting
+  const processedClients = useMemo(() => {
+    let filtered = [...clients]
+
+    // Apply filters
+    if (filters.name) {
+      filtered = filtered.filter(c => 
+        c.name.toLowerCase().includes(filters.name.toLowerCase())
+      )
+    }
+    if (filters.email) {
+      filtered = filtered.filter(c => 
+        c.email.toLowerCase().includes(filters.email.toLowerCase())
+      )
+    }
+    if (filters.city) {
+      filtered = filtered.filter(c => 
+        (c.city || '').toLowerCase().includes(filters.city.toLowerCase())
+      )
+    }
+
+    // Apply sorting
+    if (sortColumn) {
+      filtered.sort((a, b) => {
+        let aVal: any
+        let bVal: any
+
+        switch (sortColumn) {
+          case 'name':
+            aVal = a.name
+            bVal = b.name
+            break
+          case 'email':
+            aVal = a.email
+            bVal = b.email
+            break
+          case 'city':
+            aVal = a.city || ''
+            bVal = b.city || ''
+            break
+          case 'value_per_bird':
+            aVal = a.value_per_bird || 0
+            bVal = b.value_per_bird || 0
+            break
+          case 'due_days':
+            aVal = a.due_days || 0
+            bVal = b.due_days || 0
+            break
+          case 'created_at':
+            aVal = new Date(a.created_at).getTime()
+            bVal = new Date(b.created_at).getTime()
+            break
+          default:
+            return 0
+        }
+
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
+        return 0
+      })
+    }
+
+    return filtered
+  }, [clients, filters, sortColumn, sortDirection])
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="ml-2 h-4 w-4 inline" />
+      : <ArrowDown className="ml-2 h-4 w-4 inline" />
+  }
 
   const handleDelete = async (id: string) => {
     setIsDeleting(true)
@@ -84,10 +181,10 @@ export function ClientsTable({ clients }: ClientsTableProps) {
       },
     ]
 
-    exportToCSV(clients, columns, `clients-${getTimestamp()}.csv`)
+    exportToCSV(processedClients, columns, `clients-${getTimestamp()}.csv`)
     toast({
       title: "Exported",
-      description: "Clients exported to CSV successfully.",
+      description: `${processedClients.length} client(s) exported to CSV successfully.`,
     })
   }
 
@@ -101,8 +198,7 @@ export function ClientsTable({ clients }: ClientsTableProps) {
 
   return (
     <>
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">Clients</h3>
+      <div className="flex justify-end items-center mb-4">
         <Button onClick={handleExport} size="sm" variant="outline" title="Export to CSV">
           <Download className="h-4 w-4" />
         </Button>
@@ -111,17 +207,59 @@ export function ClientsTable({ clients }: ClientsTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Contact</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Value/Bird</TableHead>
-              <TableHead>Due Days</TableHead>
-              <TableHead>Created</TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('name')}>
+                Name<SortIcon column="name" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('email')}>
+                Contact<SortIcon column="email" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('city')}>
+                Location<SortIcon column="city" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('value_per_bird')}>
+                Value/Bird<SortIcon column="value_per_bird" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('due_days')}>
+                Due Days<SortIcon column="due_days" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('created_at')}>
+                Created<SortIcon column="created_at" />
+              </TableHead>
               <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+            <TableRow>
+              <TableHead>
+                <Input
+                  placeholder="Filter..."
+                  value={filters.name}
+                  onChange={(e) => handleFilterChange('name', e.target.value)}
+                  className="h-8"
+                />
+              </TableHead>
+              <TableHead>
+                <Input
+                  placeholder="Filter..."
+                  value={filters.email}
+                  onChange={(e) => handleFilterChange('email', e.target.value)}
+                  className="h-8"
+                />
+              </TableHead>
+              <TableHead>
+                <Input
+                  placeholder="Filter..."
+                  value={filters.city}
+                  onChange={(e) => handleFilterChange('city', e.target.value)}
+                  className="h-8"
+                />
+              </TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {clients.map((client) => (
+            {processedClients.map((client) => (
               <TableRow key={client.id}>
                 <TableCell className="font-medium">{client.name}</TableCell>
                 <TableCell>

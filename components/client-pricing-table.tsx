@@ -3,13 +3,14 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Pencil, Trash2 } from "lucide-react"
+import { Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { getPriceForCategoryOnDate } from "@/lib/utils"
+import { Input } from "@/components/ui/input"
 
 interface PricingRule {
   id: string
@@ -48,6 +49,30 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole }
   const [isDeleting, setIsDeleting] = useState(false)
   const today = new Date().toISOString().split("T")[0]
 
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Filter state
+  const [filters, setFilters] = useState({
+    client: '',
+    product: '',
+    category: '',
+  })
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const handleFilterChange = (column: string, value: string) => {
+    setFilters(prev => ({ ...prev, [column]: value }))
+  }
+
   const calculateFinalPrice = (rule: PricingRule) => {
     // Get category price as base
     const categoryPrice = rule.price_category_id 
@@ -67,6 +92,84 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole }
       default:
         return basePrice
     }
+  }
+
+  // Apply filtering and sorting
+  const processedRules = useMemo(() => {
+    let filtered = [...pricingRules]
+
+    // Apply filters
+    if (filters.client) {
+      filtered = filtered.filter(r => 
+        r.clients.name.toLowerCase().includes(filters.client.toLowerCase())
+      )
+    }
+    if (filters.product) {
+      filtered = filtered.filter(r => 
+        r.products.name.toLowerCase().includes(filters.product.toLowerCase())
+      )
+    }
+    if (filters.category) {
+      filtered = filtered.filter(r => 
+        (r.price_categories?.name || '').toLowerCase().includes(filters.category.toLowerCase())
+      )
+    }
+
+    // Apply sorting
+    if (sortColumn) {
+      filtered.sort((a, b) => {
+        let aVal: any
+        let bVal: any
+
+        switch (sortColumn) {
+          case 'client':
+            aVal = a.clients.name
+            bVal = b.clients.name
+            break
+          case 'product':
+            aVal = a.products.name
+            bVal = b.products.name
+            break
+          case 'category':
+            aVal = a.price_categories?.name || ''
+            bVal = b.price_categories?.name || ''
+            break
+          case 'category_price':
+            const aCatPrice = a.price_category_id 
+              ? getPriceForCategoryOnDate(a.price_category_id, today, priceHistory)
+              : null
+            const bCatPrice = b.price_category_id 
+              ? getPriceForCategoryOnDate(b.price_category_id, today, priceHistory)
+              : null
+            aVal = aCatPrice !== null ? aCatPrice : 0
+            bVal = bCatPrice !== null ? bCatPrice : 0
+            break
+          case 'rule_type':
+            aVal = a.price_rule_type
+            bVal = b.price_rule_type
+            break
+          case 'final_price':
+            aVal = calculateFinalPrice(a)
+            bVal = calculateFinalPrice(b)
+            break
+          default:
+            return 0
+        }
+
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
+        return 0
+      })
+    }
+
+    return filtered
+  }, [pricingRules, filters, sortColumn, sortDirection, today, priceHistory])
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="ml-2 h-4 w-4 inline" />
+      : <ArrowDown className="ml-2 h-4 w-4 inline" />
   }
 
   const handleDelete = async (id: string) => {
@@ -106,18 +209,61 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole }
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Client</TableHead>
-              <TableHead>Product</TableHead>
-              <TableHead>Base Category</TableHead>
-              <TableHead>Category Price (Today)</TableHead>
-              <TableHead>Rule Type</TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('client')}>
+                Client<SortIcon column="client" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('product')}>
+                Product<SortIcon column="product" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category')}>
+                Base Category<SortIcon column="category" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category_price')}>
+                Category Price (Today)<SortIcon column="category_price" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('rule_type')}>
+                Rule Type<SortIcon column="rule_type" />
+              </TableHead>
               <TableHead>Rule Value</TableHead>
-              <TableHead>Final Price</TableHead>
-              {userRole !== "manager" && <TableHead className="text-right">Actions</TableHead>}
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('final_price')}>
+                Final Price<SortIcon column="final_price" />
+              </TableHead>
+              {userRole !== "admin" && <TableHead className="text-right">Actions</TableHead>}
+            </TableRow>
+            <TableRow>
+              <TableHead>
+                <Input
+                  placeholder="Filter..."
+                  value={filters.client}
+                  onChange={(e) => handleFilterChange('client', e.target.value)}
+                  className="h-8"
+                />
+              </TableHead>
+              <TableHead>
+                <Input
+                  placeholder="Filter..."
+                  value={filters.product}
+                  onChange={(e) => handleFilterChange('product', e.target.value)}
+                  className="h-8"
+                />
+              </TableHead>
+              <TableHead>
+                <Input
+                  placeholder="Filter..."
+                  value={filters.category}
+                  onChange={(e) => handleFilterChange('category', e.target.value)}
+                  className="h-8"
+                />
+              </TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+              {userRole !== "admin" && <TableHead></TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pricingRules.map((rule) => {
+            {processedRules.map((rule) => {
               const finalPrice = calculateFinalPrice(rule)
               const categoryPrice = rule.price_category_id 
                 ? getPriceForCategoryOnDate(rule.price_category_id, today, priceHistory)
@@ -148,7 +294,7 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole }
                     {rule.price_rule_type === "multiplier" && `× ${rule.price_rule_value}`}
                   </TableCell>
                   <TableCell className="font-bold text-green-600">₹{finalPrice.toFixed(2)}</TableCell>
-                  {userRole !== "manager" && (
+                  {userRole !== "admin" && (
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="sm" asChild>

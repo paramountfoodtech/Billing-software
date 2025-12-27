@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Plus } from "lucide-react"
 import { PricesPageClient } from "@/app/dashboard/prices/prices-page-client"
+import PricesAccountantSimple from "@/app/dashboard/prices/prices-accountant-simple"
 import { Suspense } from "react"
 import { LoadingOverlay } from "@/components/loading-overlay"
 
@@ -28,6 +29,11 @@ export default async function PricesPage() {
     redirect("/dashboard")
   }
 
+  // If accountant, go directly to Update Prices page
+  if (profile.role === "accountant") {
+    redirect("/dashboard/prices/new")
+  }
+
   // Get all price categories with latest prices
   const { data: priceCategories } = await supabase
     .from("price_categories")
@@ -43,15 +49,10 @@ export default async function PricesPage() {
     .order("effective_date", { ascending: false })
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Price Management</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage daily prices for categories (Paper Price, Skinless, With Skin, Eggs)
-          </p>
-        </div>
-        <div className="flex gap-2">
+    <div className="lg:p-8">
+      <div className="px-6 pb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-slate-900">Price Management</h1>
+        <div className="flex items-center gap-2">
           <Button variant="outline" asChild>
             <Link href="/dashboard/prices/categories">
               Manage Categories
@@ -67,10 +68,12 @@ export default async function PricesPage() {
       </div>
 
       <Suspense fallback={<LoadingOverlay />}>
-        <PricesPageClient 
-          priceCategories={priceCategories || []} 
-          priceHistory={priceHistory || []} 
-        />
+        <div className="px-6">
+          <PricesPageClient 
+            priceCategories={priceCategories || []} 
+            priceHistory={priceHistory || []} 
+          />
+        </div>
       </Suspense>
     </div>
   )

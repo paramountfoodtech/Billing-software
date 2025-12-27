@@ -29,34 +29,35 @@ export default async function UsersPage() {
     redirect("/auth/login")
   }
 
-  // Check role (admin full, manager view-only)
+  // Check role (super_admin full, admin view-only)
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
-  if (!profile || (profile.role !== "admin" && profile.role !== "manager")) {
+  if (!profile || (profile.role !== "super_admin" && profile.role !== "admin")) {
     redirect("/dashboard")
   }
 
   const userRole = profile.role
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">User Management</h1>
-          <p className="text-slate-500 mt-1">Manage system users and their roles</p>
+    <div className="lg:p-8">
+      <div className="px-6 pb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-slate-900">User Management</h1>
+        <div className="flex items-center gap-2">
+          {userRole === "super_admin" && (
+            <Link href="/dashboard/users/new">
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add User
+              </Button>
+            </Link>
+          )}
         </div>
-        {userRole === "admin" && (
-          <Link href="/dashboard/users/new">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add User
-            </Button>
-          </Link>
-        )}
       </div>
 
       <Suspense fallback={<LoadingOverlay />}>
-        <UsersContent userRole={userRole} />
+        <div className="px-6">
+          <UsersContent userRole={userRole} />
+        </div>
       </Suspense>
     </div>
   )

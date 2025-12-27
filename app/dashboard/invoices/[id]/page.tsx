@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
 import { PrintableInvoice } from "@/components/printable-invoice"
+import { Notes } from "@/components/notes"
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -26,7 +27,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         unit_price,
         tax_rate,
         discount,
-        line_total
+        line_total,
+        bird_count,
+        per_bird_adjustment
       )
     `)
     .eq("id", id)
@@ -40,12 +43,15 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const { data: { user } } = await supabase.auth.getUser()
   
   let template = null
+  let userRole = null
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, role")
       .eq("id", user.id)
       .single()
+
+    userRole = profile?.role
 
     if (profile?.organization_id) {
       const { data: templateData } = await supabase
@@ -58,9 +64,41 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     }
   }
 
+  // Fetch invoice notes
+  const { data: invoiceNotesData } = await supabase
+    .from("invoice_notes")
+    .select(`
+      id,
+      note,
+      created_at,
+      created_by,
+      created_by_profile:profiles!created_by (
+        full_name,
+        role
+      )
+    `)
+    .eq("invoice_id", id)
+    .order("created_at", { ascending: false })
+
+  // Filter out notes with null profiles
+  const invoiceNotes = (invoiceNotesData || [])
+    .filter((note: any) => note.created_by_profile !== null)
+    .map((note: any) => ({
+      id: note.id,
+      note: note.note,
+      created_at: note.created_at,
+      profiles: note.created_by_profile
+    })) || []
+
   return (
-    <div className="p-6 lg:p-8 max-w-5xl mx-auto">
+    <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
       <PrintableInvoice invoice={invoice} template={template} />
+      <Notes 
+        notes={invoiceNotes || []} 
+        referenceId={id} 
+        referenceType="invoice"
+        userRole={userRole}
+      />
     </div>
   )
 }

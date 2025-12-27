@@ -31,7 +31,7 @@ export default async function CategoriesPage() {
 
   const { data: profile } = await supabase.from("profiles").select("organization_id, role").eq("id", user.id).single()
 
-  if (!profile || profile.role !== "admin") {
+  if (!profile || profile.role !== "super_admin") {
     redirect("/dashboard")
   }
 

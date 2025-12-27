@@ -27,22 +27,23 @@ export default async function InvoicesPage() {
     .order("created_at", { ascending: false })
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Invoices</h1>
-          <p className="text-muted-foreground mt-1">Create and manage your invoices</p>
+    <div className="lg:p-8">
+      <div className="px-6 pb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-slate-900">Invoices</h1>
+        <div className="flex items-center gap-2">
+          <Button asChild>
+            <Link href="/dashboard/invoices/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Create Invoice
+            </Link>
+          </Button>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/invoices/new">
-            <Plus className="h-4 w-4 mr-2" />
-            Create Invoice
-          </Link>
-        </Button>
       </div>
 
       <Suspense fallback={<LoadingOverlay />}>
-        <InvoicesPageClient clients={clients || []} invoices={invoices || []}/>
+        <div className="px-6">
+          <InvoicesPageClient clients={clients || []} invoices={invoices || []} />
+        </div>
       </Suspense>
     </div>
   )

@@ -24,9 +24,9 @@
 ### In Supabase SQL Editor:
 
 ```sql
--- Update the user to admin role
+-- Update the user to super_admin role
 UPDATE public.profiles 
-SET role = 'admin' 
+SET role = 'super_admin' 
 WHERE email = 'admin@yourcompany.com';
 ```
 
@@ -52,7 +52,7 @@ Open: http://localhost:3000
 
 ## 5️⃣ First Login & Setup (5 minutes)
 
-### Login as Admin
+### Login as Super Admin
 - Email: `admin@yourcompany.com`
 - Password: (your password)
 
@@ -147,23 +147,23 @@ Open: http://localhost:3000
 
 - `/dashboard` - Overview
 - `/dashboard/clients` - Manage Clients (Admin)
-- `/dashboard/products` - Manage Products (Admin + Accountant)
-- `/dashboard/client-pricing` - Custom Pricing (Admin Only)
+- `/dashboard/products` - Manage Products (Super Admin + Admin + Accountant)
+- `/dashboard/client-pricing` - Custom Pricing (Super Admin + Admin)
 - `/dashboard/invoices` - Invoices (All)
 - `/dashboard/payments` - Payments (All)
-- `/dashboard/reports` - Analytics (All)
-- `/dashboard/users` - Create Users (Admin Only)
+- `/dashboard/reports` - Analytics (Super Admin + Admin)
+- `/dashboard/users` - Create Users (Super Admin Only)
 
 ---
 
 ## ⚠️ Important Notes
 
-1. **No Public Signup**: Users can only be created by admins
-2. **First User Must Be Admin**: Create via Supabase Dashboard
+1. **No Public Signup**: Users can only be created by super admins
+2. **First User Must Be Super Admin**: Create via Supabase Dashboard
 3. **Run All 5 Scripts**: Don't skip any migration scripts
 4. **Paper Price Required**: All products need a paper price
 5. **Client Rules Optional**: If no rule, uses default unit price
-6. **Only 2 Roles**: Admin (full access) and Accountant (limited access)
+6. **Three Roles**: Super Admin (full access), Admin (view-only for super admin areas), and Accountant (limited access)
 
 ---
 

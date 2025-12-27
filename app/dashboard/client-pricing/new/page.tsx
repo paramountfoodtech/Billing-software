@@ -15,7 +15,7 @@ export default async function NewClientPricingPage() {
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
-  if (profile?.role !== "admin") {
+  if (profile?.role !== "super_admin") {
     redirect("/dashboard")
   }
 

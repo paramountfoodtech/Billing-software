@@ -18,7 +18,7 @@ export default async function ReportsPage() {
   }
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-  if (!profile || (profile.role !== "admin" && profile.role !== "manager")) {
+  if (!profile || (profile.role !== "super_admin" && profile.role !== "admin")) {
     redirect("/dashboard")
   }
 
@@ -41,7 +41,15 @@ export default async function ReportsPage() {
     .reduce((sum, inv) => sum + (Number(inv.total_amount) - Number(inv.amount_paid)), 0)
 
   const paidInvoices = invoices.filter((inv) => inv.status === "paid").length
-  const overdueInvoices = invoices.filter((inv) => inv.status === "overdue").length
+  // Compute overdue dynamically based on due_date and unpaid balance to sync with dashboard/table logic
+  const msInDay = 1000 * 60 * 60 * 24
+  const today = new Date()
+  const overdueInvoices = invoices.filter((inv) => {
+    const balance = Number(inv.total_amount) - Number(inv.amount_paid)
+    const dueDate = new Date(inv.due_date)
+    const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / msInDay)
+    return balance > 0 && daysOverdue > 0
+  }).length
   const draftInvoices = invoices.filter((inv) => inv.status === "draft").length
 
   // Calculate monthly revenue
@@ -88,14 +96,12 @@ export default async function ReportsPage() {
     .slice(0, 10)
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Reports & Analytics</h1>
-        <p className="text-muted-foreground mt-1">Comprehensive business insights and financial reports</p>
+    <div className="lg:p-8">
+      <div className="px-6 pb-4">
+        <h1 className="text-2xl font-semibold text-slate-900">Reports &amp; Analytics</h1>
       </div>
-
-      {/* Key Metrics */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+        {/* Key Metrics */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8 px-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>

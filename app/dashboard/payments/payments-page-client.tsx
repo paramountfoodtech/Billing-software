@@ -89,7 +89,6 @@ export function PaymentsPageClient({ clients, payments, clientInvoices = {} }: P
           {/* Client Invoices Summary */}
           <Card className="bg-amber-50 border-amber-200">
             <CardContent className="pt-6">
-              <h3 className="font-semibold mb-4">Client's Invoices Summary</h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">Total Invoices</span>
@@ -126,7 +125,6 @@ export function PaymentsPageClient({ clients, payments, clientInvoices = {} }: P
           {/* Recent Payments */}
           <Card className="bg-blue-50 border-blue-200">
             <CardContent className="pt-6">
-              <h3 className="font-semibold mb-4">Recent Payments</h3>
               <div className="space-y-2">
                 {filteredPayments.slice(0, 5).map((payment) => (
                   <div key={payment.id} className="flex justify-between items-center text-sm pb-2 border-b border-blue-100 last:border-b-0">
@@ -149,7 +147,6 @@ export function PaymentsPageClient({ clients, payments, clientInvoices = {} }: P
       )}
 
       <div className="space-y-4">
-        <h3 className="font-semibold">All Payments{selectedClientId ? ' for Selected Client' : ''}</h3>
         <PaymentsTable payments={filteredPayments} />
       </div>
     </div>

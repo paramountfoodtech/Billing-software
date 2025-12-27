@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Printer } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, Fragment } from "react"
 
 interface InvoiceTemplate {
   company_name: string
@@ -19,6 +19,7 @@ interface InvoiceTemplate {
 interface Invoice {
   id: string
   invoice_number: string
+  reference_number?: string
   issue_date: string
   due_date: string
   status: string
@@ -44,6 +45,8 @@ interface Invoice {
     tax_rate: string
     discount: string
     line_total: string
+    bird_count: number | null
+    per_bird_adjustment: string | null
   }>
 }
 
@@ -143,6 +146,9 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
               <h2 className="text-3xl font-bold mb-2">INVOICE</h2>
               <div className="text-sm">
                 <p className="font-semibold">Invoice #: {invoice.invoice_number}</p>
+                {invoice.reference_number && (
+                  <p className="text-gray-600">Ref: {invoice.reference_number}</p>
+                )}
                 <p>Date: {new Date(invoice.issue_date).toLocaleDateString('en-IN', { 
                   year: 'numeric', 
                   month: 'long', 
@@ -184,16 +190,45 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
               </tr>
             </thead>
             <tbody>
-              {invoice.invoice_items.map((item, index) => (
-                <tr key={index} className="border-b border-gray-200">
-                  <td className="py-3">{item.description}</td>
-                  <td className="text-right">{Number(item.quantity).toFixed(2)}</td>
-                  <td className="text-right">₹{Number(item.unit_price).toFixed(2)}</td>
-                  <td className="text-right">{Number(item.discount).toFixed(2)}%</td>
-                  <td className="text-right">{Number(item.tax_rate).toFixed(2)}%</td>
-                  <td className="text-right">₹{Number(item.line_total).toFixed(2)}</td>
-                </tr>
-              ))}
+              {invoice.invoice_items.map((item, index) => {
+                const hasPerBird = item.bird_count && item.per_bird_adjustment
+                const baseAmount = hasPerBird 
+                  ? Number(item.line_total) - Number(item.per_bird_adjustment)
+                  : Number(item.line_total)
+                
+                return (
+                  <Fragment key={`item-group-${index}`}>
+                    <tr key={`item-${index}`} className="border-b border-gray-200">
+                      <td className="py-3">{item.description}</td>
+                      <td className="text-right">{Number(item.quantity).toFixed(2)}</td>
+                      <td className="text-right">₹{Number(item.unit_price).toFixed(2)}</td>
+                      <td className="text-right">{Number(item.discount).toFixed(2)}%</td>
+                      <td className="text-right">{Number(item.tax_rate).toFixed(2)}%</td>
+                      <td className="text-right">₹{baseAmount.toFixed(2)}</td>
+                    </tr>
+                    {hasPerBird && (
+                      <tr key={`perbird-${index}`} className="border-b border-gray-200">
+                        <td className="py-2 pl-8 text-sm text-amber-600" colSpan={5}>
+                          Per-bird adjustment ({item.bird_count} birds × ₹{(Number(item.per_bird_adjustment) / item.bird_count).toFixed(2)}/bird)
+                        </td>
+                        <td className="text-right text-sm text-amber-600">
+                          {Number(item.per_bird_adjustment) > 0 ? '+' : ''}₹{Number(item.per_bird_adjustment).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+                    {hasPerBird && (
+                      <tr key={`total-${index}`} className="border-b border-gray-200 font-semibold">
+                        <td className="py-2 pl-8 text-sm" colSpan={5}>
+                          Line Total
+                        </td>
+                        <td className="text-right text-sm">
+                          ₹{Number(item.line_total).toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
 

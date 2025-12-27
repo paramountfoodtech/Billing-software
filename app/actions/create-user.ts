@@ -27,8 +27,8 @@ export async function createUser(formData: {
     .eq("id", user.id)
     .single()
 
-  if (adminProfile?.role !== "admin") {
-    return { error: "Only admins can create users" }
+  if (adminProfile?.role !== "super_admin") {
+    return { error: "Only super admins can create users" }
   }
 
   if (!adminProfile.organization_id) {
@@ -95,8 +95,8 @@ export async function updateUser(
 
   const { data: adminProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
-  if (adminProfile?.role !== "admin") {
-    return { error: "Only admins can update users" }
+  if (adminProfile?.role !== "super_admin") {
+    return { error: "Only super admins can update users" }
   }
 
   try {

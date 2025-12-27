@@ -2,13 +2,14 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { Pencil, Trash2, Download } from "lucide-react"
+import { Pencil, Trash2, Download, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
+import { Input } from "@/components/ui/input"
 
 interface PriceCategory {
   id: string
@@ -38,6 +39,76 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
   const [filter, setFilter] = useState("")
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
+
+  // Sorting state for categories
+  const [sortColumn, setSortColumn] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Filter state for categories
+  const [categoryFilters, setCategoryFilters] = useState({
+    name: '',
+  })
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const handleCategoryFilterChange = (column: string, value: string) => {
+    setCategoryFilters(prev => ({ ...prev, [column]: value }))
+  }
+
+  // Apply filtering and sorting to categories
+  const processedCategories = useMemo(() => {
+    let filtered = [...priceCategories]
+
+    // Apply filters
+    if (categoryFilters.name) {
+      filtered = filtered.filter(c => 
+        c.name.toLowerCase().includes(categoryFilters.name.toLowerCase())
+      )
+    }
+
+    // Apply sorting
+    if (sortColumn) {
+      filtered.sort((a, b) => {
+        let aVal: any
+        let bVal: any
+
+        switch (sortColumn) {
+          case 'name':
+            aVal = a.name
+            bVal = b.name
+            break
+          case 'price':
+            const aPriceObj = getLatestPrice(a.id)
+            const bPriceObj = getLatestPrice(b.id)
+            aVal = aPriceObj?.price || 0
+            bVal = bPriceObj?.price || 0
+            break
+          default:
+            return 0
+        }
+
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
+        return 0
+      })
+    }
+
+    return filtered
+  }, [priceCategories, categoryFilters, sortColumn, sortDirection])
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="ml-2 h-4 w-4 inline" />
+      : <ArrowDown className="ml-2 h-4 w-4 inline" />
+  }
 
   const getLatestPrice = (categoryId: string, asOfDate?: string) => {
     const filterDate = asOfDate || new Date().toISOString().split("T")[0]
@@ -173,14 +244,31 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Category Name</TableHead>
-              <TableHead>Current Price</TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('name')}>
+                Category Name<SortIcon column="name" />
+              </TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('price')}>
+                Current Price<SortIcon column="price" />
+              </TableHead>
               <TableHead>Last Updated</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
+            <TableRow>
+              <TableHead>
+                <Input
+                  placeholder="Filter..."
+                  value={categoryFilters.name}
+                  onChange={(e) => handleCategoryFilterChange('name', e.target.value)}
+                  className="h-8"
+                />
+              </TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+              <TableHead></TableHead>
+            </TableRow>
           </TableHeader>
           <TableBody>
-            {priceCategories.map((category) => {
+            {processedCategories.map((category) => {
               const latestPrice = getLatestPrice(category.id)
                 return (
                   <TableRow key={category.id}>
@@ -244,7 +332,6 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
       {/* Price History Table */}
       {priceHistory.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold mb-3">Price History</h3>
           <div className="rounded-lg border bg-white overflow-hidden">
             <Table>
               <TableHeader>

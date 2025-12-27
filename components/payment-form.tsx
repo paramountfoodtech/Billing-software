@@ -304,11 +304,43 @@ export function PaymentForm({ invoices, clients = [], preSelectedInvoiceId, preS
                     </div>
                   </div>
 
-                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h4 className="font-semibold text-blue-900 mb-3">Payment will be allocated to unpaid invoices in order</h4>
-                    <p className="text-sm text-blue-700">
-                      The payment amount will be automatically distributed across unpaid invoices, starting with the oldest invoice.
-                    </p>
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                    <h4 className="font-semibold text-blue-900 mb-2">Payment Summary</h4>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-blue-700">Total Invoices Amount:</span>
+                      <span className="font-medium">₹{clientInvoices.reduce((sum, inv) => sum + Number(inv.total_amount), 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-blue-700">Already Paid:</span>
+                      <span className="font-medium">₹{clientInvoices.reduce((sum, inv) => sum + Number(inv.amount_paid), 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-bold border-t border-blue-300 pt-2">
+                      <span className="text-blue-900">Current Balance Due:</span>
+                      <span className="text-red-600">₹{clientTotalPending.toFixed(2)}</span>
+                    </div>
+
+                    {Number(formData.amount) > 0 && (
+                      <div className="mt-3 pt-3 border-t border-blue-300">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-blue-700">Payment Amount:</span>
+                          <span className="font-medium text-green-600">₹{Number(formData.amount).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-bold mt-2">
+                          <span className="text-blue-900">Remaining Balance:</span>
+                          <span className={clientTotalPending - Number(formData.amount) > 0 ? "text-orange-600" : "text-green-600"}>
+                            ₹{(clientTotalPending - Number(formData.amount)).toFixed(2)}
+                          </span>
+                        </div>
+                        {clientTotalPending - Number(formData.amount) === 0 && <p className="text-xs text-green-600 mt-1">✓ All invoices will be fully paid</p>}
+                        {clientTotalPending - Number(formData.amount) > 0 && <p className="text-xs text-orange-600 mt-1">⚠ Partial payment - balance remains</p>}
+                      </div>
+                    )}
+
+                    <div className="pt-3 border-t border-blue-300">
+                      <p className="text-sm text-blue-700">
+                        The payment amount will be automatically distributed across unpaid invoices, starting with the oldest invoice.
+                      </p>
+                    </div>
                   </div>
                 </>
               )}
@@ -321,7 +353,7 @@ export function PaymentForm({ invoices, clients = [], preSelectedInvoiceId, preS
                 </Label>
                 <Select
                   value={formData.invoice_id}
-                  onValueChange={(value) => setFormData({ ...formData, invoice_id: value })}
+                  onValueChange={(value) => setFormData({ ...formData, invoice_id: value, amount: "" })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select an invoice" />

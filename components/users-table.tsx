@@ -1,14 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Edit, Trash2 } from "lucide-react"
+import { Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
+import { Input } from "@/components/ui/input"
 
 interface User {
   id: string
@@ -23,13 +24,102 @@ interface User {
 export function UsersTable({ users, userRole }: { users: User[]; userRole?: string }) {
   const router = useRouter()
   const { toast } = useToast()
-  const [searchTerm, setSearchTerm] = useState("")
 
-  const filteredUsers = users.filter(
-    (user) =>
-      user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Filter state
+  const [filters, setFilters] = useState({
+    name: '',
+    email: '',
+    role: '',
+  })
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const handleFilterChange = (column: string, value: string) => {
+    setFilters(prev => ({ ...prev, [column]: value }))
+  }
+
+  // Apply filtering and sorting
+  const processedUsers = useMemo(() => {
+    let filtered = [...users]
+
+    // Apply filters
+    if (filters.name) {
+      filtered = filtered.filter(u => 
+        u.full_name.toLowerCase().includes(filters.name.toLowerCase())
+      )
+    }
+    if (filters.email) {
+      filtered = filtered.filter(u => 
+        u.email.toLowerCase().includes(filters.email.toLowerCase())
+      )
+    }
+    if (filters.role) {
+      filtered = filtered.filter(u => 
+        u.role.toLowerCase().includes(filters.role.toLowerCase())
+      )
+    }
+
+    // Apply sorting
+    if (sortColumn) {
+      filtered.sort((a, b) => {
+        let aVal: any
+        let bVal: any
+
+        switch (sortColumn) {
+          case 'name':
+            aVal = a.full_name
+            bVal = b.full_name
+            break
+          case 'email':
+            aVal = a.email
+            bVal = b.email
+            break
+          case 'role':
+            aVal = a.role
+            bVal = b.role
+            break
+          case 'organization':
+            aVal = a.organizations?.name || ''
+            bVal = b.organizations?.name || ''
+            break
+          case 'status':
+            aVal = a.is_active ? 1 : 0
+            bVal = b.is_active ? 1 : 0
+            break
+          case 'created_at':
+            aVal = new Date(a.created_at).getTime()
+            bVal = new Date(b.created_at).getTime()
+            break
+          default:
+            return 0
+        }
+
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1
+        return 0
+      })
+    }
+
+    return filtered
+  }, [users, filters, sortColumn, sortDirection])
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="ml-2 h-4 w-4 inline" />
+      : <ArrowDown className="ml-2 h-4 w-4 inline" />
+  }
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to delete ${name}? This action cannot be undone.`)) {
@@ -71,36 +161,65 @@ export function UsersTable({ users, userRole }: { users: User[]; userRole?: stri
 
   return (
     <div className="bg-white rounded-lg border border-slate-200">
-      <div className="p-4 border-b border-slate-200">
-        <input
-          type="text"
-          placeholder="Search users..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead>Organization</TableHead>
-            <TableHead>Status</TableHead>
-            {userRole === "admin" && <TableHead className="text-right">Actions</TableHead>}
+            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('name')}>
+              Name<SortIcon column="name" />
+            </TableHead>
+            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('email')}>
+              Email<SortIcon column="email" />
+            </TableHead>
+            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('role')}>
+              Role<SortIcon column="role" />
+            </TableHead>
+            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('organization')}>
+              Organization<SortIcon column="organization" />
+            </TableHead>
+            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('status')}>
+              Status<SortIcon column="status" />
+            </TableHead>
+            {userRole === "super_admin" && <TableHead className="text-right">Actions</TableHead>}
+          </TableRow>
+          <TableRow>
+            <TableHead>
+              <Input
+                placeholder="Filter..."
+                value={filters.name}
+                onChange={(e) => handleFilterChange('name', e.target.value)}
+                className="h-8"
+              />
+            </TableHead>
+            <TableHead>
+              <Input
+                placeholder="Filter..."
+                value={filters.email}
+                onChange={(e) => handleFilterChange('email', e.target.value)}
+                className="h-8"
+              />
+            </TableHead>
+            <TableHead>
+              <Input
+                placeholder="Filter..."
+                value={filters.role}
+                onChange={(e) => handleFilterChange('role', e.target.value)}
+                className="h-8"
+              />
+            </TableHead>
+            <TableHead></TableHead>
+            <TableHead></TableHead>
+            {userRole === "admin" && <TableHead></TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filteredUsers.length === 0 ? (
+          {processedUsers.length === 0 ? (
             <TableRow>
               <TableCell colSpan={6} className="text-center text-slate-500 py-8">
                 No users found
               </TableCell>
             </TableRow>
           ) : (
-            filteredUsers.map((user) => (
+            processedUsers.map((user) => (
               <TableRow key={user.id}>
                 <TableCell className="font-medium">{user.full_name}</TableCell>
                 <TableCell>{user.email}</TableCell>
@@ -115,7 +234,7 @@ export function UsersTable({ users, userRole }: { users: User[]; userRole?: stri
                     {user.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </TableCell>
-                {userRole === "admin" && (
+                {userRole === "super_admin" && (
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Link href={`/dashboard/users/${user.id}/edit`}>

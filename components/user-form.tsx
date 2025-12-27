@@ -136,13 +136,13 @@ export function UserForm({ organizations, initialData }: UserFormProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="super_admin">Super Admin</SelectItem>
               <SelectItem value="admin">Admin</SelectItem>
-              <SelectItem value="manager">Manager</SelectItem>
               <SelectItem value="accountant">Accountant</SelectItem>
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground mt-1">
-            Admin: Full access | Manager: View-only for admin areas, full access where accountants have access | Accountant: Limited to invoices, products, prices, payments, clients
+            Super Admin: Full access | Admin: View-only for super admin areas, full access where accountants have access | Accountant: Limited to invoices, products, prices, payments, clients
           </p>
         </div>
 
