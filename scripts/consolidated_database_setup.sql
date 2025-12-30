@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS public.products (
   unit TEXT DEFAULT 'unit',
   tax_rate DECIMAL(5, 2) DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
+  position INTEGER NOT NULL DEFAULT 0,
   organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
   created_by UUID NOT NULL REFERENCES public.profiles(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -97,6 +98,8 @@ CREATE TABLE IF NOT EXISTS public.price_categories (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT NOT NULL,
   description TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  position INTEGER NOT NULL DEFAULT 0,
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   created_by UUID NOT NULL REFERENCES public.profiles(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -253,10 +256,13 @@ CREATE INDEX IF NOT EXISTS idx_clients_organization_id ON public.clients(organiz
 -- Products indexes
 CREATE INDEX IF NOT EXISTS idx_products_name ON public.products(name);
 CREATE INDEX IF NOT EXISTS idx_products_organization_id ON public.products(organization_id);
+CREATE INDEX IF NOT EXISTS idx_products_position ON public.products(organization_id, position);
 
 -- Price categories indexes
 CREATE INDEX IF NOT EXISTS idx_price_categories_organization_id ON public.price_categories(organization_id);
 CREATE INDEX IF NOT EXISTS idx_price_categories_name ON public.price_categories(name);
+CREATE INDEX IF NOT EXISTS idx_price_categories_is_active ON public.price_categories(is_active);
+CREATE INDEX IF NOT EXISTS idx_price_categories_position ON public.price_categories(organization_id, position);
 
 -- Price category history indexes
 CREATE INDEX IF NOT EXISTS idx_price_category_history_category_id ON public.price_category_history(price_category_id);
@@ -656,6 +662,21 @@ CREATE POLICY "Super Admins can delete price categories"
 CREATE POLICY "Users can view price history in their organization"
   ON public.price_category_history FOR SELECT
   USING (organization_id = public.get_user_organization(auth.uid()));
+
+CREATE POLICY "Org users can create price history"
+  ON public.price_category_history FOR INSERT
+  WITH CHECK (
+    organization_id = public.get_user_organization(auth.uid())
+  );
+
+CREATE POLICY "Org users can update price history"
+  ON public.price_category_history FOR UPDATE
+  USING (
+    organization_id = public.get_user_organization(auth.uid())
+  )
+  WITH CHECK (
+    organization_id = public.get_user_organization(auth.uid())
+  );
 
 CREATE POLICY "Super Admins can create price history"
   ON public.price_category_history FOR INSERT

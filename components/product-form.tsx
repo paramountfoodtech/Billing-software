@@ -83,6 +83,7 @@ export function ProductForm({ product, userRole }: ProductFormProps) {
         if (error) throw error
         
         toast({
+          variant: "success",
           title: "Product updated",
           description: "Product information has been updated successfully.",
         })
@@ -103,6 +104,7 @@ export function ProductForm({ product, userRole }: ProductFormProps) {
         if (error) throw error
         
         toast({
+          variant: "success",
           title: "Product created",
           description: `${formData.name} has been added successfully.`,
         })

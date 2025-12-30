@@ -176,6 +176,7 @@ export function ClientPricingForm({ clients, products, existingRule, priceCatego
 
         if (error) throw error
         toast({
+          variant: "success",
           title: "Success",
           description: "Pricing rule updated successfully.",
         })
@@ -206,6 +207,7 @@ export function ClientPricingForm({ clients, products, existingRule, priceCatego
         }
         
         toast({
+          variant: "success",
           title: "Success",
           description: `${rulesToInsert.length} pricing rule(s) created successfully.`,
         })

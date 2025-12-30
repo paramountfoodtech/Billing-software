@@ -3,7 +3,9 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DashboardNav } from "@/components/dashboard-nav"
 import { PageTitleProvider } from "@/app/dashboard/page-title-context"
+import { SidebarProvider } from "@/app/dashboard/sidebar-context"
 import { DashboardHeader } from "@/components/dashboard-header"
+import { DashboardLayoutClient } from "@/app/dashboard/layout-client"
 import { Suspense } from "react"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -36,26 +38,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <PageTitleProvider>
-      <div className="flex min-h-screen bg-slate-50">
-        <DashboardNav profile={profile} />
-        <main className="flex-1 flex flex-col overflow-auto">
-          <DashboardHeader userId={profile?.id || ""} />
-          <div className="flex-1 overflow-auto">
-            <Suspense 
-              fallback={
-                <div className="w-full h-full bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100" 
-                  style={{
-                    animation: 'shimmerContent 2s infinite',
-                    backgroundSize: '200% 100%'
-                  }}
-                />
-              }
-            >
-              {children}
-            </Suspense>
-          </div>
-        </main>
-      </div>
+      <SidebarProvider>
+        <DashboardLayoutClient profile={profile}>
+          {children}
+        </DashboardLayoutClient>
+      </SidebarProvider>
     </PageTitleProvider>
   )
 }

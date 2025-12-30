@@ -10,6 +10,8 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState, useMemo, ReactNode } from "react"
+import { usePagination } from "@/hooks/use-pagination"
+import { TablePagination } from "@/components/table-pagination"
 import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
 import { Input } from "@/components/ui/input"
 import {
@@ -60,6 +62,9 @@ export function InvoicesTable({ invoices, toolbarLeft }: InvoicesTableProps) {
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Pagination state
+  const [itemsPerPage, setItemsPerPage] = useState(10)
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -154,6 +159,11 @@ export function InvoicesTable({ invoices, toolbarLeft }: InvoicesTableProps) {
     return filtered
   }, [invoices, filters, sortColumn, sortDirection])
 
+  const pagination = usePagination({
+    items: processedInvoices,
+    itemsPerPage,
+  })
+
   const SortIcon = ({ column }: { column: string }) => {
     if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
     return sortDirection === 'asc' 
@@ -177,6 +187,7 @@ export function InvoicesTable({ invoices, toolbarLeft }: InvoicesTableProps) {
       })
     } else {
       toast({
+        variant: "success",
         title: "Invoice deleted",
         description: "The invoice has been deleted successfully.",
       })
@@ -246,6 +257,7 @@ export function InvoicesTable({ invoices, toolbarLeft }: InvoicesTableProps) {
 
     exportToCSV(enrichedInvoices, columns, `invoices-${getTimestamp()}.csv`)
     toast({
+      variant: "success",
       title: "Exported",
       description: `${enrichedInvoices.length} invoice(s) exported to CSV successfully.`,
     })
@@ -261,7 +273,7 @@ export function InvoicesTable({ invoices, toolbarLeft }: InvoicesTableProps) {
 
   return (
     <>
-      <div className="flex items-end justify-between gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
         <div className="flex items-center gap-3">
           {toolbarLeft}
         </div>
@@ -269,73 +281,73 @@ export function InvoicesTable({ invoices, toolbarLeft }: InvoicesTableProps) {
           <Download className="h-4 w-4" />
         </Button>
       </div>
-      <div className="rounded-lg border bg-white">
-        <Table>
+      <div className="rounded-lg border bg-white overflow-x-auto">
+        <Table className="text-xs sm:text-sm">
           <TableHeader>
             <TableRow>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('invoice_number')}>
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('invoice_number')}>
                 Invoice #<SortIcon column="invoice_number" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('client')}>
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('client')}>
                 Client<SortIcon column="client" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('issue_date')}>
+              <TableHead className="hidden sm:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('issue_date')}>
                 Issue Date<SortIcon column="issue_date" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('due_date')}>
+              <TableHead className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('due_date')}>
                 Due Date<SortIcon column="due_date" />
               </TableHead>
-              <TableHead>Overdue</TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_amount')}>
-                Total Amount<SortIcon column="total_amount" />
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">Overdue</TableHead>
+              <TableHead className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('total_amount')}>
+                Total<SortIcon column="total_amount" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('amount_paid')}>
+              <TableHead className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('amount_paid')}>
                 Paid<SortIcon column="amount_paid" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('due_amount')}>
-                Due Amount<SortIcon column="due_amount" />
+              <TableHead className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('due_amount')}>
+                Due<SortIcon column="due_amount" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('status')}>
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('status')}>
                 Status<SortIcon column="status" />
               </TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Actions</TableHead>
             </TableRow>
             <TableRow>
-              <TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
                 <Input
                   placeholder="Filter..."
                   value={filters.invoice_number}
                   onChange={(e) => handleFilterChange('invoice_number', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
                 <Input
                   placeholder="Filter..."
                   value={filters.client}
                   onChange={(e) => handleFilterChange('client', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
-              <TableHead>
+              <TableHead className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
                 <Input
                   placeholder="Filter..."
                   value={filters.status}
                   onChange={(e) => handleFilterChange('status', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead></TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {processedInvoices.map((invoice) => {
+            {pagination.paginatedItems.map((invoice) => {
               const config = statusConfig[invoice.status as keyof typeof statusConfig]
               const balance = Number(invoice.total_amount) - Number(invoice.amount_paid)
 
@@ -366,43 +378,43 @@ export function InvoicesTable({ invoices, toolbarLeft }: InvoicesTableProps) {
 
               return (
                 <TableRow key={invoice.id}>
-                  <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3 max-w-[100px] sm:max-w-none truncate">{invoice.invoice_number}</TableCell>
+                  <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
                     <div className="flex flex-col">
-                      <span className="font-medium">{invoice.clients.name}</span>
-                      <span className="text-xs text-muted-foreground">{invoice.clients.email}</span>
+                      <span className="font-medium text-xs sm:text-sm">{invoice.clients.name}</span>
+                      <span className="text-xs text-muted-foreground hidden sm:inline">{invoice.clients.email}</span>
                     </div>
                   </TableCell>
-                  <TableCell>{new Date(invoice.issue_date).toLocaleDateString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit' })}</TableCell>
-                  <TableCell>{new Date(invoice.due_date).toLocaleDateString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit' })}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className={overdueClass}>{overdueLabel}</Badge>
+                  <TableCell className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs">{new Date(invoice.issue_date).toLocaleDateString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit' })}</TableCell>
+                  <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs">{new Date(invoice.due_date).toLocaleDateString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit' })}</TableCell>
+                  <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                    <Badge variant="secondary" className={`${overdueClass} text-xs`}>{overdueLabel}</Badge>
                   </TableCell>
-                  <TableCell className="font-medium">
+                  <TableCell className="hidden lg:table-cell font-medium px-2 sm:px-4 py-2 sm:py-3 text-xs">
                     ₹{Number(invoice.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell className="text-green-600">
+                  <TableCell className="hidden md:table-cell text-green-600 px-2 sm:px-4 py-2 sm:py-3 text-xs">
                     ₹{Number(invoice.amount_paid).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell className={balance > 0 ? "font-semibold text-orange-600" : "text-green-600"}>
+                  <TableCell className={`hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs ${balance > 0 ? "font-semibold text-orange-600" : "text-green-600"}`}>
                     ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className={config.className}>
+                  <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
+                    <Badge variant="secondary" className={`${config.className} text-xs`}>
                       {config.label}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
+                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
+                    <div className="flex justify-end gap-1 sm:gap-2">
                       <Button variant="ghost" size="sm" asChild>
                         <Link href={`/dashboard/invoices/${invoice.id}`}>
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                         </Link>
                       </Button>
                       {invoice.status === "draft" && (
                         <Button variant="ghost" size="sm" asChild>
                           <Link href={`/dashboard/invoices/${invoice.id}/edit`}>
-                            <Pencil className="h-4 w-4" />
+                            <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
                           </Link>
                         </Button>
                       )}
@@ -414,7 +426,7 @@ export function InvoicesTable({ invoices, toolbarLeft }: InvoicesTableProps) {
                           setDeleteDialogOpen(true)
                         }}
                       >
-                        <Trash2 className="h-4 w-4 text-red-600" />
+                        <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
                       </Button>
                     </div>
                   </TableCell>
@@ -424,6 +436,15 @@ export function InvoicesTable({ invoices, toolbarLeft }: InvoicesTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        itemsPerPage={itemsPerPage}
+        onPageChange={pagination.goToPage}
+        onItemsPerPageChange={setItemsPerPage}
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

@@ -7,6 +7,8 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState, useMemo } from "react"
+import { usePagination } from "@/hooks/use-pagination"
+import { TablePagination } from "@/components/table-pagination"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,6 +55,9 @@ export function ClientsTable({ clients }: ClientsTableProps) {
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Pagination state
+  const [itemsPerPage, setItemsPerPage] = useState(10)
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -142,6 +147,11 @@ export function ClientsTable({ clients }: ClientsTableProps) {
     return filtered
   }, [clients, filters, sortColumn, sortDirection])
 
+  const pagination = usePagination({
+    items: processedClients,
+    itemsPerPage,
+  })
+
   const SortIcon = ({ column }: { column: string }) => {
     if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
     return sortDirection === 'asc' 
@@ -163,6 +173,7 @@ export function ClientsTable({ clients }: ClientsTableProps) {
       })
     } else {
       toast({
+        variant: "success",
         title: "Client deleted",
         description: "The client has been deleted successfully.",
       })
@@ -198,6 +209,7 @@ export function ClientsTable({ clients }: ClientsTableProps) {
 
     exportToCSV(processedClients, columns, `clients-${getTimestamp()}.csv`)
     toast({
+      variant: "success",
       title: "Exported",
       description: `${processedClients.length} client(s) exported to CSV successfully.`,
     })
@@ -213,113 +225,113 @@ export function ClientsTable({ clients }: ClientsTableProps) {
 
   return (
     <>
-      <div className="flex justify-end items-center mb-4">
+      <div className="flex justify-end mb-4">
         <Button onClick={handleExport} size="sm" variant="outline" title="Export to CSV">
           <Download className="h-4 w-4" />
         </Button>
       </div>
-      <div className="rounded-lg border bg-white">
-        <Table>
+      <div className="rounded-lg border bg-white overflow-x-auto">
+        <Table className="text-xs sm:text-sm">
           <TableHeader>
             <TableRow>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('name')}>
-                Name<SortIcon column="name" />
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('name')}>
+                <span className="hidden sm:inline">Name</span><span className="sm:hidden">Client</span><SortIcon column="name" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('email')}>
+              <TableHead className="hidden sm:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('email')}>
                 Contact<SortIcon column="email" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('city')}>
+              <TableHead className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('city')}>
                 Location<SortIcon column="city" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('value_per_bird')}>
+              <TableHead className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('value_per_bird')}>
                 Value/Bird<SortIcon column="value_per_bird" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('due_days')}>
+              <TableHead className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('due_days')}>
                 Due Days<SortIcon column="due_days" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('created_at')}>
+              <TableHead className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('created_at')}>
                 Created<SortIcon column="created_at" />
               </TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Actions</TableHead>
             </TableRow>
             <TableRow>
-              <TableHead>
+              <TableHead className="px-2 sm:px-4 py-2">
                 <Input
                   placeholder="Filter..."
                   value={filters.name}
                   onChange={(e) => handleFilterChange('name', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead>
+              <TableHead className="hidden sm:table-cell px-2 sm:px-4 py-2">
                 <Input
                   placeholder="Filter..."
                   value={filters.email}
                   onChange={(e) => handleFilterChange('email', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead>
+              <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2">
                 <Input
                   placeholder="Filter..."
                   value={filters.city}
                   onChange={(e) => handleFilterChange('city', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
+              <TableHead className="hidden lg:table-cell"></TableHead>
+              <TableHead className="hidden lg:table-cell"></TableHead>
+              <TableHead className="hidden md:table-cell"></TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {processedClients.map((client) => (
-              <TableRow key={client.id}>
-                <TableCell className="font-medium">{client.name}</TableCell>
-                <TableCell>
+            {pagination.paginatedItems.map((client) => (
+              <TableRow key={client.id} className="text-xs sm:text-sm">
+                <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3 max-w-[120px] sm:max-w-none truncate">{client.name}</TableCell>
+                <TableCell className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3">
                   <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1 text-sm">
-                      <Mail className="h-3 w-3 text-muted-foreground" />
-                      {client.email}
+                    <div className="flex items-center gap-1 text-xs sm:text-sm">
+                      <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate">{client.email}</span>
                     </div>
                     {client.phone && (
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <Phone className="h-3 w-3" />
-                        {client.phone}
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Phone className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{client.phone}</span>
                       </div>
                     )}
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3">
                   {client.city && client.state ? (
-                    <div className="text-sm">
+                    <div className="text-xs sm:text-sm">
                       {client.city}, {client.state}
                     </div>
                   ) : (
                     <span className="text-muted-foreground">-</span>
                   )}
                 </TableCell>
-                <TableCell className="text-sm">
+                <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
                   {client.value_per_bird !== undefined && client.value_per_bird !== null
                     ? `₹${Number(client.value_per_bird).toFixed(2)}`
                     : "-"}
                 </TableCell>
-                <TableCell className="text-sm">
+                <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
                   {client.due_days ?? 0}
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
+                <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs text-muted-foreground">
                   {new Date(client.created_at).toLocaleDateString('en-IN', { 
                     year: 'numeric', 
                     month: 'short', 
                     day: 'numeric' 
                   })}
                 </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
+                <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
+                  <div className="flex justify-end gap-1 sm:gap-2">
                     <Button variant="ghost" size="sm" asChild>
                       <Link href={`/dashboard/clients/${client.id}/edit`}>
-                        <Pencil className="h-4 w-4" />
+                        <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
                       </Link>
                     </Button>
                     <Button
@@ -330,7 +342,7 @@ export function ClientsTable({ clients }: ClientsTableProps) {
                         setDeleteDialogOpen(true)
                       }}
                     >
-                      <Trash2 className="h-4 w-4 text-red-600" />
+                      <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
                     </Button>
                   </div>
                 </TableCell>
@@ -339,6 +351,15 @@ export function ClientsTable({ clients }: ClientsTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        itemsPerPage={itemsPerPage}
+        onPageChange={pagination.goToPage}
+        onItemsPerPageChange={setItemsPerPage}
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

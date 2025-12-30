@@ -40,7 +40,7 @@ export default async function PricesPage() {
     .from("price_categories")
     .select("*")
     .eq("organization_id", profile.organization_id)
-    .order("created_at", { ascending: false })
+    .order("position", { ascending: true })
 
   // Get latest price for each category
   const { data: priceHistory } = await supabase
@@ -51,30 +51,26 @@ export default async function PricesPage() {
 
   return (
     <DashboardPageWrapper title="Price Management">
-      <div className="lg:p-8">
-        <div className="px-6 pb-4 flex items-center justify-end">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" asChild>
-              <Link href="/dashboard/prices/categories">
-                Manage Categories
-              </Link>
-            </Button>
-            <Button asChild>
-              <Link href="/dashboard/prices/new">
-                <Plus className="h-4 w-4 mr-2" />
-                Update Prices
-              </Link>
-            </Button>
-          </div>
+      <div className="w-full p-4 sm:p-6 lg:p-8 space-y-4">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+          <Button variant="outline" asChild className="w-full sm:w-auto">
+            <Link href="/dashboard/prices/categories">
+              Manage Categories
+            </Link>
+          </Button>
+          <Button asChild className="w-full sm:w-auto">
+            <Link href="/dashboard/prices/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Update Prices
+            </Link>
+          </Button>
         </div>
 
         <Suspense fallback={<LoadingOverlay />}>
-          <div className="px-6">
-            <PricesPageClient 
-              priceCategories={priceCategories || []} 
-              priceHistory={priceHistory || []} 
-            />
-          </div>
+          <PricesPageClient 
+            priceCategories={priceCategories || []} 
+            priceHistory={priceHistory || []} 
+          />
         </Suspense>
       </div>
     </DashboardPageWrapper>

@@ -187,6 +187,7 @@ export function PaymentForm({ invoices, clients = [], preSelectedInvoiceId, preS
         }
 
         toast({
+          variant: "success",
           title: "Bulk payment recorded",
           description: `₹${paymentAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} allocated across ${unpaidInvoices.length} invoices.`,
         })
@@ -232,6 +233,7 @@ export function PaymentForm({ invoices, clients = [], preSelectedInvoiceId, preS
       }
 
       toast({
+        variant: "success",
         title: "Payment recorded",
         description: `₹${Number(formData.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} payment has been recorded successfully.`,
       })

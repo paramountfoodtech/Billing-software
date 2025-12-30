@@ -14,7 +14,8 @@ import { Switch } from "@/components/ui/switch"
 import { Trash2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useToast } from "@/hooks/use-toast"
 import { getPriceForCategoryOnDate } from "@/lib/utils"
 
 interface Client {
@@ -54,6 +55,7 @@ interface InvoiceFormProps {
     client_id: string
     issue_date: string
     due_date: string
+    invoice_number: string
     notes: string | null
     subtotal?: number | null
     tax_amount?: number | null
@@ -79,7 +81,7 @@ interface InvoiceItem {
   tax_rate: number | null
   discount: number | null
   line_total: number
-  bird_count?: number
+  bird_count?: number | null
   enabled?: boolean
   use_per_bird?: boolean
 }
@@ -88,6 +90,7 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
   const deriveInvoiceRatesFromInitial = () => {
     if (!initialInvoice || !initialItems || initialItems.length === 0) {
@@ -156,11 +159,34 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
     }))
   })
 
+  // Track when a duplicate is added to show toast after state settles
+  const lastItemCountRef = useRef(items.length)
+  const lastItemsRef = useRef(items)
+
+  useEffect(() => {
+    // Only check for duplicates when items increased (new item added)
+    if (items.length > lastItemCountRef.current && items.length > 0) {
+      const newItem = items[items.length - 1]
+      // Check if the newly added item is an exact duplicate
+      const isDuplicate = items
+        .slice(0, -1)
+        .some((it) => it.product_id === newItem.product_id && ((it.quantity ?? null) === (newItem.quantity ?? null)))
+      
+      if (isDuplicate) {
+        toast({
+          title: "Duplicate item",
+          description: "You added the same product with the same quantity. This is allowed but please review.",
+        })
+      }
+    }
+    lastItemCountRef.current = items.length
+    lastItemsRef.current = items
+  }, [items, toast])
+
   const getClientAdjustment = (clientId: string) => {
     const client = clients.find((c) => c.id === clientId)
     return client?.value_per_bird ? Number(client.value_per_bird) : 0
   }
-
   // Function to check if a pricing rule is applied for a product
   const getPricingRuleInfo = (productId: string, clientId: string) => {
     if (!clientId || !productId) return null
@@ -183,6 +209,17 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
       }
     }
     return null
+  }
+
+  // Check if item at given index is an exact duplicate (same product and same quantity) with any other item
+  const isExactDuplicate = (index: number) => {
+    if (index < 0 || index >= items.length) return false
+    const item = items[index]
+    return items.some((other, otherIndex) => 
+      otherIndex !== index && 
+      other.product_id === item.product_id && 
+      ((other.quantity ?? null) === (item.quantity ?? null))
+    )
   }
 
   // Function to calculate price based on client-specific pricing rules
@@ -377,10 +414,10 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
     const discountAmount = (subtotal * discountRate) / 100
     const afterDiscount = afterTax - discountAmount
     
-    // Apply per-bird adjustment to the overall price (after quantity, tax, and discount)
-    if (item.use_per_bird) {
+    // Apply per-bird adjustment only if bird_count is provided
+    if (item.use_per_bird && item.bird_count != null) {
       const clientAdjustment = formData.client_id ? getClientAdjustment(formData.client_id) : 0
-      const birdCount = Math.max(1, item.bird_count || 1)
+      const birdCount = Math.max(1, item.bird_count)
       const perBirdTotal = clientAdjustment * birdCount
       return Math.max(0, afterDiscount + perBirdTotal)
     }
@@ -430,37 +467,27 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
 
   // No global per-bird toggle; per-item controls handle repricing
 
-  const updateItem = (productId: string, updater: (item: InvoiceItem) => InvoiceItem) => {
-    setItems((prev) =>
-      prev.map((item) => {
-        if (item.product_id !== productId) return item
-        const next = updater(item)
-        next.line_total = calculateLineTotal(next)
-        return next
-      }),
-    )
+  const updateItemByIndex = (index: number, updater: (item: InvoiceItem) => InvoiceItem) => {
+    setItems((prev) => {
+      if (index < 0 || index >= prev.length) return prev
+      const updated = [...prev]
+      const next = updater(updated[index])
+      next.line_total = calculateLineTotal(next)
+      updated[index] = next
+      return updated
+    })
   }
 
-  // Check if product is in Live category and named Whole bird
+  // Check if product name contains "whole" - enable per-bird value toggle for such products
   const isLiveWholeBird = (productId: string, clientId: string) => {
     if (!clientId) return false
     
     const product = products.find((p) => p.id === productId)
     if (!product) return false
     
-    // Check if product name contains "Whole bird" (case insensitive)
+    // Check if product name contains "whole" (case insensitive)
     const nameLower = product.name.toLowerCase()
-    if (!nameLower.includes('whole bird')) return false
-    
-    // Check if pricing rule uses "Live" category
-    const pricingRule = clientPricingRules.find(
-      (rule) => rule.product_id === productId && rule.client_id === clientId
-    )
-    
-    if (!pricingRule?.price_category_id) return false
-    
-    const category = priceCategories.find((c) => c.id === pricingRule.price_category_id)
-    return category?.name.toLowerCase() === 'live'
+    return nameLower.includes('whole')
   }
 
   const handleProductToggle = (productId: string, enabled: boolean) => {
@@ -484,111 +511,117 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
         // Enable per-bird by default for Live category Whole bird products
         const shouldEnablePerBird = isLiveWholeBird(productId, formData.client_id)
         const applyPerBird = existing?.use_per_bird !== undefined ? !!existing.use_per_bird : shouldEnablePerBird
-        const birdCount = applyPerBird ? Math.max(1, existing?.bird_count || 1) : 1
+        // For unit price, do not depend on bird count; leave bird_count blank until user enters
         const unitPrice = calculateClientPrice(
           productId,
           formData.client_id,
           formData.issue_date,
           applyPerBird,
-          birdCount,
+          1,
         )
 
         const baseItem: InvoiceItem = {
           product_id: productId,
           description: existing?.description || product.name,
-          quantity: existing?.quantity || 1,
+          quantity: existing?.quantity ?? null,
           unit_price: unitPrice,
-          tax_rate: Number(product.tax_rate),
-          discount: existing?.discount || 0,
-          bird_count: applyPerBird ? birdCount : undefined,
+          tax_rate: 0,
+          discount: 0,
+          bird_count: applyPerBird ? (existing?.bird_count ?? null) : null,
           enabled: true,
           use_per_bird: applyPerBird,
           line_total: 0,
         }
         baseItem.line_total = calculateLineTotal(baseItem)
 
-        if (existingIndex >= 0) {
-          const updated = [...prev]
-          updated[existingIndex] = { ...baseItem }
-          return updated
-        }
-
+        // Append the new item; duplicate detection happens in useEffect
         return [...prev, baseItem]
       }
 
+      // Remove the first matching item for this product
       if (existingIndex >= 0) {
         const updated = [...prev]
         updated.splice(existingIndex, 1)
         return updated
       }
-
       return prev
+    })
+  }
+
+  const handleRemoveItem = (index: number) => {
+    setItems((prev) => {
+      if (index < 0 || index >= prev.length) return prev
+      const updated = [...prev]
+      updated.splice(index, 1)
+      return updated
     })
   }
 
   const parseNullableNumber = (val: string) => (val === "" ? null : Number(val))
 
-  const handleQuantityChange = (productId: string, value: string) => {
-    updateItem(productId, (item) => ({ ...item, quantity: parseNullableNumber(value) }))
+  const handleQuantityChange = (index: number, value: string) => {
+    updateItemByIndex(index, (item) => ({ ...item, quantity: parseNullableNumber(value) }))
   }
 
-  const handleUnitPriceChange = (productId: string, value: string) => {
-    updateItem(productId, (item) => ({ ...item, unit_price: parseNullableNumber(value) }))
+  const handleUnitPriceChange = (index: number, value: string) => {
+    updateItemByIndex(index, (item) => ({ ...item, unit_price: parseNullableNumber(value) }))
   }
 
-  const handleTaxChange = (productId: string, value: string) => {
-    updateItem(productId, (item) => ({ ...item, tax_rate: parseNullableNumber(value) }))
+  const handleTaxChange = (index: number, value: string) => {
+    updateItemByIndex(index, (item) => ({ ...item, tax_rate: parseNullableNumber(value) }))
   }
 
-  const handleDiscountChange = (productId: string, value: string) => {
-    updateItem(productId, (item) => ({ ...item, discount: parseNullableNumber(value) }))
+  const handleDiscountChange = (index: number, value: string) => {
+    updateItemByIndex(index, (item) => ({ ...item, discount: parseNullableNumber(value) }))
   }
 
-  const handleDescriptionChange = (productId: string, value: string) => {
-    updateItem(productId, (item) => ({ ...item, description: value }))
+  const handleDescriptionChange = (index: number, value: string) => {
+    updateItemByIndex(index, (item) => ({ ...item, description: value }))
   }
 
-  const handleBirdCountChange = (productId: string, value: number) => {
-    setItems((prev) =>
-      prev.map((item) => {
-        if (item.product_id !== productId) return item
-        const birdCount = Math.max(1, value)
-        const unitPrice = calculateClientPrice(
-          productId,
-          formData.client_id,
-          formData.issue_date,
-          !!item.use_per_bird,
-          birdCount,
-        )
-        const next = { ...item, bird_count: birdCount, unit_price: unitPrice }
-        next.line_total = calculateLineTotal(next)
-        return next
-      }),
-    )
+  const handleBirdCountChange = (index: number, value: string) => {
+    setItems((prev) => {
+      if (index < 0 || index >= prev.length) return prev
+      const updated = [...prev]
+      const item = updated[index]
+      const birdCount = value === "" ? null : Math.max(1, Number(value))
+      const unitPrice = calculateClientPrice(
+        item.product_id || "",
+        formData.client_id,
+        formData.issue_date,
+        !!item.use_per_bird,
+        birdCount != null ? birdCount : 1,
+      )
+      const next = { ...item, bird_count: birdCount, unit_price: unitPrice }
+      next.line_total = calculateLineTotal(next)
+      updated[index] = next
+      return updated
+    })
   }
 
-  const handlePerBirdToggle = (productId: string, enabled: boolean) => {
-    setItems((prev) =>
-      prev.map((item) => {
-        if (item.product_id !== productId) return item
-        const birdCount = enabled ? Math.max(1, item.bird_count || 1) : 1
-        const unitPrice = calculateClientPrice(
-          productId,
-          formData.client_id,
-          formData.issue_date,
-          enabled,
-          birdCount,
-        )
-        const next = {
-          ...item,
-          use_per_bird: enabled,
-          bird_count: enabled ? birdCount : undefined,
-          unit_price: unitPrice,
-        }
-        next.line_total = calculateLineTotal(next)
-        return next
-      }),
-    )
+  const handlePerBirdToggle = (index: number, enabled: boolean) => {
+    setItems((prev) => {
+      if (index < 0 || index >= prev.length) return prev
+      const updated = [...prev]
+      const item = updated[index]
+      const birdCountForPrice = enabled && item.bird_count != null ? Math.max(1, item.bird_count) : 1
+      const unitPrice = calculateClientPrice(
+        item.product_id || "",
+        formData.client_id,
+        formData.issue_date,
+        enabled,
+        birdCountForPrice,
+      )
+      const next = {
+        ...item,
+        use_per_bird: enabled,
+        bird_count: enabled ? (item.bird_count ?? null) : null,
+        unit_price: unitPrice,
+      }
+      next.line_total = calculateLineTotal(next)
+      updated[index] = next
+      return updated
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -688,7 +721,7 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
 
       // Insert invoice items
       const itemsToInsert = items
-        .filter((item) => item.product_id)
+        .filter((item) => item.product_id && item.quantity !== null && item.quantity !== 0 && item.quantity > 0)
         .map((item) => {
           // Calculate per-bird adjustment if applicable
           const perBirdAdj = item.use_per_bird && formData.client_id 
@@ -708,6 +741,13 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
             per_bird_adjustment: perBirdAdj,
           }
         })
+
+      // Validate that at least one item with valid quantity exists
+      if (itemsToInsert.length === 0) {
+        setError("Please add at least one product with a valid quantity (greater than 0)")
+        setIsLoading(false)
+        return
+      }
 
       if (itemsToInsert.length > 0) {
         const { error: itemsError } = await supabase.from("invoice_items").insert(itemsToInsert)
@@ -781,6 +821,7 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                 id="issue_date"
                 type="date"
                 required
+                placeholder="Select issue date"
                 value={formData.issue_date}
                 onChange={(e) => {
                   const nextIssue = e.target.value
@@ -802,6 +843,7 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                 id="due_date"
                 type="date"
                 required
+                placeholder="Select due date"
                 value={formData.due_date}
                 onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
               />
@@ -847,10 +889,6 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                 <SelectContent>
                   {products
                     .filter((p) => {
-                      // Show only products that aren't already added
-                      const alreadyAdded = items.some((item) => item.product_id === p.id)
-                      if (alreadyAdded) return false
-                      
                       // Show only products with pricing rules for this client
                       const hasRule = clientPricingRules.some(
                         (rule) => rule.product_id === p.id && rule.client_id === formData.client_id
@@ -862,16 +900,11 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                         {product.name}
                       </SelectItem>
                     ))}
-                  {products.filter((p) => {
-                    const alreadyAdded = items.some((item) => item.product_id === p.id)
-                    if (alreadyAdded) return false
-                    const hasRule = clientPricingRules.some(
+                  {products.filter((p) => clientPricingRules.some(
                       (rule) => rule.product_id === p.id && rule.client_id === formData.client_id
-                    )
-                    return hasRule
-                  }).length === 0 && (
+                    )).length === 0 && (
                     <SelectItem value="_no_products" disabled>
-                      All available products added
+                      No products available with pricing rules
                     </SelectItem>
                   )}
                 </SelectContent>
@@ -895,7 +928,7 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                 No products added yet. Use the dropdown above to add products.
               </div>
             )}
-            {items.map((item) => {
+            {items.map((item, index) => {
               if (!item.product_id) return null
               const product = products.find((p) => p.id === item.product_id)
               if (!product) return null
@@ -924,13 +957,13 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                 : null
 
               return (
-                <div key={product.id} className="space-y-3 rounded-lg border p-4">
+                <div key={`item-${index}`} className={`space-y-3 rounded-lg border p-4 ${isExactDuplicate(index) ? 'border-red-500 border-2' : ''}`}>
                   <div className="flex items-start gap-3">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleProductToggle(product.id, false)}
+                      onClick={() => handleRemoveItem(index)}
                       className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -988,14 +1021,14 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                   </div>
 
                   {enabled && item && (
-                    <div className={`grid gap-4 ${item.use_per_bird ? "md:grid-cols-8" : "md:grid-cols-7"}`}>
+                    <div className={`grid gap-4 ${item.use_per_bird ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
                       {isLiveWholeBird(product.id, formData.client_id) && (
                         <div className="space-y-2">
                           <Label>Per-bird</Label>
                           <div className="flex items-center gap-3 rounded-md border px-3 py-2">
                             <Switch
                               checked={!!item.use_per_bird}
-                              onCheckedChange={(checked) => handlePerBirdToggle(product.id, Boolean(checked))}
+                              onCheckedChange={(checked) => handlePerBirdToggle(index, Boolean(checked))}
                               disabled={!formData.client_id}
                             />
                           </div>
@@ -1008,8 +1041,9 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                           <Input
                             type="number"
                             min="1"
-                            value={item.bird_count || 1}
-                            onChange={(e) => handleBirdCountChange(product.id, Number(e.target.value) || 0)}
+                            placeholder="e.g., 100 birds"
+                            value={item.bird_count ?? ""}
+                            onChange={(e) => handleBirdCountChange(index, e.target.value)}
                           />
                         </div>
                       )}
@@ -1019,7 +1053,7 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                         <Input
                           required
                           value={item.description}
-                          onChange={(e) => handleDescriptionChange(product.id, e.target.value)}
+                          onChange={(e) => handleDescriptionChange(index, e.target.value)}
                           placeholder="Item description"
                         />
                       </div>
@@ -1031,8 +1065,9 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                           step="0.01"
                           min="0"
                           required
+                          placeholder="e.g., 10"
                           value={item.quantity ?? ""}
-                          onChange={(e) => handleQuantityChange(product.id, e.target.value)}
+                          onChange={(e) => handleQuantityChange(index, e.target.value)}
                         />
                       </div>
 
@@ -1042,33 +1077,9 @@ export function InvoiceForm({ clients, products, clientPricingRules, priceCatego
                           type="number"
                           step="0.01"
                           min="0"
-                          required
-                          value={item.unit_price ?? ""}
-                          onChange={(e) => handleUnitPriceChange(product.id, e.target.value)}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Tax Rate (%)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max="100"
-                          value={item.tax_rate ?? ""}
-                          onChange={(e) => handleTaxChange(product.id, e.target.value)}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Discount (%)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max="100"
-                          value={item.discount ?? ""}
-                          onChange={(e) => handleDiscountChange(product.id, e.target.value)}
+                          placeholder="e.g., 250.00"
+                          value={item.unit_price !== null && item.unit_price !== undefined ? item.unit_price : ""}
+                          onChange={(e) => handleUnitPriceChange(index, e.target.value)}
                         />
                       </div>
 

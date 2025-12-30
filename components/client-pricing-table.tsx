@@ -8,16 +8,8 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState, useMemo, ReactNode } from "react"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { usePagination } from "@/hooks/use-pagination"
+import { TablePagination } from "@/components/table-pagination"
 import { useToast } from "@/hooks/use-toast"
 import { getPriceForCategoryOnDate } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -65,6 +57,9 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole, 
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Pagination state
+  const [itemsPerPage, setItemsPerPage] = useState(10)
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -114,6 +109,7 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole, 
       document.body.removeChild(link)
 
       toast({
+        variant: "success",
         title: 'Exported',
         description: `${exportData.length} pricing rules exported to CSV successfully.`,
       })
@@ -224,6 +220,11 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole, 
     return filtered
   }, [pricingRules, filters, sortColumn, sortDirection, today, priceHistory])
 
+  const pagination = usePagination({
+    items: processedRules,
+    itemsPerPage,
+  })
+
   const SortIcon = ({ column }: { column: string }) => {
     if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
     return sortDirection === 'asc' 
@@ -245,6 +246,7 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole, 
       })
     } else {
       toast({
+        variant: "success",
         title: "Pricing rule deleted",
         description: "The pricing rule has been deleted successfully.",
       })
@@ -272,65 +274,65 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole, 
           <Download className="h-4 w-4" />
         </Button>
       </div>
-      <div className="rounded-lg border bg-white">
-        <Table>
+      <div className="rounded-lg border bg-white overflow-x-auto">
+        <Table className="text-xs sm:text-sm">
           <TableHeader>
             <TableRow>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('client')}>
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('client')}>
                 Client<SortIcon column="client" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('product')}>
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('product')}>
                 Product<SortIcon column="product" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category')}>
+              <TableHead className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('category')}>
                 Base Category<SortIcon column="category" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category_price')}>
-                Category Price (Today)<SortIcon column="category_price" />
+              <TableHead className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('category_price')}>
+                Category Price<SortIcon column="category_price" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('rule_type')}>
-                Rule Type<SortIcon column="rule_type" />
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('rule_type')}>
+                Rule<SortIcon column="rule_type" />
               </TableHead>
-              <TableHead>Rule Value</TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('final_price')}>
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">Value</TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('final_price')}>
                 Final Price<SortIcon column="final_price" />
               </TableHead>
-              {userRole !== "admin" && <TableHead className="text-right">Actions</TableHead>}
+              {userRole !== "admin" && <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Actions</TableHead>}
             </TableRow>
             <TableRow>
-              <TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
                 <Input
                   placeholder="Filter..."
                   value={filters.client}
                   onChange={(e) => handleFilterChange('client', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
                 <Input
                   placeholder="Filter..."
                   value={filters.product}
                   onChange={(e) => handleFilterChange('product', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead>
+              <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3">
                 <Input
                   placeholder="Filter..."
                   value={filters.category}
                   onChange={(e) => handleFilterChange('category', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
-              {userRole !== "admin" && <TableHead></TableHead>}
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              {userRole !== "admin" && <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {processedRules.map((rule) => {
+            {pagination.paginatedItems.map((rule) => {
               const finalPrice = calculateFinalPrice(rule)
               const categoryPrice = rule.price_category_id 
                 ? getPriceForCategoryOnDate(rule.price_category_id, today, priceHistory)
@@ -338,35 +340,35 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole, 
               
               return (
                 <TableRow key={rule.id}>
-                  <TableCell className="font-medium">{rule.clients.name}</TableCell>
-                  <TableCell>{rule.products.name}</TableCell>
-                  <TableCell>
-                    <span className="font-medium text-blue-600">{rule.price_categories?.name || "—"}</span>
+                  <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3 max-w-[100px] sm:max-w-none truncate text-xs sm:text-sm">{rule.clients.name}</TableCell>
+                  <TableCell className="px-2 sm:px-4 py-2 sm:py-3 text-xs">{rule.products.name}</TableCell>
+                  <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                    <span className="font-medium text-blue-600 text-xs">{rule.price_categories?.name || "—"}</span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
                     {categoryPrice !== null ? (
-                      <span className="font-semibold text-green-600">₹{categoryPrice.toFixed(2)}</span>
+                      <span className="font-semibold text-green-600 text-xs">₹{categoryPrice.toFixed(2)}</span>
                     ) : (
-                      <span className="text-gray-400">No price</span>
+                      <span className="text-gray-400 text-xs">No price</span>
                     )}
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
+                  <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
+                    <Badge variant="secondary" className="text-xs">
                       {ruleTypeLabels[rule.price_rule_type as keyof typeof ruleTypeLabels]}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs">
                     {rule.price_rule_type === "discount_percentage" && `${rule.price_rule_value}%`}
                     {rule.price_rule_type === "discount_flat" && `₹${Number(rule.price_rule_value || 0).toFixed(2)}`}
                     {rule.price_rule_type === "multiplier" && `× ${rule.price_rule_value}`}
                   </TableCell>
-                  <TableCell className="font-bold text-green-600">₹{finalPrice.toFixed(2)}</TableCell>
+                  <TableCell className="font-bold text-green-600 px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">₹{finalPrice.toFixed(2)}</TableCell>
                   {userRole !== "admin" && (
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                    <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
+                      <div className="flex justify-end gap-1 sm:gap-2">
                         <Button variant="ghost" size="sm" asChild>
                           <Link href={`/dashboard/client-pricing/${rule.id}/edit`}>
-                            <Pencil className="h-4 w-4" />
+                            <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
                           </Link>
                         </Button>
                         <Button
@@ -378,7 +380,7 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole, 
                           }}
                           disabled={isDeleting}
                         >
-                          <Trash2 className="h-4 w-4 text-red-600" />
+                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
                         </Button>
                       </div>
                     </TableCell>
@@ -389,6 +391,15 @@ export function ClientPricingTable({ pricingRules, priceHistory = [], userRole, 
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        itemsPerPage={itemsPerPage}
+        onPageChange={pagination.goToPage}
+        onItemsPerPageChange={setItemsPerPage}
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

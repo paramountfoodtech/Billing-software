@@ -75,6 +75,7 @@ export function UserForm({ organizations, initialData }: UserFormProps) {
         })
       } else {
         toast({
+          variant: "success",
           title: "Success",
           description: initialData ? "User updated successfully." : "User created successfully.",
         })

@@ -65,6 +65,7 @@ export function PriceForm({ initialData, initialPrice }: PriceFormProps) {
         if (error) throw error
 
         toast({
+          variant: "success",
           title: "Success",
           description: "Category updated successfully.",
         })
@@ -178,6 +179,7 @@ export function PriceForm({ initialData, initialPrice }: PriceFormProps) {
       if (error) throw error
 
       toast({
+        variant: "success",
         title: "Success",
         description: "Price update created successfully.",
       })

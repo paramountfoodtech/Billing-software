@@ -156,6 +156,7 @@ export function ClientForm({ client }: ClientFormProps) {
         if (error) throw error
         
         toast({
+          variant: "success",
           title: "Client updated",
           description: "Client information has been updated successfully.",
         })
@@ -181,8 +182,7 @@ export function ClientForm({ client }: ClientFormProps) {
           // Don't fail the client creation, just log the error
         }
         
-        toast({
-          title: "Client created",
+        toast({          variant: "success",          title: "Client created",
           description: `${formData.name} has been added successfully.`,
         })
       }

@@ -46,7 +46,7 @@ export default async function SettingsPage() {
 
   return (
     <DashboardPageWrapper title="System Settings">
-      <div className="lg:p-8 space-y-6">
+      <div className="w-full p-4 sm:p-6 lg:p-8 space-y-6">
         {isManagerViewOnly && (
           <div className="px-6 py-2 bg-amber-50 border border-amber-200 rounded-lg">
             <p className="text-sm text-amber-700">View-only access. Contact an admin to make changes.</p>

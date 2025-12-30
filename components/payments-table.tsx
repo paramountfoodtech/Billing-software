@@ -8,6 +8,8 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState, useMemo, ReactNode } from "react"
+import { usePagination } from "@/hooks/use-pagination"
+import { TablePagination } from "@/components/table-pagination"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,6 +65,9 @@ export function PaymentsTable({ payments, toolbarLeft }: PaymentsTableProps) {
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Pagination state
+  const [itemsPerPage, setItemsPerPage] = useState(10)
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -149,6 +154,11 @@ export function PaymentsTable({ payments, toolbarLeft }: PaymentsTableProps) {
     return filtered
   }, [payments, filters, sortColumn, sortDirection])
 
+  const pagination = usePagination({
+    items: processedPayments,
+    itemsPerPage,
+  })
+
   const SortIcon = ({ column }: { column: string }) => {
     if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
     return sortDirection === 'asc' 
@@ -170,6 +180,7 @@ export function PaymentsTable({ payments, toolbarLeft }: PaymentsTableProps) {
       })
     } else {
       toast({
+        variant: "success",
         title: "Payment deleted",
         description: "The payment has been deleted successfully.",
       })
@@ -205,6 +216,7 @@ export function PaymentsTable({ payments, toolbarLeft }: PaymentsTableProps) {
 
     exportToCSV(processedPayments, columns, `payments-${getTimestamp()}.csv`)
     toast({
+      variant: "success",
       title: "Exported",
       description: `${processedPayments.length} payment(s) exported to CSV successfully.`,
     })
@@ -220,7 +232,7 @@ export function PaymentsTable({ payments, toolbarLeft }: PaymentsTableProps) {
 
   return (
     <>
-      <div className="flex items-end justify-between gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
         <div className="flex items-center gap-3">
           {toolbarLeft}
         </div>
@@ -228,100 +240,100 @@ export function PaymentsTable({ payments, toolbarLeft }: PaymentsTableProps) {
           <Download className="h-4 w-4" />
         </Button>
       </div>
-      <div className="rounded-lg border bg-white">
-        <Table>
+      <div className="rounded-lg border bg-white overflow-x-auto">
+        <Table className="text-xs sm:text-sm">
           <TableHeader>
             <TableRow>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('date')}>
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('date')}>
                 Date<SortIcon column="date" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('invoice')}>
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('invoice')}>
                 Invoice<SortIcon column="invoice" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('client')}>
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('client')}>
                 Client<SortIcon column="client" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('amount')}>
-                Payment<SortIcon column="amount" />
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('amount')}>
+                Amount<SortIcon column="amount" />
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('method')}>
+              <TableHead className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('method')}>
                 Method<SortIcon column="method" />
               </TableHead>
-              <TableHead>Reference</TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('status')}>
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">Reference</TableHead>
+              <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('status')}>
                 Status<SortIcon column="status" />
               </TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Actions</TableHead>
             </TableRow>
             <TableRow>
-              <TableHead></TableHead>
-              <TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
                 <Input
                   placeholder="Filter..."
                   value={filters.invoice}
                   onChange={(e) => handleFilterChange('invoice', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
                 <Input
                   placeholder="Filter..."
                   value={filters.client}
                   onChange={(e) => handleFilterChange('client', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead></TableHead>
-              <TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3">
                 <Input
                   placeholder="Filter..."
                   value={filters.method}
                   onChange={(e) => handleFilterChange('method', e.target.value)}
-                  className="h-8"
+                  className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {processedPayments.map((payment) => {
+            {pagination.paginatedItems.map((payment) => {
               const config = statusConfig[payment.status as keyof typeof statusConfig]
 
               return (
                 <TableRow key={payment.id}>
-                  <TableCell>
+                  <TableCell className="px-2 sm:px-4 py-2 sm:py-3 text-xs">
                     {new Date(payment.payment_date).toLocaleDateString('en-IN', { 
                       year: 'numeric', 
                       month: 'short', 
                       day: 'numeric' 
                     })}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
                     <Link
                       href={`/dashboard/invoices/${payment.invoice_id}`}
-                      className="font-medium hover:underline text-blue-600"
+                      className="font-medium hover:underline text-blue-600 max-w-[100px] sm:max-w-none truncate block text-xs"
                     >
                       {payment.invoices.invoice_number}
                     </Link>
                   </TableCell>
-                  <TableCell>{payment.invoices.clients.name}</TableCell>
-                  <TableCell className="font-semibold text-green-600">
+                  <TableCell className="px-2 sm:px-4 py-2 sm:py-3 text-xs">{payment.invoices.clients.name}</TableCell>
+                  <TableCell className="font-semibold text-green-600 px-2 sm:px-4 py-2 sm:py-3 text-xs">
                     ₹{Number(payment.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell className="capitalize">{payment.payment_method.replace("_", " ")}</TableCell>
-                  <TableCell className="text-muted-foreground">{payment.reference_number || "-"}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className={config.className}>
+                  <TableCell className="hidden md:table-cell capitalize px-2 sm:px-4 py-2 sm:py-3 text-xs">{payment.payment_method.replace("_", " ")}</TableCell>
+                  <TableCell className="hidden lg:table-cell text-muted-foreground px-2 sm:px-4 py-2 sm:py-3 text-xs">{payment.reference_number || "-"}</TableCell>
+                  <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
+                    <Badge variant="secondary" className={`${config.className} text-xs`}>
                       {config.label}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
+                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
+                    <div className="flex justify-end gap-1 sm:gap-2">
                       <Button variant="ghost" size="sm" asChild>
                         <Link href={`/dashboard/payments/${payment.id}`}>
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                         </Link>
                       </Button>
                       <Button
@@ -332,7 +344,7 @@ export function PaymentsTable({ payments, toolbarLeft }: PaymentsTableProps) {
                           setDeleteDialogOpen(true)
                         }}
                       >
-                        <Trash2 className="h-4 w-4 text-red-600" />
+                        <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
                       </Button>
                     </div>
                   </TableCell>
@@ -342,6 +354,15 @@ export function PaymentsTable({ payments, toolbarLeft }: PaymentsTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        itemsPerPage={itemsPerPage}
+        onPageChange={pagination.goToPage}
+        onItemsPerPageChange={setItemsPerPage}
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

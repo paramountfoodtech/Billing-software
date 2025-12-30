@@ -98,9 +98,9 @@ export default async function ReportsPage() {
 
   return (
     <DashboardPageWrapper title="Reports & Analytics">
-      <div className="lg:p-8">
+      <div className="w-full p-4 sm:p-6 lg:p-8">
         {/* Key Metrics */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8 px-6">
+        <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>

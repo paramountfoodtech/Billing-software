@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
+import { Switch } from "@/components/ui/switch"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { Spinner } from "@/components/ui/spinner"
@@ -27,6 +28,7 @@ interface PriceCategory {
   id: string
   name: string
   description: string | null
+  is_active?: boolean
 }
 
 interface CategoriesManagementProps {
@@ -99,6 +101,7 @@ export function CategoriesManagement({ priceCategories }: CategoriesManagementPr
       if (error) throw error
 
       toast({
+        variant: "success",
         title: "Success",
         description: "Category added successfully.",
       })
@@ -126,6 +129,7 @@ export function CategoriesManagement({ priceCategories }: CategoriesManagementPr
       if (error) throw error
 
       toast({
+        variant: "success",
         title: "Success",
         description: "Category deleted successfully.",
       })
@@ -139,6 +143,33 @@ export function CategoriesManagement({ priceCategories }: CategoriesManagementPr
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+    const supabase = createClient()
+
+    try {
+      const { error } = await supabase
+        .from("price_categories")
+        .update({ is_active: !currentStatus })
+        .eq("id", id)
+
+      if (error) throw error
+
+      toast({
+        variant: "success",
+        title: "Success",
+        description: `Category ${!currentStatus ? "activated" : "deactivated"} successfully.`,
+      })
+
+      router.refresh()
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to update category status.",
+      })
     }
   }
 
@@ -201,16 +232,31 @@ export function CategoriesManagement({ priceCategories }: CategoriesManagementPr
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {priceCategories.map((category) => (
-          <Card key={category.id}>
+          <Card key={category.id} className={!category.is_active ? "opacity-60" : ""}>
             <CardContent className="pt-6">
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-lg">{category.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-lg">{category.name}</h3>
+                      {!category.is_active && (
+                        <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded">Inactive</span>
+                      )}
+                    </div>
                     {category.description && (
                       <p className="text-sm text-muted-foreground mt-1">{category.description}</p>
                     )}
                   </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <Switch
+                    checked={category.is_active ?? true}
+                    onCheckedChange={() => handleToggleActive(category.id, category.is_active ?? true)}
+                  />
+                  <Label className="text-sm cursor-pointer" onClick={() => handleToggleActive(category.id, category.is_active ?? true)}>
+                    {category.is_active ? "Active" : "Inactive"}
+                  </Label>
                 </div>
 
                 <div className="flex gap-2 pt-2">

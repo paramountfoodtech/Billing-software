@@ -213,6 +213,7 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
         })
       } else {
         toast({
+          variant: "success",
           title: "Success",
           description: `${priceUpdates.length} category price(s) updated successfully.`,
         })

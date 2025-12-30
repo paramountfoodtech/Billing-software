@@ -187,17 +187,16 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
                 <th className="text-left py-2">Description</th>
                 <th className="text-right py-2">Qty</th>
                 <th className="text-right py-2">Rate</th>
-                <th className="text-right py-2">Disc %</th>
-                <th className="text-right py-2">{activeTemplate.tax_label} %</th>
                 <th className="text-right py-2">Amount</th>
               </tr>
             </thead>
             <tbody>
               {invoice.invoice_items.map((item, index) => {
-                const hasPerBird = item.bird_count && item.per_bird_adjustment
+                const hasPerBird = item.bird_count !== null && item.per_bird_adjustment !== null
                 const baseAmount = hasPerBird 
                   ? Number(item.line_total) - Number(item.per_bird_adjustment)
                   : Number(item.line_total)
+                const safeBirdCount = Math.max(1, Number(item.bird_count ?? 1))
                 
                 return (
                   <Fragment key={`item-group-${index}`}>
@@ -205,14 +204,12 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
                       <td className="py-3">{item.description}</td>
                       <td className="text-right">{Number(item.quantity).toFixed(2)}</td>
                       <td className="text-right">₹{Number(item.unit_price).toFixed(2)}</td>
-                      <td className="text-right">{Number(item.discount).toFixed(2)}%</td>
-                      <td className="text-right">{Number(item.tax_rate).toFixed(2)}%</td>
                       <td className="text-right">₹{baseAmount.toFixed(2)}</td>
                     </tr>
                     {hasPerBird && (
                       <tr key={`perbird-${index}`} className="border-b border-gray-200">
                         <td className="py-2 pl-8 text-sm text-amber-600" colSpan={5}>
-                          Per-bird adjustment ({item.bird_count} birds × ₹{(Number(item.per_bird_adjustment) / item.bird_count).toFixed(2)}/bird)
+                          Per-bird adjustment ({safeBirdCount} birds × ₹{(Number(item.per_bird_adjustment || 0) / safeBirdCount).toFixed(2)}/bird)
                         </td>
                         <td className="text-right text-sm text-amber-600">
                           {Number(item.per_bird_adjustment) > 0 ? '+' : ''}₹{Number(item.per_bird_adjustment).toFixed(2)}

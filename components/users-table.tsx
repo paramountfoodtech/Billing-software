@@ -9,6 +9,8 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
+import { usePagination } from "@/hooks/use-pagination"
+import { TablePagination } from "@/components/table-pagination"
 import { Input } from "@/components/ui/input"
 import {
   AlertDialog,
@@ -40,6 +42,9 @@ export function UsersTable({ users, userRole }: { users: User[]; userRole?: stri
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Pagination state
+  const [itemsPerPage, setItemsPerPage] = useState(10)
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -126,6 +131,11 @@ export function UsersTable({ users, userRole }: { users: User[]; userRole?: stri
     return filtered
   }, [users, filters, sortColumn, sortDirection])
 
+  const pagination = usePagination({
+    items: processedUsers,
+    itemsPerPage,
+  })
+
   const SortIcon = ({ column }: { column: string }) => {
     if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
     return sortDirection === 'asc' 
@@ -158,6 +168,7 @@ export function UsersTable({ users, userRole }: { users: User[]; userRole?: stri
       setUserToDelete(null)
       
       toast({
+        variant: "success",
         title: "User deactivated",
         description: "The user has been deactivated successfully.",
       })
@@ -194,86 +205,86 @@ export function UsersTable({ users, userRole }: { users: User[]; userRole?: stri
 
   return (
     <>
-    <div className="bg-white rounded-lg border border-slate-200">
-      <Table>
+    <div className="rounded-lg border border-slate-200 bg-white overflow-x-auto">
+      <Table className="text-xs sm:text-sm">
         <TableHeader>
           <TableRow>
-            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('name')}>
+            <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('name')}>
               Name<SortIcon column="name" />
             </TableHead>
-            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('email')}>
+            <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('email')}>
               Email<SortIcon column="email" />
             </TableHead>
-            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('role')}>
+            <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('role')}>
               Role<SortIcon column="role" />
             </TableHead>
-            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('organization')}>
+            <TableHead className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('organization')}>
               Organization<SortIcon column="organization" />
             </TableHead>
-            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('status')}>
+            <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('status')}>
               Status<SortIcon column="status" />
             </TableHead>
-            {userRole === "super_admin" && <TableHead className="text-right">Actions</TableHead>}
+            {userRole === "super_admin" && <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Actions</TableHead>}
           </TableRow>
           <TableRow>
-            <TableHead>
+            <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
               <Input
                 placeholder="Filter..."
                 value={filters.name}
                 onChange={(e) => handleFilterChange('name', e.target.value)}
-                className="h-8"
+                className="h-7 text-xs"
               />
             </TableHead>
-            <TableHead>
+            <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
               <Input
                 placeholder="Filter..."
                 value={filters.email}
                 onChange={(e) => handleFilterChange('email', e.target.value)}
-                className="h-8"
+                className="h-7 text-xs"
               />
             </TableHead>
-            <TableHead>
+            <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
               <Input
                 placeholder="Filter..."
                 value={filters.role}
                 onChange={(e) => handleFilterChange('role', e.target.value)}
-                className="h-8"
+                className="h-7 text-xs"
               />
             </TableHead>
-            <TableHead></TableHead>
-            <TableHead></TableHead>
-            {userRole === "admin" && <TableHead></TableHead>}
+            <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+            <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+            {userRole === "admin" && <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {processedUsers.length === 0 ? (
+          {pagination.paginatedItems.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-slate-500 py-8">
+              <TableCell colSpan={6} className="text-center text-slate-500 py-8 px-2 sm:px-4">
                 No users found
               </TableCell>
             </TableRow>
           ) : (
-            processedUsers.map((user) => (
+            pagination.paginatedItems.map((user) => (
               <TableRow key={user.id}>
-                <TableCell className="font-medium">{user.full_name}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>
-                  <Badge className={getRoleBadgeColor(user.role)} variant="secondary">
+                <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3 max-w-[100px] sm:max-w-none truncate text-xs sm:text-sm">{user.full_name}</TableCell>
+                <TableCell className="px-2 sm:px-4 py-2 sm:py-3 text-xs hidden sm:table-cell">{user.email}</TableCell>
+                <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
+                  <Badge className={`${getRoleBadgeColor(user.role)} text-xs`} variant="secondary">
                     {user.role.replace("_", " ")}
                   </Badge>
                 </TableCell>
-                <TableCell>{user.organizations?.name || "N/A"}</TableCell>
-                <TableCell>
-                  <Badge variant={user.is_active ? "default" : "secondary"}>
+                <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs">{user.organizations?.name || "N/A"}</TableCell>
+                <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
+                  <Badge variant={user.is_active ? "default" : "secondary"} className="text-xs">
                     {user.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </TableCell>
                 {userRole === "super_admin" && (
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
+                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
+                    <div className="flex justify-end gap-1 sm:gap-2">
                       <Link href={`/dashboard/users/${user.id}/edit`}>
                         <Button variant="ghost" size="sm">
-                          <Edit className="h-4 w-4" />
+                          <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
                         </Button>
                       </Link>
                       <Button
@@ -285,7 +296,7 @@ export function UsersTable({ users, userRole }: { users: User[]; userRole?: stri
                         }}
                         className="text-red-600 hover:text-red-700"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                       </Button>
                     </div>
                   </TableCell>
@@ -296,6 +307,16 @@ export function UsersTable({ users, userRole }: { users: User[]; userRole?: stri
         </TableBody>
       </Table>
     </div>
+
+    <TablePagination
+      currentPage={pagination.currentPage}
+      totalPages={pagination.totalPages}
+      totalItems={pagination.totalItems}
+      itemsPerPage={itemsPerPage}
+      onPageChange={pagination.goToPage}
+      onItemsPerPageChange={setItemsPerPage}
+    />
+
     <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>

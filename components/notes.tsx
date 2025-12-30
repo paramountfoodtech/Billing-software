@@ -181,6 +181,7 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
       })
     } else {
       toast({
+        variant: "success",
         title: "Note added",
         description: "Your note has been added successfully.",
       })

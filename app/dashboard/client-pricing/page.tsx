@@ -49,29 +49,25 @@ export default async function ClientPricingPage() {
 
   return (
     <DashboardPageWrapper title="Client-Specific Pricing">
-      <div className="lg:p-8">
-        <div className="px-6 pb-4 flex items-center justify-end">
-          <div className="flex items-center gap-2">
-            {profile.role === "super_admin" && (
-              <Button asChild>
-                <Link href="/dashboard/client-pricing/new">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Pricing Rule
-                </Link>
-              </Button>
-            )}
-          </div>
+      <div className="w-full p-4 sm:p-6 lg:p-8 space-y-4">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+          {profile.role === "super_admin" && (
+            <Button asChild className="w-full sm:w-auto">
+              <Link href="/dashboard/client-pricing/new">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Pricing Rule
+              </Link>
+            </Button>
+          )}
         </div>
 
         <Suspense fallback={<LoadingOverlay />}>
-          <div className="px-6">
-            <ClientPricingPageClient
-              pricingRules={pricingRules || []}
-              priceHistory={priceHistory || []}
-              clients={clients || []}
-              userRole={profile.role}
-            />
-          </div>
+          <ClientPricingPageClient
+            pricingRules={pricingRules || []}
+            priceHistory={priceHistory || []}
+            clients={clients || []}
+            userRole={profile.role}
+          />
         </Suspense>
       </div>
     </DashboardPageWrapper>

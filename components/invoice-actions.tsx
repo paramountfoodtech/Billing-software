@@ -32,6 +32,7 @@ export function InvoiceActions({ invoiceId, currentStatus }: InvoiceActionsProps
       })
     } else {
       toast({
+        variant: "success",
         title: "Success",
         description: "Invoice status updated successfully.",
       })

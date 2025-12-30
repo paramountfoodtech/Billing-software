@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
+import { useSidebarContext } from "@/app/dashboard/sidebar-context"
 import {
   LayoutDashboard,
   Users,
@@ -44,7 +45,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
   const { toast } = useToast()
   const [isPending, startTransition] = useTransition()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const { isSidebarCollapsed, setIsSidebarCollapsed } = useSidebarContext()
   const [isSigningOut, setIsSigningOut] = useState(false)
 
   const handleSignOut = async () => {
@@ -54,6 +55,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
     try {
       await supabase.auth.signOut()
       toast({
+        variant: "success",
         title: "Signed out",
         description: "You have been successfully signed out.",
       })
@@ -138,7 +140,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:sticky lg:top-0 inset-y-0 left-0 z-40 bg-white border-r border-slate-200 flex flex-col transition-all duration-300 lg:h-screen",
+          "fixed inset-y-0 left-0 z-40 bg-white border-r border-slate-200 flex flex-col transition-all duration-300 lg:h-screen",
           isMobileMenuOpen ? "translate-x-0 w-64" : "-translate-x-full lg:translate-x-0",
           !isSidebarCollapsed ? "lg:w-64" : "lg:w-20",
         )}

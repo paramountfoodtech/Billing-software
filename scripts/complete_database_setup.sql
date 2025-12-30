@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS public.products (
   unit TEXT DEFAULT 'unit',
   tax_rate DECIMAL(5, 2) DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
+  position INTEGER NOT NULL DEFAULT 0,
   organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
   created_by UUID NOT NULL REFERENCES public.profiles(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -87,6 +88,8 @@ CREATE TABLE IF NOT EXISTS public.price_categories (
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  position INTEGER NOT NULL DEFAULT 0,
   created_by UUID NOT NULL REFERENCES public.profiles(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -197,7 +200,10 @@ CREATE INDEX IF NOT EXISTS idx_clients_organization_id ON public.clients(organiz
 CREATE INDEX IF NOT EXISTS idx_clients_created_by ON public.clients(created_by);
 CREATE INDEX IF NOT EXISTS idx_products_name ON public.products(name);
 CREATE INDEX IF NOT EXISTS idx_products_organization_id ON public.products(organization_id);
+CREATE INDEX IF NOT EXISTS idx_products_position ON public.products(organization_id, position);
 CREATE INDEX IF NOT EXISTS idx_price_categories_organization_id ON public.price_categories(organization_id);
+CREATE INDEX IF NOT EXISTS idx_price_categories_is_active ON public.price_categories(is_active);
+CREATE INDEX IF NOT EXISTS idx_price_categories_position ON public.price_categories(organization_id, position);
 CREATE INDEX IF NOT EXISTS idx_price_category_history_category_id ON public.price_category_history(price_category_id);
 CREATE INDEX IF NOT EXISTS idx_price_category_history_org_date ON public.price_category_history(organization_id, effective_date);
 CREATE INDEX IF NOT EXISTS idx_client_product_pricing_client_id ON public.client_product_pricing(client_id);

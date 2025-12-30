@@ -44,6 +44,7 @@ export function SettingsForm({ organization }: { organization: Organization | nu
       if (error) throw error
 
       toast({
+        variant: "success",
         title: "Success",
         description: "Settings updated successfully!",
       })

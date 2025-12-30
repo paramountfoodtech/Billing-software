@@ -3,11 +3,30 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Pencil, Trash2, Download, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Pencil, Trash2, Download, ArrowUpDown, ArrowUp, ArrowDown, GripVertical } from "lucide-react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState, useMemo } from "react"
+import { usePagination } from "@/hooks/use-pagination"
+import { TablePagination } from "@/components/table-pagination"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +47,7 @@ interface Product {
   description: string | null
   is_active: boolean
   created_at: string
+  position?: number
   profiles?: {
     full_name: string
   }
@@ -37,6 +57,72 @@ interface ProductsTableProps {
   products: Product[]
 }
 
+function SortableProductRow({
+  product,
+  onDelete,
+}: {
+  product: Product
+  onDelete: (id: string) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: product.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <TableRow ref={setNodeRef} style={style} className="text-xs sm:text-sm">
+      <TableCell className="w-[40px] sm:w-[50px] px-2 sm:px-4 py-2 sm:py-3">
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing hover:bg-muted rounded p-1 inline-flex"
+        >
+          <GripVertical className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+        </div>
+      </TableCell>
+      <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3 max-w-[100px] sm:max-w-none truncate">{product.name}</TableCell>
+      <TableCell className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3 max-w-xs truncate">
+        {product.description || <span className="text-muted-foreground">-</span>}
+      </TableCell>
+      <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
+        {product.is_active ? (
+          <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
+            Active
+          </Badge>
+        ) : (
+          <Badge variant="secondary" className="text-xs">Inactive</Badge>
+        )}
+      </TableCell>
+      <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
+        <div className="flex justify-end gap-1 sm:gap-2">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/dashboard/products/${product.id}/edit`}>
+              <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
+            </Link>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDelete(product.id)}
+          >
+            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
 export function ProductsTable({ products }: ProductsTableProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -44,9 +130,21 @@ export function ProductsTable({ products }: ProductsTableProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [productToDelete, setProductToDelete] = useState<string | null>(null)
 
+  // Drag and drop setup
+  const [orderedProducts, setOrderedProducts] = useState(products)
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  // Pagination state
+  const [itemsPerPage, setItemsPerPage] = useState(10)
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -69,7 +167,7 @@ export function ProductsTable({ products }: ProductsTableProps) {
 
   // Apply filtering and sorting
   const processedProducts = useMemo(() => {
-    let filtered = [...products]
+    let filtered = [...orderedProducts]
 
     // Apply filters
     if (filters.name) {
@@ -113,13 +211,57 @@ export function ProductsTable({ products }: ProductsTableProps) {
     }
 
     return filtered
-  }, [products, filters, sortColumn, sortDirection])
+  }, [orderedProducts, filters, sortColumn, sortDirection])
+
+  const pagination = usePagination({
+    items: processedProducts,
+    itemsPerPage,
+  })
 
   const SortIcon = ({ column }: { column: string }) => {
     if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
     return sortDirection === 'asc' 
       ? <ArrowUp className="ml-2 h-4 w-4 inline" />
       : <ArrowDown className="ml-2 h-4 w-4 inline" />
+  }
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      const oldIndex = orderedProducts.findIndex((prod) => prod.id === active.id)
+      const newIndex = orderedProducts.findIndex((prod) => prod.id === over.id)
+
+      const newOrder = arrayMove(orderedProducts, oldIndex, newIndex)
+      setOrderedProducts(newOrder)
+
+      // Persist the new order to the database
+      const supabase = createClient()
+      const updates = newOrder.map((prod, index) => ({
+        id: prod.id,
+        position: index,
+      }))
+
+      try {
+        for (const update of updates) {
+          await supabase
+            .from("products")
+            .update({ position: update.position })
+            .eq("id", update.id)
+        }
+        toast({
+          variant: "success",
+          title: "Order updated",
+          description: "Product order has been saved.",
+        })
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to save product order.",
+        })
+      }
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -136,6 +278,7 @@ export function ProductsTable({ products }: ProductsTableProps) {
       })
     } else {
       toast({
+        variant: "success",
         title: "Product deleted",
         description: "The product has been deleted successfully.",
       })
@@ -158,6 +301,7 @@ export function ProductsTable({ products }: ProductsTableProps) {
 
     exportToCSV(processedProducts, columns, `products-${getTimestamp()}.csv`)
     toast({
+      variant: "success",
       title: "Exported",
       description: `${processedProducts.length} product(s) exported to CSV successfully.`,
     })
@@ -173,87 +317,84 @@ export function ProductsTable({ products }: ProductsTableProps) {
 
   return (
     <>
-      <div className="flex justify-end items-center mb-4">
+      <div className="flex justify-end mb-4">
         <Button onClick={handleExport} size="sm" variant="outline" title="Export to CSV">
           <Download className="h-4 w-4" />
         </Button>
       </div>
-      <div className="rounded-lg border bg-white">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('name')}>
-                Name<SortIcon column="name" />
-              </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('description')}>
-                Description<SortIcon column="description" />
-              </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('is_active')}>
-                Status<SortIcon column="is_active" />
-              </TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-            <TableRow>
-              <TableHead>
-                <Input
-                  placeholder="Filter..."
-                  value={filters.name}
-                  onChange={(e) => handleFilterChange('name', e.target.value)}
-                  className="h-8"
-                />
-              </TableHead>
-              <TableHead>
-                <Input
-                  placeholder="Filter..."
-                  value={filters.description}
-                  onChange={(e) => handleFilterChange('description', e.target.value)}
-                  className="h-8"
-                />
-              </TableHead>
-              <TableHead></TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {processedProducts.map((product) => (
-              <TableRow key={product.id}>
-                <TableCell className="font-medium">{product.name}</TableCell>
-                <TableCell className="max-w-xs truncate">
-                  {product.description || <span className="text-muted-foreground">-</span>}
-                </TableCell>
-                <TableCell>
-                  {product.is_active ? (
-                    <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
-                      Active
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">Inactive</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/dashboard/products/${product.id}/edit`}>
-                        <Pencil className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setProductToDelete(product.id)
-                        setDeleteDialogOpen(true)
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-600" />
-                    </Button>
-                  </div>
-                </TableCell>
+      <div className="rounded-lg border bg-white overflow-x-auto">
+        <DndContext
+          id="products-dnd"
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <Table className="text-xs sm:text-sm">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[40px] sm:w-[50px] px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+                <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('name')}>
+                  Name<SortIcon column="name" />
+                </TableHead>
+                <TableHead className="hidden sm:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('description')}>
+                  Description<SortIcon column="description" />
+                </TableHead>
+                <TableHead className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3" onClick={() => handleSort('is_active')}>
+                  Status<SortIcon column="is_active" />
+                </TableHead>
+                <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+              <TableRow>
+                <TableHead className="px-2 sm:px-4 py-2"></TableHead>
+                <TableHead className="px-2 sm:px-4 py-2">
+                  <Input
+                    placeholder="Filter..."
+                    value={filters.name}
+                    onChange={(e) => handleFilterChange('name', e.target.value)}
+                    className="h-7 text-xs"
+                  />
+                </TableHead>
+                <TableHead className="hidden sm:table-cell px-2 sm:px-4 py-2">
+                  <Input
+                    placeholder="Filter..."
+                    value={filters.description}
+                    onChange={(e) => handleFilterChange('description', e.target.value)}
+                    className="h-8"
+                  />
+                </TableHead>
+                <TableHead></TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <SortableContext
+                items={pagination.paginatedItems.map((prod) => prod.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {pagination.paginatedItems.map((product) => (
+                  <SortableProductRow
+                    key={product.id}
+                    product={product}
+                    onDelete={(id) => {
+                      setProductToDelete(id)
+                      setDeleteDialogOpen(true)
+                    }}
+                  />
+                ))}
+              </SortableContext>
+            </TableBody>
+          </Table>
+        </DndContext>
       </div>
+
+      <TablePagination
+        currentPage={pagination.currentPage}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        itemsPerPage={itemsPerPage}
+        onPageChange={pagination.goToPage}
+        onItemsPerPageChange={setItemsPerPage}
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

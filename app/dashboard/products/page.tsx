@@ -6,14 +6,35 @@ import { ProductsTable } from "@/components/products-table"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
 import { Suspense } from "react"
 import { LoadingOverlay } from "@/components/loading-overlay"
+import { redirect } from "next/navigation"
 
 async function ProductsContent() {
   const supabase = await createClient()
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/auth/login")
+  }
+
+  // Get user's organization
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("organization_id")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile) {
+    redirect("/dashboard")
+  }
+
   const { data: products } = await supabase
     .from("products")
     .select("*, profiles!products_created_by_fkey(full_name)")
-    .order("created_at", { ascending: false })
+    .eq("organization_id", profile.organization_id)
+    .order("position", { ascending: true })
 
   return <ProductsTable products={products || []} />
 }
@@ -21,22 +42,18 @@ async function ProductsContent() {
 export default async function ProductsPage() {
   return (
     <DashboardPageWrapper title="Products & Services">
-      <div className="lg:p-8">
-        <div className="px-6 pb-4 flex items-center justify-end">
-          <div className="flex items-center gap-2">
-            <Button asChild>
-              <Link href="/dashboard/products/new">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Product
-              </Link>
-            </Button>
-          </div>
+      <div className="w-full p-4 sm:p-6 lg:p-8 space-y-4">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+          <Button asChild className="w-full sm:w-auto">
+            <Link href="/dashboard/products/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Product
+            </Link>
+          </Button>
         </div>
 
         <Suspense fallback={<LoadingOverlay />}>
-          <div className="px-6">
-            <ProductsContent />
-          </div>
+          <ProductsContent />
         </Suspense>
       </div>
     </DashboardPageWrapper>

@@ -122,6 +122,23 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Ensure mobile viewport height is correct */
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
+  }
+}
+
+/* Mobile responsive utilities */
+@layer utilities {
+  .touch-action-pan-y {
+    touch-action: pan-y;
+  }
+  
+  .touch-action-pan-x {
+    touch-action: pan-x;
+  }
 }
 
 @keyframes shimmer {
