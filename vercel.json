@@ -8,17 +8,5 @@
       "path": "/api/cron/send-reports?type=annual",
       "schedule": "0 8 31 3 *"
     }
-  ],
-  "_commented_out": [
-    {
-      "comment": "Weekly - exceeds free tier limit",
-      "path": "/api/cron/send-reports?type=weekly",
-      "schedule": "0 8 * * 1"
-    },
-    {
-      "comment": "Semi-annual - exceeds free tier limit",
-      "path": "/api/cron/send-reports?type=semi-annual",
-      "schedule": "0 8 1 */6 *"
-    }
   ]
 }
