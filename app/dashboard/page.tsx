@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, FileText, DollarSign, TrendingUp } from "lucide-react"
+import { Users, FileText, DollarSign } from "lucide-react"
 import { DashboardCharts } from "@/components/dashboard-charts"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
 import { Suspense } from "react"
@@ -72,14 +72,6 @@ export default async function DashboardPage() {
   const paidInvoices = invoicesResult.data?.filter((inv) => Number(inv.amount_paid) >= Number(inv.total_amount)).length || 0
   const totalRevenue =
     paymentsResult.data?.reduce((sum, payment) => sum + Number(payment.amount), 0).toFixed(2) || "0.00"
-  // Pending amount is the sum of (total_amount - amount_paid) for all invoices where there's still a balance
-  const pendingAmount =
-    invoicesResult.data
-      ?.reduce((sum, inv) => {
-        const balance = Number(inv.total_amount) - Number(inv.amount_paid)
-        return balance > 0 ? sum + balance : sum
-      }, 0)
-      .toFixed(2) || "0.00"
 
   return (
     <DashboardPageWrapper title="Dashboard Overview">
@@ -89,7 +81,7 @@ export default async function DashboardPage() {
             Showing data for Financial Year: <span className="font-semibold text-foreground">{fyRange.fy}</span>
           </p>
         </div>
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-xs sm:text-sm font-medium">Total Clients</CardTitle>
@@ -122,17 +114,6 @@ export default async function DashboardPage() {
             <CardContent>
               <div className="text-xl sm:text-2xl font-bold">₹{totalRevenue}</div>
               <p className="text-xs text-muted-foreground mt-1">FY {fyRange.fy} payments</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Pending Amount</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">₹{pendingAmount}</div>
-              <p className="text-xs text-muted-foreground mt-1">Outstanding invoices</p>
             </CardContent>
           </Card>
         </div>

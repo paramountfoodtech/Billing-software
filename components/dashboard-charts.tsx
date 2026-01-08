@@ -101,16 +101,20 @@ export function DashboardCharts({ invoices, payments }: DashboardChartsProps) {
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2 sm:pb-3">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Collection Rate</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Pending Amount</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline justify-between">
-              <div className="text-xl sm:text-2xl font-bold">{collectionRate}%</div>
-              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
+              <div className="text-xl sm:text-2xl font-bold text-orange-600">
+                ₹{pendingAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              </div>
+              <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 text-orange-600" />
             </div>
             <p className="text-xs text-muted-foreground mt-1 sm:mt-2">
-              ₹{totalPaid.toLocaleString("en-IN", { maximumFractionDigits: 0 })} / ₹
-              {totalInvoiced.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              Not yet due - {invoices.filter((inv) => {
+                const balance = Number(inv.total_amount) - Number(inv.amount_paid)
+                return balance > 0 && inv.due_date > todayStr
+              }).length} invoices upcoming
             </p>
           </CardContent>
         </Card>
@@ -137,35 +141,16 @@ export function DashboardCharts({ invoices, payments }: DashboardChartsProps) {
 
         <Card>
           <CardHeader className="pb-2 sm:pb-3">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Pending Amount</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Collection Rate</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline justify-between">
-              <div className="text-xl sm:text-2xl font-bold text-orange-600">
-                ₹{pendingAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-              </div>
-              <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 text-orange-600" />
+              <div className="text-xl sm:text-2xl font-bold">{collectionRate}%</div>
+              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
             </div>
             <p className="text-xs text-muted-foreground mt-1 sm:mt-2">
-              Not yet due - {invoices.filter((inv) => {
-                const balance = Number(inv.total_amount) - Number(inv.amount_paid)
-                return balance > 0 && inv.due_date > todayStr
-              }).length} invoices upcoming
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2 sm:pb-3">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Paid Invoices</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline justify-between">
-              <div className="text-xl sm:text-2xl font-bold text-green-600">{paidInvoicesCount}</div>
-              <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
-            </div>
-            <p className="text-xs text-muted-foreground mt-1 sm:mt-2">
-              {invoices.length > 0 ? ((paidInvoicesCount / invoices.length) * 100).toFixed(0) : 0}% of total invoices
+              ₹{totalPaid.toLocaleString("en-IN", { maximumFractionDigits: 0 })} / ₹
+              {totalInvoiced.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
             </p>
           </CardContent>
         </Card>
