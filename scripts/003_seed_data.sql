@@ -1,3 +1,0 @@
--- This file is deprecated and not needed
--- Create data through the application UI after signing up
--- Organizations, profiles, clients, products, and invoices are all created through the UI

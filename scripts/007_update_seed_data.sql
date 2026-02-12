@@ -1,3 +1,0 @@
--- This file is deprecated and not needed
--- Organizations are created automatically when users sign up
--- See scripts/006_add_organizations.sql for the handle_new_user() trigger
