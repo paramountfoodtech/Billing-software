@@ -93,7 +93,12 @@ export async function createUser(formData: {
       html: emailHtml,
     })
 
-    // Email sending is non-critical, don't fail user creation if email fails
+    // Log email result for debugging
+    if (!emailResult.success) {
+      console.error(`[CreateUser] Failed to send welcome email to ${formData.email}: ${emailResult.error}`)
+    } else {
+      console.log(`[CreateUser] Welcome email sent successfully to ${formData.email}`)
+    }
 
     revalidatePath("/dashboard/users")
     return { success: true }

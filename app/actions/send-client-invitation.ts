@@ -54,8 +54,13 @@ export async function sendClientInvitation(clientEmail: string, clientName: stri
       html: emailHtml,
     })
 
+    if (!result.success) {
+      console.error(`[SendClientInvitation] Failed to send invitation to ${clientEmail}: ${result.error}`)
+    }
+
     return result
   } catch (error: any) {
+    console.error(`[SendClientInvitation] Exception: ${error.message}`)
     return { success: false, error: error.message }
   }
 }
