@@ -8,13 +8,18 @@ interface PricingRule {
   id: string
   client_id: string
   product_id: string
-  price_category_id: string
-  markup_percentage: number
-  discount_percentage: number
+  price_category_id: string | null
+  price_rule_type: string
+  price_rule_value: string | null
+  fixed_base_value: number | null
+  notes: string | null
   created_at: string
+  conditional_threshold?: number | null
+  conditional_discount_below?: number | null
+  conditional_discount_above_equal?: number | null
   clients: { name: string }
-  products: { name: string; paper_price: number }
-  price_categories: { name: string }
+  products: { name: string; paper_price: string }
+  price_categories?: { name: string } | null
 }
 
 interface Client {

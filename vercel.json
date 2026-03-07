@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/send-reports?type=daily",
+      "schedule": "30 2 * * *"
+    },
+    {
       "path": "/api/cron/send-reports?type=monthly",
       "schedule": "0 8 1 * *"
     },

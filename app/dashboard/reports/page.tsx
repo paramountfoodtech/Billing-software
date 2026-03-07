@@ -1,15 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { MonthYearPicker } from "@/components/month-year-picker"
+import { ReportsTable } from "@/components/reports-table"
 
 export const revalidate = 0
 
@@ -133,20 +126,6 @@ export default async function ReportsPage({
     (r) => r.sale > 0 || r.payments > 0 || r.outstanding > 0 || r.oldBal > 0,
   )
 
-  const totals = rows.reduce(
-    (acc, r) => ({
-      oldBal: acc.oldBal + r.oldBal,
-      sale: acc.sale + r.sale,
-      saleKgs: acc.saleKgs + r.saleKgs,
-      payments: acc.payments + r.payments,
-      outstanding: acc.outstanding + r.outstanding,
-    }),
-    { oldBal: 0, sale: 0, saleKgs: 0, payments: 0, outstanding: 0 },
-  )
-
-  const fmt = (n: number) =>
-    n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
   return (
     <DashboardPageWrapper title="Reports">
       <div className="w-full p-4 sm:p-6 lg:p-8">
@@ -161,117 +140,7 @@ export default async function ReportsPage({
           <MonthYearPicker currentYear={reportYear} currentMonth={reportMonth} />
         </div>
 
-        {/* Report Table */}
-        <div className="rounded-lg border bg-white overflow-x-auto">
-          <Table className="text-xs sm:text-sm">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="px-2 sm:px-4 py-2 sm:py-3">Hotel</TableHead>
-                <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Old Bal</TableHead>
-                <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Sale</TableHead>
-                <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Sale KGS</TableHead>
-                <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Avg Qty</TableHead>
-                <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Payments</TableHead>
-                <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">Outstanding</TableHead>
-              </TableRow>
-              <TableRow>
-                <TableHead className="px-2 sm:px-4 py-1.5 font-normal text-muted-foreground" />
-                <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground">
-                  Outstanding − Current month Sale
-                </TableHead>
-                <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground">
-                  Current Month Sale
-                </TableHead>
-                <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground">
-                  Total Purchased Qty
-                </TableHead>
-                <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground leading-tight">
-                  Avg Qty per Day
-                  <br />
-                  Total / {daysInMonth} days
-                </TableHead>
-                <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground">
-                  Current Month Payments
-                </TableHead>
-                <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground">
-                  Total Outstanding
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-
-            <TableBody>
-              {rows.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="text-center text-muted-foreground py-16 px-2 sm:px-4"
-                  >
-                    No activity found for {monthLabel}.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3">
-                      {row.name}
-                    </TableCell>
-                    <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                      {row.oldBal > 0 ? `₹${fmt(row.oldBal)}` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                      {row.sale > 0 ? `₹${fmt(row.sale)}` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                      {row.saleKgs > 0 ? row.saleKgs.toFixed(2) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                      {row.saleKgs > 0 ? (
-                        <>
-                          {(row.saleKgs / daysInMonth).toFixed(2)}
-                          <span className="text-muted-foreground ml-1">
-                            / {daysInMonth}d
-                          </span>
-                        </>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-green-700">
-                      {row.payments > 0 ? `₹${fmt(row.payments)}` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 font-semibold text-orange-700">
-                      {row.outstanding > 0 ? `₹${fmt(row.outstanding)}` : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-              {/* Totals row */}
-              {rows.length > 0 && (
-                <TableRow className="border-t-2 font-bold bg-muted/30">
-                  <TableCell className="px-2 sm:px-4 py-2 sm:py-3">Total Sale</TableCell>
-                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                    ₹{fmt(totals.oldBal)}
-                  </TableCell>
-                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                    ₹{fmt(totals.sale)}
-                  </TableCell>
-                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                    {totals.saleKgs > 0 ? totals.saleKgs.toFixed(2) : "0"}
-                  </TableCell>
-                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 font-normal text-muted-foreground">
-                    —
-                  </TableCell>
-                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-green-700">
-                    ₹{fmt(totals.payments)}
-                  </TableCell>
-                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-orange-700">
-                    ₹{fmt(totals.outstanding)}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+        <ReportsTable rows={rows} daysInMonth={daysInMonth} monthLabel={monthLabel} />
       </div>
     </DashboardPageWrapper>
   )

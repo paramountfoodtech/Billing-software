@@ -16,6 +16,7 @@ interface AutomatedReportsSettingsProps {
     id: string
     automated_reports_enabled?: boolean
     automated_report_settings?: {
+      daily?: boolean
       weekly?: boolean
       monthly?: boolean
       "semi-annual"?: boolean
@@ -32,6 +33,7 @@ export function AutomatedReportsSettings({ organization }: AutomatedReportsSetti
   const [loading, setLoading] = useState(false)
 
   const defaultSettings = {
+    daily: true,
     weekly: false,
     monthly: false,
     "semi-annual": false,
@@ -131,8 +133,22 @@ export function AutomatedReportsSettings({ organization }: AutomatedReportsSetti
 
             <div className="space-y-4">
               <Label className="text-base">Report Frequency</Label>
-              
+
               <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-lg border border-blue-200 bg-blue-50/50">
+                  <div className="flex items-center gap-3">
+                    <Calendar className="h-4 w-4 text-blue-600" />
+                    <div>
+                      <p className="font-medium">Daily Report</p>
+                      <p className="text-sm text-muted-foreground">Every day at 8 AM — sent to super admin (client-wise breakdown)</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={settings.daily}
+                    onCheckedChange={() => handleToggleSetting("daily")}
+                  />
+                </div>
+
                 <div className="flex items-center justify-between p-3 rounded-lg border">
                   <div className="flex items-center gap-3">
                     <Calendar className="h-4 w-4 text-muted-foreground" />

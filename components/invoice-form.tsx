@@ -73,6 +73,7 @@ interface InvoiceFormProps {
     due_date: string;
     due_days_type?: string | null;
     invoice_number: string;
+    reference_number?: string | null;
     notes: string | null;
     subtotal?: number | null;
     tax_amount?: number | null;

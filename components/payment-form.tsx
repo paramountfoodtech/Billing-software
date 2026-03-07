@@ -28,10 +28,9 @@ interface Invoice {
   total_amount: string;
   amount_paid: string;
   status: string;
+  issue_date?: string;
   client_id?: string;
-  clients?: {
-    name: string;
-  };
+  clients?: { name: string } | { name: string }[];
 }
 
 interface Client {
@@ -475,7 +474,7 @@ export function PaymentForm({
                         Number(invoice.amount_paid);
                       return (
                         <SelectItem key={invoice.id} value={invoice.id}>
-                          {invoice.invoice_number} - {invoice.clients?.name} (₹
+                          {invoice.invoice_number} - {Array.isArray(invoice.clients) ? invoice.clients[0]?.name : invoice.clients?.name} (₹
                           {invoiceBalance.toFixed(2)} due)
                         </SelectItem>
                       );

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { NextResponse } from "next/server"
 
 // This endpoint will be called by a cron job (Vercel Cron or external service)
@@ -8,16 +9,22 @@ export async function GET(request: Request) {
     // Verify authorization
     const authHeader = request.headers.get("authorization")
     const cronSecret = process.env.NEXT_PUBLIC_CRON_SECRET || "your-secret-key"
-    
+
     if (authHeader !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
-    const reportType = searchParams.get("type") // weekly, monthly, semi-annual, annual
+    const reportType = searchParams.get("type") // daily, weekly, monthly, semi-annual, annual
 
-    // Get all organizations with automated reports enabled
+    if (reportType === "daily") {
+      // Daily report: send to super admin only
+      const result = await generateAndSendDailyReport()
+      return NextResponse.json({ message: "Daily report processed", result })
+    }
+
+    // Get all organizations with automated reports enabled (existing weekly/monthly/annual flow)
     const { data: organizations } = await supabase
       .from("organizations")
       .select("*")
@@ -32,20 +39,20 @@ export async function GET(request: Request) {
     for (const org of organizations) {
       // Check if this report type is enabled for this organization
       const reportSettings = org.automated_report_settings || {}
-      
+
       if (!reportSettings[reportType || "weekly"]) {
         continue
       }
 
       // Generate and send report
-      const result = await generateAndSendReport(org.id, reportType || "weekly", org.email)
+      const result = await generateAndSendReport(org.id, reportType || "weekly", org.report_email || org.email)
       results.push({ organization: org.name, result })
     }
 
-    return NextResponse.json({ 
-      message: "Reports processed", 
+    return NextResponse.json({
+      message: "Reports processed",
       results,
-      count: results.length 
+      count: results.length
     })
   } catch (error) {
     return NextResponse.json(
@@ -55,16 +62,165 @@ export async function GET(request: Request) {
   }
 }
 
+// ─── Daily report: replicates the Reports page content ───────────────────────
+
+async function generateAndSendDailyReport() {
+  const adminClient = createAdminClient()
+  const supabase = await createClient()
+
+  // Find the super_admin profile
+  const { data: superAdminProfile } = await supabase
+    .from("profiles")
+    .select("id, organization_id")
+    .eq("role", "super_admin")
+    .single()
+
+  if (!superAdminProfile) {
+    return "no super_admin found"
+  }
+
+  // Get super admin email from auth.users
+  const { data: userData } = await adminClient.auth.admin.getUserById(superAdminProfile.id)
+  const superAdminEmail = userData?.user?.email
+
+  if (!superAdminEmail) {
+    return "super_admin email not found"
+  }
+
+  // Check if daily reports are enabled for the organization
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("automated_reports_enabled, automated_report_settings")
+    .eq("id", superAdminProfile.organization_id)
+    .single()
+
+  if (!org?.automated_reports_enabled || !org?.automated_report_settings?.daily) {
+    return "daily reports not enabled"
+  }
+
+  // Build current month date range (same as reports page default)
+  const today = new Date()
+  const reportYear = today.getFullYear()
+  const reportMonth = today.getMonth() + 1
+  const monthStart = `${reportYear}-${String(reportMonth).padStart(2, "0")}-01`
+  const daysInMonth = new Date(reportYear, reportMonth, 0).getDate()
+  const monthEnd = `${reportYear}-${String(reportMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`
+  const monthLabel = today.toLocaleDateString("en-IN", { month: "long", year: "numeric" })
+
+  // Fetch data in parallel (mirrors reports page queries)
+  const [clientsResult, currentMonthInvoicesResult, allUnpaidInvoicesResult, currentMonthPaymentsResult] =
+    await Promise.all([
+      supabase.from("clients").select("id, name").order("name", { ascending: true }),
+
+      supabase
+        .from("invoices")
+        .select("id, client_id, total_amount, invoice_items(quantity)")
+        .gte("issue_date", monthStart)
+        .lte("issue_date", monthEnd),
+
+      supabase
+        .from("invoices")
+        .select("client_id, total_amount, amount_paid, issue_date")
+        .neq("status", "cancelled")
+        .neq("status", "paid"),
+
+      supabase
+        .from("payments")
+        .select("amount, invoices(client_id)")
+        .gte("payment_date", monthStart)
+        .lte("payment_date", monthEnd),
+    ])
+
+  const clients = clientsResult.data || []
+  const currentMonthInvoices = currentMonthInvoicesResult.data || []
+  const allUnpaidInvoices = allUnpaidInvoicesResult.data || []
+  const currentMonthPayments = currentMonthPaymentsResult.data || []
+
+  // Build per-client rows (mirrors reports page logic)
+  type ClientRow = {
+    id: string
+    name: string
+    sale: number
+    saleKgs: number
+    payments: number
+    outstanding: number
+    oldBal: number
+  }
+
+  const clientMap = new Map<string, ClientRow>()
+  for (const client of clients) {
+    clientMap.set(client.id, { id: client.id, name: client.name, sale: 0, saleKgs: 0, payments: 0, outstanding: 0, oldBal: 0 })
+  }
+
+  for (const invoice of currentMonthInvoices) {
+    const row = clientMap.get(invoice.client_id)
+    if (!row) continue
+    row.sale += Number(invoice.total_amount)
+    const items = (invoice.invoice_items as { quantity: string | number | null }[] | null) ?? []
+    row.saleKgs += items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+  }
+
+  for (const invoice of allUnpaidInvoices) {
+    const balance = Number(invoice.total_amount) - Number(invoice.amount_paid)
+    if (balance <= 0) continue
+    const row = clientMap.get(invoice.client_id)
+    if (!row) continue
+    row.outstanding += balance
+    if (invoice.issue_date < monthStart) {
+      row.oldBal += balance
+    }
+  }
+
+  for (const payment of currentMonthPayments) {
+    const clientId = (payment.invoices as unknown as { client_id: string } | null)?.client_id
+    if (!clientId) continue
+    const row = clientMap.get(clientId)
+    if (!row) continue
+    row.payments += Number(payment.amount)
+  }
+
+  const rows = Array.from(clientMap.values()).filter(
+    (r) => r.sale > 0 || r.payments > 0 || r.outstanding > 0 || r.oldBal > 0,
+  )
+
+  const totals = rows.reduce(
+    (acc, r) => ({
+      oldBal: acc.oldBal + r.oldBal,
+      sale: acc.sale + r.sale,
+      saleKgs: acc.saleKgs + r.saleKgs,
+      payments: acc.payments + r.payments,
+      outstanding: acc.outstanding + r.outstanding,
+    }),
+    { oldBal: 0, sale: 0, saleKgs: 0, payments: 0, outstanding: 0 },
+  )
+
+  const html = generateDailyReportHtml({ monthLabel, daysInMonth, rows, totals, generatedAt: today })
+
+  const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/email/send-report`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      to: superAdminEmail,
+      subject: `Daily Report – ${monthLabel} (as of ${today.toLocaleDateString("en-IN")})`,
+      html,
+    }),
+  })
+
+  return response.ok ? "sent" : "failed"
+}
+
+// ─── Existing report types (weekly / monthly / semi-annual / annual) ──────────
+
 async function generateAndSendReport(
   organizationId: string,
   reportType: string,
   email: string
 ) {
   const supabase = await createClient()
-  
+
   // Calculate date range based on report type
   const dateRange = getDateRangeForReportType(reportType)
-  
+
   // Fetch data for the period
   const [invoicesResult, paymentsResult] = await Promise.all([
     supabase
@@ -126,7 +282,7 @@ function getDateRangeForReportType(reportType: string) {
   const today = new Date()
   const year = today.getFullYear()
   const month = today.getMonth()
-  
+
   switch (reportType) {
     case "weekly": {
       const weekAgo = new Date(today)
@@ -173,6 +329,108 @@ function getDateRangeForReportType(reportType: string) {
   }
 }
 
+// ─── Email templates ──────────────────────────────────────────────────────────
+
+function generateDailyReportHtml(data: {
+  monthLabel: string
+  daysInMonth: number
+  rows: {
+    id: string
+    name: string
+    sale: number
+    saleKgs: number
+    payments: number
+    outstanding: number
+    oldBal: number
+  }[]
+  totals: {
+    oldBal: number
+    sale: number
+    saleKgs: number
+    payments: number
+    outstanding: number
+  }
+  generatedAt: Date
+}) {
+  const { monthLabel, daysInMonth, rows, totals, generatedAt } = data
+  const fmt = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const rowsHtml = rows.length === 0
+    ? `<tr><td colspan="7" style="text-align:center;padding:32px;color:#6b7280;">No activity found for ${monthLabel}.</td></tr>`
+    : rows.map((r) => `
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-weight:500;">${r.name}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${r.oldBal > 0 ? `₹${fmt(r.oldBal)}` : "—"}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${r.sale > 0 ? `₹${fmt(r.sale)}` : "—"}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${r.saleKgs > 0 ? r.saleKgs.toFixed(2) : "—"}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${r.saleKgs > 0 ? `${(r.saleKgs / daysInMonth).toFixed(2)} / ${daysInMonth}d` : "—"}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#15803d;">${r.payments > 0 ? `₹${fmt(r.payments)}` : "—"}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#c2410c;font-weight:600;">${r.outstanding > 0 ? `₹${fmt(r.outstanding)}` : "—"}</td>
+        </tr>
+      `).join("")
+
+  const totalsHtml = rows.length > 0 ? `
+    <tr style="background:#f3f4f6;font-weight:bold;border-top:2px solid #d1d5db;">
+      <td style="padding:10px 12px;">Total Sale</td>
+      <td style="padding:10px 12px;text-align:right;">₹${fmt(totals.oldBal)}</td>
+      <td style="padding:10px 12px;text-align:right;">₹${fmt(totals.sale)}</td>
+      <td style="padding:10px 12px;text-align:right;">${totals.saleKgs > 0 ? totals.saleKgs.toFixed(2) : "0"}</td>
+      <td style="padding:10px 12px;text-align:right;">—</td>
+      <td style="padding:10px 12px;text-align:right;color:#15803d;">₹${fmt(totals.payments)}</td>
+      <td style="padding:10px 12px;text-align:right;color:#c2410c;">₹${fmt(totals.outstanding)}</td>
+    </tr>
+  ` : ""
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8" /></head>
+    <body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;margin:0;padding:0;background:#f9fafb;">
+      <div style="max-width:760px;margin:0 auto;padding:20px;">
+        <div style="background:#1e40af;color:white;padding:24px;text-align:center;border-radius:8px 8px 0 0;">
+          <h1 style="margin:0 0 4px;">Daily Business Report</h1>
+          <p style="margin:0;opacity:0.9;">Monthly Report: ${monthLabel}</p>
+        </div>
+
+        <div style="background:white;padding:24px;border-radius:0 0 8px 8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="background:#1e40af;color:white;">
+                <th style="padding:10px 12px;text-align:left;">Hotel</th>
+                <th style="padding:10px 12px;text-align:right;">Old Bal</th>
+                <th style="padding:10px 12px;text-align:right;">Sale</th>
+                <th style="padding:10px 12px;text-align:right;">Sale KGS</th>
+                <th style="padding:10px 12px;text-align:right;">Avg Qty / Day</th>
+                <th style="padding:10px 12px;text-align:right;">Payments</th>
+                <th style="padding:10px 12px;text-align:right;">Outstanding</th>
+              </tr>
+              <tr style="background:#eff6ff;color:#6b7280;font-size:11px;font-weight:normal;">
+                <th style="padding:6px 12px;text-align:left;font-weight:normal;"></th>
+                <th style="padding:6px 12px;text-align:right;font-weight:normal;">Outstanding − Current month Sale</th>
+                <th style="padding:6px 12px;text-align:right;font-weight:normal;">Current Month Sale</th>
+                <th style="padding:6px 12px;text-align:right;font-weight:normal;">Total Purchased Qty</th>
+                <th style="padding:6px 12px;text-align:right;font-weight:normal;">Total / ${daysInMonth} days</th>
+                <th style="padding:6px 12px;text-align:right;font-weight:normal;">Current Month Payments</th>
+                <th style="padding:6px 12px;text-align:right;font-weight:normal;">Total Outstanding</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+              ${totalsHtml}
+            </tbody>
+          </table>
+
+          <p style="margin-top:24px;text-align:center;color:#9ca3af;font-size:12px;">
+            This is an automated daily report from your Billing Management System.<br/>
+            Generated on ${generatedAt.toLocaleString("en-IN")}
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+}
+
 function generateReportHtml(data: {
   reportType: string
   period: string
@@ -186,7 +444,7 @@ function generateReportHtml(data: {
   }
 }) {
   const { period, metrics } = data
-  
+
   return `
     <!DOCTYPE html>
     <html>
@@ -211,42 +469,42 @@ function generateReportHtml(data: {
         </div>
         <div class="content">
           <h2 style="margin-top: 0;">Financial Summary</h2>
-          
+
           <div class="metric-card">
             <div class="metric-label">Total Revenue</div>
             <div class="metric-value">₹${metrics.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </div>
-          
+
           <div class="grid">
             <div class="metric-card">
               <div class="metric-label">Total Invoiced</div>
               <div class="metric-value" style="font-size: 20px;">₹${metrics.totalInvoiced.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
-            
+
             <div class="metric-card">
               <div class="metric-label">Outstanding</div>
               <div class="metric-value" style="font-size: 20px; color: #dc2626;">₹${metrics.totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
           </div>
-          
+
           <h3>Invoice Statistics</h3>
           <div class="grid">
             <div class="metric-card">
               <div class="metric-label">Total Invoices</div>
               <div class="metric-value" style="font-size: 20px;">${metrics.totalInvoices}</div>
             </div>
-            
+
             <div class="metric-card">
               <div class="metric-label">Paid Invoices</div>
               <div class="metric-value" style="font-size: 20px; color: #16a34a;">${metrics.paidInvoices}</div>
             </div>
-            
+
             <div class="metric-card">
               <div class="metric-label">Pending Invoices</div>
               <div class="metric-value" style="font-size: 20px; color: #ea580c;">${metrics.pendingInvoices}</div>
             </div>
           </div>
-          
+
           <div class="footer">
             <p>This is an automated report from your Billing Management System.</p>
             <p>Generated on ${new Date().toLocaleString('en-IN')}</p>

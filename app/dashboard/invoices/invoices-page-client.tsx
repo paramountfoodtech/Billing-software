@@ -19,6 +19,7 @@ interface Invoice {
   client_id: string;
   invoice_number: string;
   issue_date: string;
+  due_date: string;
   total_amount: string;
   amount_paid: string;
   status: string;
