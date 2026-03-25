@@ -14,7 +14,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
 import { getPriceForCategoryOnDate } from "@/lib/utils";
@@ -58,6 +58,8 @@ interface ProductPricingRule {
   price_rule_value: string;
   notes: string;
   enabled: boolean;
+  // Present in bulk edit mode so we can update the existing DB row.
+  id?: string;
   fixed_value?: string;
   use_fixed_value?: boolean;
   conditional_threshold?: string;
@@ -65,10 +67,24 @@ interface ProductPricingRule {
   conditional_discount_above_equal?: string;
 }
 
+type NormalizedPricingRuleForCompare = {
+  enabled: boolean;
+  use_fixed_value: boolean;
+  fixed_value: string;
+  price_category_id: string;
+  price_rule_type: string;
+  price_rule_value: string;
+  notes: string;
+  conditional_threshold: string;
+  conditional_discount_below: string;
+  conditional_discount_above_equal: string;
+};
+
 interface ClientPricingFormProps {
   clients: Client[];
   products: Product[];
   existingRule?: PricingRule;
+  existingRules?: PricingRule[];
   priceCategories?: PriceCategory[];
   priceHistory?: Array<{
     price_category_id: string;
@@ -81,6 +97,7 @@ export function ClientPricingForm({
   clients,
   products,
   existingRule,
+  existingRules,
   priceCategories = [],
   priceHistory = [],
 }: ClientPricingFormProps) {
@@ -99,7 +116,7 @@ export function ClientPricingForm({
   const today = new Date().toISOString().split("T")[0];
 
   const [selectedClient, setSelectedClient] = useState(
-    existingRule?.client_id || "",
+    existingRule?.client_id || existingRules?.[0]?.client_id || "",
   );
   const [productRules, setProductRules] = useState<
     Record<string, ProductPricingRule>
@@ -124,6 +141,29 @@ export function ClientPricingForm({
             existingRule.conditional_discount_above_equal?.toString() || "",
         },
       };
+    }
+    if (existingRules && existingRules.length > 0) {
+      const byProduct: Record<string, ProductPricingRule> = {};
+      for (const rule of existingRules) {
+        const useFixedValue = !!rule.fixed_base_value;
+        byProduct[rule.product_id] = {
+          id: rule.id,
+          product_id: rule.product_id,
+          price_category_id: rule.price_category_id || "",
+          price_rule_type: rule.price_rule_type,
+          price_rule_value: rule.price_rule_value?.toString() || "",
+          notes: rule.notes || "",
+          enabled: true,
+          fixed_value: rule.fixed_base_value?.toString() || "",
+          use_fixed_value: useFixedValue,
+          conditional_threshold: rule.conditional_threshold?.toString() || "",
+          conditional_discount_below:
+            rule.conditional_discount_below?.toString() || "",
+          conditional_discount_above_equal:
+            rule.conditional_discount_above_equal?.toString() || "",
+        };
+      }
+      return byProduct;
     }
     return {};
   });
@@ -159,6 +199,94 @@ export function ClientPricingForm({
     ...cat,
     currentPrice: getPriceForCategoryOnDate(cat.id, today, history),
   }));
+
+  const normalizeNumericString = (value: unknown): string => {
+    if (value === null || value === undefined) return "";
+    const str = String(value).trim();
+    if (!str) return "";
+    const n = Number(str);
+    if (Number.isNaN(n)) return str;
+    // Normalize 150.00 -> "150" so formatting changes don't look like edits.
+    return String(n);
+  };
+
+  const normalizeCurrentRuleForCompare = (
+    rule: ProductPricingRule,
+  ): NormalizedPricingRuleForCompare => ({
+    enabled: !!rule.enabled,
+    use_fixed_value: !!rule.use_fixed_value,
+    fixed_value: normalizeNumericString(rule.fixed_value || ""),
+    price_category_id: rule.price_category_id || "",
+    price_rule_type: rule.price_rule_type || "",
+    price_rule_value: normalizeNumericString(rule.price_rule_value || ""),
+    notes: rule.notes || "",
+    conditional_threshold: normalizeNumericString(
+      rule.conditional_threshold || "",
+    ),
+    conditional_discount_below: normalizeNumericString(
+      rule.conditional_discount_below || "",
+    ),
+    conditional_discount_above_equal: normalizeNumericString(
+      rule.conditional_discount_above_equal || "",
+    ),
+  });
+
+  const initialRulesByProduct = useMemo(() => {
+    const map: Record<string, NormalizedPricingRuleForCompare> = {};
+
+    const addFromExistingRule = (r: PricingRule) => {
+      map[r.product_id] = {
+        enabled: true,
+        use_fixed_value:
+          r.fixed_base_value !== null && r.fixed_base_value !== undefined,
+        fixed_value: normalizeNumericString(r.fixed_base_value ?? ""),
+        price_category_id: r.price_category_id || "",
+        price_rule_type: r.price_rule_type || "",
+        price_rule_value: normalizeNumericString(r.price_rule_value ?? ""),
+        notes: r.notes || "",
+        conditional_threshold: normalizeNumericString(
+          r.conditional_threshold ?? "",
+        ),
+        conditional_discount_below: normalizeNumericString(
+          r.conditional_discount_below ?? "",
+        ),
+        conditional_discount_above_equal: normalizeNumericString(
+          r.conditional_discount_above_equal ?? "",
+        ),
+      };
+    };
+
+    if (existingRule) {
+      addFromExistingRule(existingRule);
+    } else if (existingRules && existingRules.length > 0) {
+      for (const r of existingRules) addFromExistingRule(r);
+    }
+
+    return map;
+  }, [existingRule, existingRules]);
+
+  const isProductRuleEdited = (productId: string, rule: ProductPricingRule) => {
+    const initial = initialRulesByProduct[productId];
+    if (!initial) {
+      // In create-mode / new products: consider it "edited" once user enables it.
+      return !!rule.enabled;
+    }
+
+    const current = normalizeCurrentRuleForCompare(rule);
+    return (
+      initial.enabled !== current.enabled ||
+      initial.use_fixed_value !== current.use_fixed_value ||
+      initial.fixed_value !== current.fixed_value ||
+      initial.price_category_id !== current.price_category_id ||
+      initial.price_rule_type !== current.price_rule_type ||
+      initial.price_rule_value !== current.price_rule_value ||
+      initial.notes !== current.notes ||
+      initial.conditional_threshold !== current.conditional_threshold ||
+      initial.conditional_discount_below !== current.conditional_discount_below ||
+      initial.conditional_discount_above_equal !==
+        current.conditional_discount_above_equal
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -281,6 +409,114 @@ export function ClientPricingForm({
           title: "Success",
           description: "Pricing rule updated successfully.",
         });
+      } else if (existingRules && existingRules.length > 0) {
+        // Bulk edit mode: update existing rules for the client, and optionally create any newly enabled products.
+        const rulesToUpdate = enabledRules.filter((r) => !!r.id);
+        const rulesToCreate = enabledRules.filter((r) => !r.id);
+
+        const updatePromises = rulesToUpdate.map(async (rule) => {
+          const updateData: any = {
+            price_rule_type: rule.price_rule_type,
+            notes: rule.notes,
+          };
+
+          if (rule.price_rule_type === "conditional_discount") {
+            updateData.conditional_threshold = Number(
+              rule.conditional_threshold,
+            );
+            updateData.conditional_discount_below = Number(
+              rule.conditional_discount_below,
+            );
+            updateData.conditional_discount_above_equal = Number(
+              rule.conditional_discount_above_equal,
+            );
+            updateData.price_rule_value = null;
+          } else {
+            updateData.price_rule_value = Number(rule.price_rule_value);
+            updateData.conditional_threshold = null;
+            updateData.conditional_discount_below = null;
+            updateData.conditional_discount_above_equal = null;
+          }
+
+          if (rule.use_fixed_value) {
+            updateData.fixed_base_value = Number(rule.fixed_value);
+            updateData.price_category_id = null;
+          } else {
+            updateData.price_category_id = rule.price_category_id;
+            updateData.fixed_base_value = null;
+          }
+
+          const { error } = await supabase
+            .from("client_product_pricing")
+            .update(updateData)
+            .eq("id", rule.id);
+
+          if (error) throw error;
+        });
+
+        if (updatePromises.length > 0) {
+          await Promise.all(updatePromises);
+        }
+
+        if (rulesToCreate.length > 0) {
+          const rulesToInsert = rulesToCreate.map((rule) => {
+            const baseData = {
+              client_id: selectedClient,
+              product_id: rule.product_id,
+              price_rule_type: rule.price_rule_type,
+              notes: rule.notes,
+              organization_id: profile.organization_id,
+              created_by: user.id,
+            } as any;
+
+            if (rule.price_rule_type === "conditional_discount") {
+              baseData.conditional_threshold = Number(
+                rule.conditional_threshold,
+              );
+              baseData.conditional_discount_below = Number(
+                rule.conditional_discount_below,
+              );
+              baseData.conditional_discount_above_equal = Number(
+                rule.conditional_discount_above_equal,
+              );
+              baseData.price_rule_value = null;
+            } else {
+              baseData.price_rule_value = Number(rule.price_rule_value);
+              baseData.conditional_threshold = null;
+              baseData.conditional_discount_below = null;
+              baseData.conditional_discount_above_equal = null;
+            }
+
+            if (rule.use_fixed_value) {
+              baseData.fixed_base_value = Number(rule.fixed_value);
+              baseData.price_category_id = null;
+            } else {
+              baseData.price_category_id = rule.price_category_id;
+              baseData.fixed_base_value = null;
+            }
+
+            return baseData;
+          });
+
+          const { error } = await supabase
+            .from("client_product_pricing")
+            .insert(rulesToInsert);
+
+          if (error) {
+            if (error.code === "23505") {
+              throw new Error(
+                "One or more pricing rules already exist for this client. Please check existing rules.",
+              );
+            }
+            throw error;
+          }
+        }
+
+        toast({
+          variant: "success",
+          title: "Success",
+          description: `${enabledRules.length} pricing rule(s) saved successfully.`,
+        });
       } else {
         // Bulk create new rules
         const rulesToInsert = Object.values(productRules)
@@ -375,7 +611,7 @@ export function ClientPricingForm({
             <Select
               value={selectedClient}
               onValueChange={setSelectedClient}
-              disabled={!!existingRule}
+              disabled={!!existingRule || (existingRules && existingRules.length > 0)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select a client" />
@@ -418,6 +654,8 @@ export function ClientPricingForm({
               if (existingRule && existingRule.product_id !== product.id)
                 return null;
 
+              const edited = isProductRuleEdited(product.id, rule);
+
               const updateProductRule = (
                 updates: Partial<ProductPricingRule>,
               ) => {
@@ -430,7 +668,11 @@ export function ClientPricingForm({
               return (
                 <div
                   key={product.id}
-                  className="border rounded-lg p-6 space-y-4"
+                  className={`border rounded-lg p-6 space-y-4 ${
+                    edited
+                      ? "bg-purple-50 border-purple-300 ring-2 ring-purple-200"
+                      : ""
+                  }`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3 flex-1">
@@ -455,6 +697,14 @@ export function ClientPricingForm({
                         )}
                       </div>
                     </div>
+
+                    {edited && (
+                      <div className="flex flex-col items-end">
+                        <span className="text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-200 px-2 py-1 rounded">
+                          Edited
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {(rule.enabled || existingRule) && (
@@ -899,7 +1149,9 @@ export function ClientPricingForm({
                 ? "Saving..."
                 : existingRule
                   ? "Update Pricing Rule"
-                  : `Create ${enabledCount} Rule${enabledCount !== 1 ? "s" : ""}`}
+                  : existingRules && existingRules.length > 0
+                    ? "Update Pricing Rules"
+                    : `Create ${enabledCount} Rule${enabledCount !== 1 ? "s" : ""}`}
             </Button>
             <Button
               type="button"

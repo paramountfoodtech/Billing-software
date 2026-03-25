@@ -27,6 +27,18 @@ export default async function EditClientPricingPage({ params }: { params: Promis
     notFound()
   }
 
+  // Load all pricing rules for this client so the edit screen is a client-level bulk editor.
+  const { data: clientPricingRules, error: clientPricingRulesError } = await supabase
+    .from("client_product_pricing")
+    .select("*")
+    .eq("client_id", pricingRule.client_id)
+    .order("product_id")
+
+  if (clientPricingRulesError) {
+    // If we fail to load the rest, fail fast rather than showing an incomplete editor.
+    notFound()
+  }
+
   // Get clients, products, and pricing data for the form
   const [clientsResult, productsResult, categoriesResult, historyResult] = await Promise.all([
     supabase.from("clients").select("id, name").order("name"),
@@ -38,15 +50,15 @@ export default async function EditClientPricingPage({ params }: { params: Promis
   return (
     <div className="p-6 lg:p-8">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">Edit Client Pricing Rule</h1>
-        <p className="text-muted-foreground mt-1">Update custom pricing for this client-product combination</p>
+        <h1 className="text-3xl font-bold tracking-tight">Edit Client Pricing Rules</h1>
+        <p className="text-muted-foreground mt-1">Update custom pricing for all products for this client</p>
       </div>
 
       <div className="max-w-3xl">
         <ClientPricingForm
           clients={clientsResult.data || []}
           products={productsResult.data || []}
-          existingRule={pricingRule}
+          existingRules={clientPricingRules || []}
           priceCategories={categoriesResult.data || []}
           priceHistory={historyResult.data || []}
         />

@@ -108,6 +108,14 @@ export function ClientPricingTable({
   });
 
   const handleExport = () => {
+    if (processedRules.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "No pricing rules to export",
+        description: "Select a client that has pricing rules configured.",
+      });
+      return;
+    }
     const exportData = processedRules.map((rule) => ({
       Client: rule.clients.name,
       Product: rule.products.name,
@@ -355,15 +363,7 @@ export function ClientPricingTable({
     setIsDeleting(false);
   };
 
-  if (pricingRules.length === 0) {
-    return (
-      <div className="text-center py-12 border rounded-lg bg-white">
-        <p className="text-muted-foreground">
-          No client-specific pricing rules found. Create one to get started.
-        </p>
-      </div>
-    );
-  }
+  const colSpan = userRole !== "admin" ? 8 : 7;
 
   return (
     <>
@@ -374,6 +374,7 @@ export function ClientPricingTable({
           size="sm"
           variant="outline"
           title="Export to CSV"
+          disabled={processedRules.length === 0}
         >
           <Download className="h-4 w-4" />
         </Button>
@@ -472,6 +473,14 @@ export function ClientPricingTable({
             </TableRow>
           </TableHeader>
           <TableBody>
+            {pagination.paginatedItems.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={colSpan} className="text-center text-muted-foreground py-12">
+                  No client-specific pricing rules found for the current
+                  selection.
+                </TableCell>
+              </TableRow>
+            )}
             {pagination.paginatedItems.map((rule) => {
               const finalPrice = calculateFinalPrice(rule);
               const categoryPrice = rule.price_category_id
