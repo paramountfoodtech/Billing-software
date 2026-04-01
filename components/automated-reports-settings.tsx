@@ -140,7 +140,7 @@ export function AutomatedReportsSettings({ organization }: AutomatedReportsSetti
                     <Calendar className="h-4 w-4 text-blue-600" />
                     <div>
                       <p className="font-medium">Daily Report</p>
-                      <p className="text-sm text-muted-foreground">Every day at 8 AM — sent to super admin (client-wise breakdown)</p>
+                      <p className="text-sm text-muted-foreground">Every day at 9 PM — sent to super admin (client-wise breakdown)</p>
                     </div>
                   </div>
                   <Switch
