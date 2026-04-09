@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -93,12 +94,13 @@ export function MissedInvoiceNumbers({
                 ) : (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {filteredNumbers.map((number) => (
-                    <div
+                    <Link
                       key={number}
-                      className="rounded border bg-white px-2 py-1 font-mono text-xs text-gray-700"
+                      href={`/dashboard/invoices/new?invoiceNumber=${encodeURIComponent(number)}`}
+                      className="rounded border bg-white px-2 py-1 font-mono text-xs text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
                     >
                       {number}
-                    </div>
+                    </Link>
                   ))}
                 </div>
                 )}

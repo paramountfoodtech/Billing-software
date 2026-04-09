@@ -24,7 +24,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Check, ChevronDown, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { getPriceForCategoryOnDate } from "@/lib/utils";
@@ -141,6 +141,7 @@ export function InvoiceForm({
   initialItems,
 }: InvoiceFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -213,11 +214,18 @@ export function InvoiceForm({
   const autoSequenceInvoiceNumber = lastInvoiceNumber
     ? getNextInvoiceNumber(lastInvoiceNumber)
     : "";
+  const prefilledInvoiceNumber = sanitizeInvoiceNumberInput(
+    searchParams.get("invoiceNumber") || "",
+  );
+  const shouldUsePrefilledInvoiceNumber =
+    !initialInvoice?.id && !!prefilledInvoiceNumber;
 
   const [formData, setFormData] = useState({
     client_id: initialInvoice?.client_id || "",
     invoice_number:
-      initialInvoice?.invoice_number || autoSequenceInvoiceNumber,
+      initialInvoice?.invoice_number ||
+      prefilledInvoiceNumber ||
+      autoSequenceInvoiceNumber,
     issue_date: initialInvoice?.issue_date || today,
     due_date: initialInvoice?.due_date || defaultDue,
     due_days_type:
@@ -225,7 +233,7 @@ export function InvoiceForm({
     notes: initialInvoice?.notes || "",
   });
   const [continueInvoiceSequence, setContinueInvoiceSequence] = useState(
-    !initialInvoice?.id && !!lastInvoiceNumber,
+    !initialInvoice?.id && !!lastInvoiceNumber && !shouldUsePrefilledInvoiceNumber,
   );
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
   const [clientSearchValue, setClientSearchValue] = useState("");
