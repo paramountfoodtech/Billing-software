@@ -48,12 +48,14 @@ interface PaymentsPageClientProps {
   clients: Client[];
   payments: Payment[];
   clientInvoices?: Record<string, Invoice[]>;
+  userRole?: string;
 }
 
 export function PaymentsPageClient({
   clients,
   payments,
   clientInvoices = {},
+  userRole,
 }: PaymentsPageClientProps) {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedFY, setSelectedFY] = useState<string>(getFinancialYear());
@@ -207,6 +209,7 @@ export function PaymentsPageClient({
 
       <PaymentsTable
         payments={filteredPayments}
+        userRole={userRole}
         fromDate={fromDate}
         toDate={toDate}
         toolbarLeft={

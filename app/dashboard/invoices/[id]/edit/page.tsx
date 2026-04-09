@@ -10,6 +10,25 @@ export default async function EditInvoicePage({
   const { id } = await params;
   const supabase = await createClient();
 
+  // Accountants can create invoices, but cannot edit existing ones.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    notFound();
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profile?.role === "accountant") {
+    notFound();
+  }
+
   // Fetch invoice and its items (include product_id)
   const { data: invoice } = await supabase
     .from("invoices")

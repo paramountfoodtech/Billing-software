@@ -620,7 +620,9 @@ export function InvoicesTable({
                               <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                             </Link>
                           </Button>
-                          {(invoice.status === "draft" || invoice.status === "recorded") && (
+                          {userRole !== "accountant" &&
+                            (invoice.status === "draft" ||
+                              invoice.status === "recorded") && (
                             <Button variant="ghost" size="sm" asChild>
                               <Link
                                 href={`/dashboard/invoices/${invoice.id}/edit`}

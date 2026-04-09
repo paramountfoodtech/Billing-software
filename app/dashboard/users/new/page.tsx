@@ -21,7 +21,7 @@ export default async function NewUserPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="w-full p-4 sm:p-6 lg:p-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-slate-900">Create New User</h1>
         <p className="text-slate-500 mt-1">Add a new user (Admin, Manager, or Accountant)</p>

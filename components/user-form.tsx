@@ -5,11 +5,13 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { createUser, updateUser } from "@/app/actions/create-user"
 import { useToast } from "@/hooks/use-toast"
+import { Eye, EyeOff } from "lucide-react"
 
 interface Organization {
   id: string
@@ -32,6 +34,7 @@ export function UserForm({ organizations, initialData }: UserFormProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
     email: initialData?.email || "",
     full_name: initialData?.full_name || "",
@@ -97,9 +100,10 @@ export function UserForm({ organizations, initialData }: UserFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-2xl bg-white p-6 rounded-lg border border-slate-200">
-      <div className="space-y-4">
-        <div>
+    <Card className="max-w-2xl">
+      <CardContent className="pt-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-2">
           <Label htmlFor="full_name">Full Name</Label>
           <Input
             id="full_name"
@@ -109,7 +113,7 @@ export function UserForm({ organizations, initialData }: UserFormProps) {
           />
         </div>
 
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input
             id="email"
@@ -122,20 +126,33 @@ export function UserForm({ organizations, initialData }: UserFormProps) {
         </div>
 
         {!initialData && (
-          <div>
+          <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              required
-              minLength={6}
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
+                minLength={6}
+                className="pr-10"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
           </div>
         )}
 
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="role">Role</Label>
           <SearchableSelect
             value={formData.role}
@@ -162,16 +179,16 @@ export function UserForm({ organizations, initialData }: UserFormProps) {
             <Label htmlFor="is_active">Active</Label>
           </div>
         )}
-      </div>
-
-      <div className="flex gap-4 mt-6">
-        <Button type="submit" disabled={loading}>
-          {loading ? "Saving..." : initialData ? "Update User" : "Create User"}
-        </Button>
-        <Button type="button" variant="outline" onClick={() => router.push("/dashboard/users")}>
-          Cancel
-        </Button>
-      </div>
-    </form>
+          <div className="flex gap-4 pt-2">
+            <Button type="submit" disabled={loading}>
+              {loading ? "Saving..." : initialData ? "Update User" : "Create User"}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => router.push("/dashboard/users")}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   )
 }

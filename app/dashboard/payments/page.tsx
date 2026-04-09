@@ -10,6 +10,22 @@ import { LoadingOverlay } from "@/components/loading-overlay"
 export default async function PaymentsPage() {
   const supabase = await createClient()
 
+  // Get current user role
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  let userRole: string | undefined
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    userRole = profile?.role
+  }
+
   // Get all clients for selector
   const { data: clients } = await supabase
     .from("clients")
@@ -58,7 +74,12 @@ export default async function PaymentsPage() {
         </div>
 
         <Suspense fallback={<LoadingOverlay />}>
-          <PaymentsPageClient clients={clients || []} payments={payments || []} clientInvoices={clientInvoices} />
+          <PaymentsPageClient
+            clients={clients || []}
+            payments={payments || []}
+            clientInvoices={clientInvoices}
+            userRole={userRole}
+          />
         </Suspense>
       </div>
     </DashboardPageWrapper>

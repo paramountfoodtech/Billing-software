@@ -210,12 +210,14 @@ export function InvoiceForm({
   const [selectedDueDaysType, setSelectedDueDaysType] = useState<string | null>(
     null,
   );
+  const autoSequenceInvoiceNumber = lastInvoiceNumber
+    ? getNextInvoiceNumber(lastInvoiceNumber)
+    : "";
 
   const [formData, setFormData] = useState({
     client_id: initialInvoice?.client_id || "",
     invoice_number:
-      initialInvoice?.invoice_number ||
-      (lastInvoiceNumber ? getNextInvoiceNumber(lastInvoiceNumber) : ""),
+      initialInvoice?.invoice_number || autoSequenceInvoiceNumber,
     issue_date: initialInvoice?.issue_date || today,
     due_date: initialInvoice?.due_date || defaultDue,
     due_days_type:
@@ -1173,7 +1175,7 @@ export function InvoiceForm({
                   setFormData({ ...formData, invoice_number: sanitizedValue });
                 }}
                 placeholder="e.g., INV-001, INV-002"
-                disabled={!!initialInvoice?.id}
+                disabled={!!initialInvoice?.id || continueInvoiceSequence}
                 pattern="[A-Za-z0-9-]+"
               />
               {!initialInvoice?.id && (
@@ -1188,16 +1190,11 @@ export function InvoiceForm({
                     checked={continueInvoiceSequence}
                     onCheckedChange={(checked) => {
                       setContinueInvoiceSequence(checked);
-                      if (checked) {
-                        const sourceValue =
-                          formData.invoice_number || lastInvoiceNumber || "";
-                        const nextNumber = getNextInvoiceNumber(sourceValue);
-                        if (nextNumber) {
-                          setFormData({
-                            ...formData,
-                            invoice_number: nextNumber,
-                          });
-                        }
+                      if (checked && autoSequenceInvoiceNumber) {
+                        setFormData({
+                          ...formData,
+                          invoice_number: autoSequenceInvoiceNumber,
+                        });
                       }
                     }}
                   />
@@ -1206,7 +1203,9 @@ export function InvoiceForm({
               <p className="text-xs text-muted-foreground">
                 {initialInvoice?.id
                   ? "Invoice number cannot be changed"
-                  : "Only letters, numbers, and hyphen (-) are allowed"}
+                  : continueInvoiceSequence
+                    ? "Invoice number is locked while auto sequence is enabled"
+                    : "Only letters, numbers, and hyphen (-) are allowed"}
               </p>
             </div>
           </div>

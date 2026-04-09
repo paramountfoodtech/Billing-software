@@ -61,6 +61,7 @@ interface Payment {
 interface PaymentsTableProps {
   payments: Payment[];
   toolbarLeft?: ReactNode;
+  userRole?: string;
   fromDate?: string;
   toDate?: string;
 }
@@ -72,7 +73,13 @@ const statusConfig = {
   refunded: { label: "Refunded", className: "bg-slate-100 text-slate-800" },
 };
 
-export function PaymentsTable({ payments, toolbarLeft, fromDate = "", toDate = "" }: PaymentsTableProps) {
+export function PaymentsTable({
+  payments,
+  toolbarLeft,
+  userRole,
+  fromDate = "",
+  toDate = "",
+}: PaymentsTableProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -604,16 +611,18 @@ export function PaymentsTable({ payments, toolbarLeft, fromDate = "", toDate = "
                               <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                             </Link>
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setPaymentToDelete(payment.id);
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-                          </Button>
+                          {userRole !== "accountant" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setPaymentToDelete(payment.id);
+                                setDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
