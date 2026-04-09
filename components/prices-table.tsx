@@ -446,6 +446,13 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
                   />
                 ))}
               </SortableContext>
+              {paginationCategories.paginatedItems.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
+                    No price categories found for the selected filters.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </DndContext>

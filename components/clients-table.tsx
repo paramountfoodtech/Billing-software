@@ -345,7 +345,13 @@ export function ClientsTable({ clients }: ClientsTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pagination.paginatedItems.map((client) => (
+            {pagination.paginatedItems.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
+                  No clients found for the selected filters.
+                </TableCell>
+              </TableRow>
+            ) : pagination.paginatedItems.map((client) => (
               <TableRow key={client.id} className="text-xs sm:text-sm">
                 <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3 max-w-[120px] sm:max-w-none truncate">
                   {client.name}

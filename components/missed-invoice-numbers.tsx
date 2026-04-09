@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Search } from "lucide-react";
 
 interface MissedInvoiceNumbersProps {
   missedNumbers: string[];
@@ -21,6 +22,11 @@ export function MissedInvoiceNumbers({
   grouped,
 }: MissedInvoiceNumbersProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const groupedItems = grouped.split(", ").filter(Boolean);
+  const filteredNumbers = search.trim()
+    ? missedNumbers.filter((n) => n.toLowerCase().includes(search.trim().toLowerCase()))
+    : missedNumbers;
 
   if (missedNumbers.length === 0) {
     return null;
@@ -37,9 +43,9 @@ export function MissedInvoiceNumbers({
         {missedNumbers.length} Missing Invoice Number{missedNumbers.length !== 1 ? "s" : ""}
       </Button>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setSearch(""); }}>
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Missing Invoice Numbers</DialogTitle>
             <DialogDescription>
               {missedNumbers.length} invoice number(s) are missing from the sequence.
@@ -47,24 +53,55 @@ export function MissedInvoiceNumbers({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground mb-2">
+          <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
+            <div className="flex-shrink-0 space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">
                 Range Summary:
               </p>
-              <code className="block bg-amber-50 p-3 rounded text-sm break-all border border-amber-200">
-                {grouped}
-              </code>
+              <div className="max-h-32 overflow-y-auto rounded border border-amber-200 bg-amber-50 p-3">
+                <div className="flex flex-wrap gap-2">
+                  {groupedItems.map((item) => (
+                    <span
+                      key={item}
+                      className="rounded-md border border-amber-200 bg-white px-2 py-1 font-mono text-xs text-amber-900"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div>
-              <p className="text-sm font-medium text-muted-foreground mb-2">
-                Full List ({missedNumbers.length} total):
-              </p>
-              <div className="bg-gray-50 p-3 rounded border max-h-96 overflow-y-auto">
-                <p className="text-xs font-mono text-gray-700 whitespace-pre-wrap break-all">
-                  {missedNumbers.join(", ")}
+            <div className="flex flex-col min-h-0 flex-1 gap-2">
+              <div className="flex-shrink-0 flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                  Full List ({missedNumbers.length} total):
                 </p>
+                <div className="relative flex-1 max-w-xs">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-8 h-8 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto rounded border bg-gray-50 p-3">
+                {filteredNumbers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No results for &ldquo;{search}&rdquo;</p>
+                ) : (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  {filteredNumbers.map((number) => (
+                    <div
+                      key={number}
+                      className="rounded border bg-white px-2 py-1 font-mono text-xs text-gray-700"
+                    >
+                      {number}
+                    </div>
+                  ))}
+                </div>
+                )}
               </div>
             </div>
           </div>

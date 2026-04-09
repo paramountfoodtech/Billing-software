@@ -389,15 +389,8 @@ export function InvoicesTable({
         </div>
       </div>
 
-      {processedInvoices.length === 0 ? (
-        <div className="text-center py-12 border rounded-lg bg-white">
-          <p className="text-muted-foreground">
-            No invoices found for the selected filters.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="rounded-lg border bg-white overflow-x-auto">
+      <>
+        <div className="rounded-lg border bg-white overflow-x-auto">
             <Table className="text-xs sm:text-sm">
               <TableHeader>
                 <TableRow>
@@ -504,7 +497,13 @@ export function InvoicesTable({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pagination.paginatedItems.map((invoice) => {
+                {pagination.paginatedItems.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
+                      No invoices found for the selected filters.
+                    </TableCell>
+                  </TableRow>
+                ) : pagination.paginatedItems.map((invoice) => {
                   const config =
                     statusConfig[invoice.status as keyof typeof statusConfig];
                   const balance =
@@ -652,16 +651,17 @@ export function InvoicesTable({
             </Table>
           </div>
 
-          <TablePagination
-            currentPage={pagination.currentPage}
-            totalPages={pagination.totalPages}
-            totalItems={pagination.totalItems}
-            itemsPerPage={itemsPerPage}
-            onPageChange={pagination.goToPage}
-            onItemsPerPageChange={setItemsPerPage}
-          />
+          {processedInvoices.length > 0 && (
+            <TablePagination
+              currentPage={pagination.currentPage}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={pagination.goToPage}
+              onItemsPerPageChange={setItemsPerPage}
+            />
+          )}
         </>
-      )}
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
