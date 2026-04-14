@@ -22,10 +22,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
-import { Check, ChevronDown, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { getPriceForCategoryOnDate } from "@/lib/utils";
 
@@ -1083,6 +1084,18 @@ export function InvoiceForm({
     product.name.toLowerCase().includes(productSearchValue.toLowerCase()),
   );
 
+  // Warn when the selected issue date has no prices configured
+  const missingPricesForDate = useMemo(() => {
+    if (!priceCategories?.length || !formData.issue_date) return null;
+    const pricesOnDate = (priceHistory ?? []).filter(
+      (p) => p.effective_date === formData.issue_date,
+    );
+    const missing = priceCategories.filter(
+      (cat) => !pricesOnDate.some((p) => p.price_category_id === cat.id),
+    );
+    return missing.length > 0 ? missing : null;
+  }, [priceCategories, priceHistory, formData.issue_date]);
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <Card>
@@ -1266,6 +1279,37 @@ export function InvoiceForm({
           </div>
         </CardContent>
       </Card>
+
+      {missingPricesForDate && (
+        <div className="p-4 bg-yellow-50 border border-yellow-300 rounded-lg">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-yellow-900">
+                Prices Not Set for {formData.issue_date}
+              </h3>
+              <p className="text-sm text-yellow-800 mt-1">
+                The following{" "}
+                {missingPricesForDate.length === 1 ? "category has" : "categories have"}{" "}
+                no price configured for this date:{" "}
+                <span className="font-medium">
+                  {missingPricesForDate.map((c) => c.name).join(", ")}
+                </span>
+                . Products using{" "}
+                {missingPricesForDate.length === 1 ? "this category" : "these categories"}{" "}
+                will have a unit price of ₹0 on this invoice.
+              </p>
+              <div className="mt-3">
+                <Button asChild size="sm" variant="outline" className="bg-white">
+                  <Link href={`/dashboard/prices/new?date=${formData.issue_date}`}>
+                    Set Prices for {formData.issue_date}
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

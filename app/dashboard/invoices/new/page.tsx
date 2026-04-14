@@ -1,13 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { InvoiceForm } from "@/components/invoice-form";
-import { AlertTriangle } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 
 export default async function NewInvoicePage() {
   const supabase = await createClient();
-
-  const today = new Date().toISOString().split("T")[0];
 
   // Fetch clients, products and client-specific pricing rules
   const [
@@ -42,16 +37,6 @@ export default async function NewInvoicePage() {
       .maybeSingle(),
   ]);
 
-  // Check if today's prices are set
-  const todayPrices = (historyResult.data || []).filter(
-    (p) => p.effective_date === today,
-  );
-  const hasTodayPrices = todayPrices.length > 0;
-  const priceCategories = categoriesResult.data || [];
-  const allCategoriesHavePrices = priceCategories.every((cat) =>
-    todayPrices.some((p) => p.price_category_id === cat.id),
-  );
-
   return (
     <div className="p-6 lg:p-8">
       <div className="mb-6">
@@ -60,37 +45,6 @@ export default async function NewInvoicePage() {
           Generate a new invoice for a client
         </p>
       </div>
-
-      {/* Warning if today's prices are not set */}
-      {(!hasTodayPrices || !allCategoriesHavePrices) && (
-        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-300 rounded-lg">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-yellow-900">
-                Today's Prices Not Updated
-              </h3>
-              <p className="text-sm text-yellow-800 mt-1">
-                Prices for {today} haven't been set yet. Products using a price
-                category will have a unit price of ₹0 on this invoice. Please
-                set today's prices before creating invoices.
-              </p>
-              <div className="mt-3">
-                <Button
-                  asChild
-                  size="sm"
-                  variant="outline"
-                  className="bg-white"
-                >
-                  <Link href="/dashboard/prices/new">
-                    Update Today's Prices
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <InvoiceForm
         clients={clientsResult.data || []}
