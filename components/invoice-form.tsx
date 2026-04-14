@@ -384,17 +384,14 @@ export function InvoiceForm({
         if (pricingRule.fixed_base_value) {
           basePrice = Number(pricingRule.fixed_base_value);
         } else if (pricingRule.price_category_id) {
-          // Get category price as base
+          // Get category price as base — only use if price was explicitly entered for this date
           const effectiveDate = issueDate || formData.issue_date;
           const categoryPrice = getPriceForCategoryOnDate(
             pricingRule.price_category_id,
             effectiveDate,
             priceHistory,
           );
-          basePrice =
-            categoryPrice !== null
-              ? categoryPrice
-              : Number(product.paper_price);
+          basePrice = categoryPrice !== null ? categoryPrice : 0;
         }
 
         if (basePrice > 0) {
@@ -495,8 +492,7 @@ export function InvoiceForm({
           effectiveDate,
           priceHistory,
         );
-        basePrice =
-          categoryPrice !== null ? categoryPrice : Number(product.paper_price);
+        basePrice = categoryPrice !== null ? categoryPrice : 0;
         const selectedCategory = priceCategories.find(
           (c) => c.id === pricingRule.price_category_id,
         );

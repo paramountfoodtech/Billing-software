@@ -44,15 +44,8 @@ export function getPriceForCategoryOnDate(
   onDate: string,
   priceHistory: Array<{ price_category_id: string; price: number; effective_date: string }>
 ): number | null {
-  const prices = priceHistory.filter(
-    (p) => p.price_category_id === categoryId && p.effective_date <= onDate
+  const price = priceHistory.find(
+    (p) => p.price_category_id === categoryId && p.effective_date === onDate
   )
-
-  if (prices.length === 0) return null
-
-  const latest = prices.sort(
-    (a, b) => new Date(b.effective_date).getTime() - new Date(a.effective_date).getTime()
-  )[0]
-
-  return Number(latest.price)
+  return price ? Number(price.price) : null
 }

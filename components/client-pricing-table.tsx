@@ -214,12 +214,9 @@ export function ClientPricingTable({
         today,
         priceHistory,
       );
-      basePrice =
-        categoryPrice !== null
-          ? categoryPrice
-          : Number(rule.products.paper_price);
+      basePrice = categoryPrice !== null ? categoryPrice : 0;
     } else {
-      basePrice = Number(rule.products.paper_price);
+      basePrice = 0;
     }
 
     const ruleValue = Number(rule.price_rule_value || 0);

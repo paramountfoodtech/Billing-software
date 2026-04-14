@@ -71,10 +71,9 @@ export default async function NewInvoicePage() {
                 Today's Prices Not Updated
               </h3>
               <p className="text-sm text-yellow-800 mt-1">
-                Prices for {today} haven't been set yet. The invoice will use
-                the most recent historical prices, which may not be current.
-                It's recommended to update today's prices before creating
-                invoices.
+                Prices for {today} haven't been set yet. Products using a price
+                category will have a unit price of ₹0 on this invoice. Please
+                set today's prices before creating invoices.
               </p>
               <div className="mt-3">
                 <Button

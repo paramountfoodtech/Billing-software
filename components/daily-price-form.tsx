@@ -48,12 +48,11 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
   const [formData, setFormData] = useState({
     effective_date: initialEffectiveDate,
     prices: priceCategories.reduce((acc, cat) => {
-      // Get latest price for this category
-      const latest = priceHistory
-        .filter(h => h.price_category_id === cat.id)
-        .sort((a, b) => new Date(b.effective_date).getTime() - new Date(a.effective_date).getTime())[0]
-      
-      acc[cat.id] = latest?.price?.toString() || ""
+      // Only pre-fill if a price was explicitly entered for this exact date
+      const priceForDate = priceHistory.find(
+        h => h.price_category_id === cat.id && h.effective_date === initialEffectiveDate
+      )
+      acc[cat.id] = priceForDate?.price?.toString() || ""
       return acc
     }, {} as Record<string, string>),
   })
@@ -92,11 +91,10 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
     setExistingPricesCount(existingForDate.length)
 
     const updatedPrices = priceCategories.reduce((acc, cat) => {
-      // Get price for the selected date or latest before that date
-      const priceForDate = priceHistory
-        .filter(h => h.price_category_id === cat.id && h.effective_date <= formData.effective_date)
-        .sort((a, b) => new Date(b.effective_date).getTime() - new Date(a.effective_date).getTime())[0]
-      
+      // Only pre-fill if a price was explicitly entered for this exact date
+      const priceForDate = priceHistory.find(
+        h => h.price_category_id === cat.id && h.effective_date === formData.effective_date
+      )
       acc[cat.id] = priceForDate?.price?.toString() || ""
       return acc
     }, {} as Record<string, string>)
@@ -107,11 +105,10 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
     }))
   }, [formData.effective_date, priceCategories, priceHistory])
 
-  const getLatestPrice = (categoryId: string) => {
-    const latest = priceHistory
-      .filter(h => h.price_category_id === categoryId)
-      .sort((a, b) => new Date(b.effective_date).getTime() - new Date(a.effective_date).getTime())[0]
-    return latest
+  const getPriceForDate = (categoryId: string, date: string) => {
+    return priceHistory.find(
+      h => h.price_category_id === categoryId && h.effective_date === date
+    ) ?? null
   }
 
   const handlePriceChange = (categoryId: string, value: string) => {
@@ -339,9 +336,12 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
             <h3 className="font-semibold text-lg">Category Prices</h3>
             <div className="grid gap-4 md:grid-cols-2">
               {priceCategories.map((category) => {
-                const latestPrice = getLatestPrice(category.id)
-                const hasChanged = latestPrice && formData.prices[category.id] !== latestPrice.price.toString()
-                
+                const savedPrice = getPriceForDate(category.id, formData.effective_date)
+                const currentInput = formData.prices[category.id] || ""
+                const hasChanged = savedPrice
+                  ? currentInput !== savedPrice.price.toString()
+                  : currentInput !== ""
+
                 return (
                   <Card key={category.id} className={hasChanged ? "border-blue-400 ring-1 ring-blue-200" : ""}>
                     <CardContent className="pt-6 space-y-3">
@@ -353,17 +353,12 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
                           </span>
                         )}
                       </div>
-                      
-                      {latestPrice && (
-                        <div className="text-sm text-muted-foreground">
-                          Current: ₹{latestPrice.price.toFixed(2)}
-                          {latestPrice.effective_date !== today && (
-                            <span className="ml-2 text-xs">
-                              (as of {new Date(latestPrice.effective_date).toLocaleDateString("en-IN")})
-                            </span>
-                          )}
-                        </div>
-                      )}
+
+                      <div className="text-sm text-muted-foreground">
+                        {savedPrice
+                          ? `Current: ₹${savedPrice.price.toFixed(2)}`
+                          : "No price set for this date"}
+                      </div>
 
                       <div className="space-y-1">
                         <Label htmlFor={`price-${category.id}`}>New Price (₹)</Label>
@@ -372,9 +367,9 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
                           type="number"
                           step="0.01"
                           min="0"
-                          value={formData.prices[category.id] || ""}
+                          value={currentInput}
                           onChange={(e) => handlePriceChange(category.id, e.target.value)}
-                          placeholder={latestPrice ? latestPrice.price.toFixed(2) : "0.00"}
+                          placeholder="0.00"
                         />
                       </div>
                     </CardContent>

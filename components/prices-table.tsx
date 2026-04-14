@@ -113,17 +113,11 @@ function SortableCategoryRow({
       </TableCell>
       <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
         <div>
-          <span className="font-semibold text-green-600 text-base sm:text-lg">
-            {latestPrice ? `₹${Number(latestPrice.price).toFixed(2)}` : "No price set"}
+          <span className={`font-semibold text-base sm:text-lg ${latestPrice ? "text-green-600" : "text-muted-foreground"}`}>
+            {latestPrice ? `₹${Number(latestPrice.price).toFixed(2)}` : "₹0.00"}
           </span>
-          {latestPrice && (
-            <div className="text-xs text-muted-foreground mt-1">
-              Effective: {new Date(latestPrice.effective_date).toLocaleDateString("en-IN", {
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-              })}
-            </div>
+          {!latestPrice && (
+            <div className="text-xs text-muted-foreground mt-1">Not set for today</div>
           )}
         </div>
       </TableCell>
@@ -206,11 +200,9 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
 
   const getLatestPrice = (categoryId: string, asOfDate?: string) => {
     const filterDate = asOfDate || new Date().toISOString().split("T")[0]
-    const prices = priceHistory.filter(
-      (p) => p.price_category_id === categoryId && p.effective_date <= filterDate,
-    )
-    if (prices.length === 0) return null
-    return prices.sort((a, b) => new Date(b.effective_date).getTime() - new Date(a.effective_date).getTime())[0]
+    return priceHistory.find(
+      (p) => p.price_category_id === categoryId && p.effective_date === filterDate,
+    ) ?? null
   }
 
   // Apply filtering and sorting to categories
