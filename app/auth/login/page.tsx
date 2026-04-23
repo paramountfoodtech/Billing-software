@@ -88,15 +88,15 @@ export default function LoginPage() {
           <div className="flex flex-col items-center gap-4">
             <Image
               src="/PFT logo.png"
-              alt="Billing Management System logo"
+              alt="Paramount Food Tech logo"
               width={64}
               height={64}
               className="h-16 w-16 object-contain drop-shadow-lg"
               priority
             />
             <div className="text-center">
-              <h1 className="text-4xl font-bold tracking-tight text-slate-900">Invoice Pro</h1>
-              <p className="text-sm text-slate-600 mt-2">Professional billing management</p>
+              <h1 className="text-4xl font-bold tracking-tight text-slate-900">Paramount Food Tech</h1>
+              <p className="text-sm text-slate-600 mt-2">Pioneering excellence in food processing</p>
             </div>
           </div>
           <Card className="border-slate-200 shadow-lg">

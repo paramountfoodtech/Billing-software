@@ -13,15 +13,15 @@ export default function SignUpPage() {
           <div className="flex flex-col items-center gap-2 text-center">
             <Image
               src="/PFT logo.png"
-              alt="Billing Management System logo"
+              alt="Paramount Food Tech logo"
               width={56}
               height={56}
               className="h-14 w-14 object-contain drop-shadow-sm"
               priority
             />
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">Invoice Pro</h1>
-              <p className="text-sm text-muted-foreground">Professional billing management system</p>
+              <h1 className="text-3xl font-bold tracking-tight">Paramount Food Tech</h1>
+              <p className="text-sm text-muted-foreground">Pioneering excellence in food processing</p>
             </div>
           </div>
           <Card>

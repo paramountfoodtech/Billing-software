@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
 import { MonthYearPicker } from "@/components/month-year-picker"
 import { ReportsTable } from "@/components/reports-table"
+import { ProductReportsTable } from "@/components/product-reports-table"
 
 export const revalidate = 0
 
@@ -51,7 +52,9 @@ export default async function ReportsPage({
 
       supabase
         .from("invoices")
-        .select("id, client_id, issue_date, total_amount, invoice_items(quantity, skinless_weight)")
+        .select(
+          "id, client_id, issue_date, total_amount, invoice_items(product_id, description, quantity, skinless_weight, line_total)",
+        )
         .gte("issue_date", monthStart)
         .lte("issue_date", monthEnd),
 
@@ -143,6 +146,72 @@ export default async function ReportsPage({
     (r) => r.sale > 0 || r.payments > 0 || r.outstanding > 0 || r.oldBal > 0,
   )
 
+  type ProductRow = {
+    id: string
+    name: string
+    currentMonthSaleValue: number
+    todaySaleQty: number
+    todaySaleValue: number
+    totalSaleKgs: number
+    avgQtyPerDay: number
+  }
+
+  const productMap = new Map<string, ProductRow>()
+  for (const invoice of currentMonthInvoices) {
+    const items =
+      (invoice.invoice_items as
+        | {
+            product_id: string | null
+            description: string | null
+            quantity: string | number | null
+            skinless_weight: string | number | null
+            line_total: string | number | null
+          }[]
+        | null) ?? []
+
+    for (const item of items) {
+      const name = (item.description || "Unnamed Product").trim()
+      const productKey = item.product_id || name
+      const current = productMap.get(productKey) || {
+        id: productKey,
+        name,
+        currentMonthSaleValue: 0,
+        todaySaleQty: 0,
+        todaySaleValue: 0,
+        totalSaleKgs: 0,
+        avgQtyPerDay: 0,
+      }
+
+      const qty =
+        item.skinless_weight && Number(item.skinless_weight) > 0
+          ? Number(item.skinless_weight)
+          : Number(item.quantity || 0)
+      const lineValue = Number(item.line_total || 0)
+
+      current.currentMonthSaleValue += lineValue
+      current.totalSaleKgs += qty
+      if (invoice.issue_date === todayDate) {
+        current.todaySaleQty += qty
+        current.todaySaleValue += lineValue
+      }
+
+      productMap.set(productKey, current)
+    }
+  }
+
+  const productRows = Array.from(productMap.values())
+    .map((row) => ({
+      ...row,
+      avgQtyPerDay: row.totalSaleKgs / daysInMonth,
+    }))
+    .filter(
+      (r) =>
+        r.currentMonthSaleValue > 0 ||
+        r.todaySaleQty > 0 ||
+        r.todaySaleValue > 0 ||
+        r.totalSaleKgs > 0,
+    )
+
   return (
     <DashboardPageWrapper title="Reports">
       <div className="w-full p-4 sm:p-6 lg:p-8">
@@ -157,7 +226,20 @@ export default async function ReportsPage({
           <MonthYearPicker currentYear={reportYear} currentMonth={reportMonth} />
         </div>
 
-        <ReportsTable rows={rows} daysInMonth={daysInMonth} monthLabel={monthLabel} />
+        <div className="space-y-8">
+          <div>
+            <h2 className="mb-3 text-lg font-semibold">Client Sales Report</h2>
+            <ReportsTable rows={rows} daysInMonth={daysInMonth} monthLabel={monthLabel} />
+          </div>
+          <div>
+            <h2 className="mb-3 text-lg font-semibold">Product Sales Report</h2>
+            <ProductReportsTable
+              rows={productRows}
+              daysInMonth={daysInMonth}
+              monthLabel={monthLabel}
+            />
+          </div>
+        </div>
       </div>
     </DashboardPageWrapper>
   )

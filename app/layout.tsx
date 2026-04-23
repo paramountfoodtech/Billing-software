@@ -9,8 +9,8 @@ const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Invoice Pro - Billing Management System",
-  description: "Professional billing and invoice management system for businesses",
+  title: "Paramount Food Tech",
+  description: "Pioneering excellence in food processing",
   generator: "v0.app",
   icons: {
     icon: [

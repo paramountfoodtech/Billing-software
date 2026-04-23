@@ -10,9 +10,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { ArrowUpDown, ArrowUp, ArrowDown, Download, FileText } from "lucide-react"
 import { usePagination } from "@/hooks/use-pagination"
 import { TablePagination } from "@/components/table-pagination"
+import { Button } from "@/components/ui/button"
+import { useToast } from "@/hooks/use-toast"
+import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils"
 
 type ClientRow = {
   id: string
@@ -33,6 +36,7 @@ interface ReportsTableProps {
 }
 
 export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProps) {
+  const { toast } = useToast()
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
@@ -160,8 +164,119 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
   const fmt = (n: number) =>
     n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+  const handleExportCSV = () => {
+    const columns: ExportColumn[] = [
+      { key: "name", label: "Client" },
+      {
+        key: "oldBal",
+        label: "Old Balance",
+        formatter: (value) => Number(value || 0).toFixed(2),
+      },
+      {
+        key: "sale",
+        label: "Current Month Sale - Value",
+        formatter: (value) => Number(value || 0).toFixed(2),
+      },
+      {
+        key: "todaySaleQty",
+        label: "Today's Sale - Qty",
+        formatter: (value) => Number(value || 0).toFixed(2),
+      },
+      {
+        key: "todaySaleValue",
+        label: "Today's Sale - Value",
+        formatter: (value) => Number(value || 0).toFixed(2),
+      },
+      {
+        key: "saleKgs",
+        label: "Total Sale in KGs",
+        formatter: (value) => Number(value || 0).toFixed(2),
+      },
+      {
+        key: "saleKgs",
+        label: "Average Quantity per Day",
+        formatter: (value) => (Number(value || 0) / daysInMonth).toFixed(2),
+      },
+      {
+        key: "payments",
+        label: "Payments",
+        formatter: (value) => Number(value || 0).toFixed(2),
+      },
+      {
+        key: "outstanding",
+        label: "Outstanding",
+        formatter: (value) => Number(value || 0).toFixed(2),
+      },
+    ]
+
+    exportToCSV(processedRows, columns, `reports-clients-${getTimestamp()}.csv`)
+    toast({
+      variant: "success",
+      title: "Exported",
+      description: `${processedRows.length} client report row(s) exported to CSV successfully.`,
+    })
+  }
+
+  const handleExportPDF = async () => {
+    const exportRows = processedRows.map((row) => ({
+      ...row,
+      oldBalFmt: `Rs.${fmt(row.oldBal)}`,
+      saleFmt: `Rs.${fmt(row.sale)}`,
+      todaySaleQtyFmt: row.todaySaleQty.toFixed(2),
+      todaySaleValueFmt: `Rs.${fmt(row.todaySaleValue)}`,
+      saleKgsFmt: row.saleKgs.toFixed(2),
+      avgQtyFmt: (row.saleKgs / daysInMonth).toFixed(2),
+      paymentsFmt: `Rs.${fmt(row.payments)}`,
+      outstandingFmt: `Rs.${fmt(row.outstanding)}`,
+    }))
+
+    const columns: ExportColumn[] = [
+      { key: "name", label: "Client" },
+      { key: "oldBalFmt", label: "Old Balance" },
+      { key: "saleFmt", label: "Current Month Sale - Value" },
+      { key: "todaySaleQtyFmt", label: "Today's Sale - Qty" },
+      { key: "todaySaleValueFmt", label: "Today's Sale - Value" },
+      { key: "saleKgsFmt", label: "Total Sale in KGs" },
+      { key: "avgQtyFmt", label: "Average Quantity per Day" },
+      { key: "paymentsFmt", label: "Payments" },
+      { key: "outstandingFmt", label: "Outstanding" },
+    ]
+
+    await exportToPDF(
+      exportRows,
+      columns,
+      `Client Report (${monthLabel})`,
+      `reports-clients-${getTimestamp()}.pdf`,
+    )
+    toast({
+      variant: "success",
+      title: "Exported",
+      description: `${processedRows.length} client report row(s) exported to PDF successfully.`,
+    })
+  }
+
   return (
     <div className="space-y-4">
+      <div className="flex justify-end gap-2">
+        <Button
+          onClick={handleExportCSV}
+          size="sm"
+          variant="outline"
+          disabled={processedRows.length === 0}
+        >
+          <Download className="h-4 w-4" />
+          <span className="ml-2 hidden sm:inline">CSV</span>
+        </Button>
+        <Button
+          onClick={handleExportPDF}
+          size="sm"
+          variant="outline"
+          disabled={processedRows.length === 0}
+        >
+          <FileText className="h-4 w-4" />
+          <span className="ml-2 hidden sm:inline">PDF</span>
+        </Button>
+      </div>
       <div className="rounded-lg border bg-white overflow-x-auto">
         <Table className="text-xs sm:text-sm min-w-[1180px]">
           <TableHeader>

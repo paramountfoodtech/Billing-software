@@ -47,6 +47,7 @@ interface Invoice {
   issue_date: string;
   due_date: string;
   due_days_type?: string | null;
+  total_birds?: number | null;
   status: string;
   total_amount: string;
   amount_paid: string;
@@ -359,11 +360,10 @@ export function InvoicesTable({
     });
   };
 
-  // Helper function to format currency with proper character encoding for jsPDF
+  // Helper function to format currency for jsPDF-compatible fonts
   const formatCurrency = (amount: string | number): string => {
     const num = Number(amount || 0).toFixed(2);
-    // Use Unicode escape sequence for rupee symbol
-    return '\u20B9' + num;
+    return `Rs. ${num}`;
   };
 
   const handleExportConsolidatedPDF = async () => {
@@ -450,48 +450,58 @@ export function InvoicesTable({
       format: "a4",
     });
 
-    // Load logo image
-    let logoImg: { data: string; format: string } | null = null;
+    // Load logo image while preserving original aspect ratio
+    // and normalize to PNG so jsPDF can render consistently.
+    let logoImg: {
+      data: string;
+      format: string;
+      width: number;
+      height: number;
+    } | null = null;
     try {
       // Use template logo file if available, otherwise use logo URL
-      const logoSource = activeTemplate.company_logo_file || activeTemplate.company_logo_url;
+      const logoSource =
+        activeTemplate.company_logo_file || activeTemplate.company_logo_url;
       if (logoSource) {
-        let base64Data: string;
-        let format = "PNG";
+        const resolvedLogoSource = logoSource.startsWith("data:")
+          ? logoSource
+          : logoSource.startsWith("http://") || logoSource.startsWith("https://")
+            ? encodeURI(logoSource)
+            : logoSource.startsWith("/")
+              ? `${window.location.origin}${encodeURI(logoSource)}`
+              : `${window.location.origin}/${encodeURI(logoSource)}`;
 
-        if (logoSource.startsWith('data:')) {
-          // Already base64 encoded - extract format and data
-          const matches = logoSource.match(/^data:image\/(\w+);base64,(.+)$/);
-          if (matches) {
-            format = matches[1].toUpperCase();
-            base64Data = matches[2];
-          } else {
-            base64Data = logoSource;
-          }
-        } else {
-          // Fetch from URL
-          const response = await fetch(encodeURI(logoSource));
-          const blob = await response.blob();
-          
-          // Determine format from blob type
-          if (blob.type.includes('jpeg') || blob.type.includes('jpg')) {
-            format = "JPEG";
-          } else if (blob.type.includes('png')) {
-            format = "PNG";
-          }
+        const loadedImage = await new Promise<HTMLImageElement>(
+          (resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = resolvedLogoSource;
+          },
+        );
 
-          base64Data = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const result = reader.result as string;
-              const base64 = result.split(',')[1];
-              resolve(base64);
-            };
-            reader.readAsDataURL(blob);
-          });
+        const width = loadedImage.naturalWidth || loadedImage.width;
+        const height = loadedImage.naturalHeight || loadedImage.height;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+
+        if (!ctx) {
+          throw new Error("Could not create canvas context for logo.");
         }
 
-        logoImg = { data: base64Data, format };
+        ctx.drawImage(loadedImage, 0, 0, width, height);
+        const normalizedPng = canvas.toDataURL("image/png");
+
+        logoImg = {
+          data: normalizedPng,
+          format: "PNG",
+          width,
+          height,
+        };
       }
     } catch (error) {
       console.warn("Could not load logo image:", error);
@@ -521,17 +531,40 @@ export function InvoicesTable({
         (sum, item) => sum + Number(item.skinless_weight || 0),
         0,
       );
+      const totalBirds = Number(invoice.total_birds || 0);
       const balance = Number(invoice.total_amount) - Number(invoice.amount_paid);
 
       // ===== HEADER: Logo + Company (Left) | INVOICE + Details (Right) =====
+      // Match printable preview spacing and keep header blocks aligned.
+      const spacing = {
+        sectionGap: 4,
+        logoToCompany: 5,
+        companyTitleToMeta: 3,
+        lineGap: 3,
+        logoTopPadding: 0,
+      };
+      const headerTopY = y;
       const logoX = margin;
-      const logoY = y;
-      const logoSize = 14; // h-14 equivalent
+      const logoY = headerTopY + spacing.logoTopPadding;
+      const logoMaxHeight = 14; // h-14 equivalent
+      const logoMaxWidth = 40;
+      let logoWidth = 0;
+      let logoHeight = logoMaxHeight;
 
       // Logo on left
       if (logoImg) {
         try {
-          pdf.addImage(logoImg.data, logoImg.format, logoX, logoY, logoSize, logoSize);
+          const logoRatio = logoImg.width / logoImg.height;
+          logoWidth = Math.min(logoMaxWidth, logoMaxHeight * logoRatio);
+          logoHeight = logoWidth / logoRatio;
+          pdf.addImage(
+            logoImg.data,
+            logoImg.format,
+            logoX,
+            logoY,
+            logoWidth,
+            logoHeight,
+          );
         } catch (error) {
           console.warn("Could not add logo to PDF:", error);
         }
@@ -539,83 +572,110 @@ export function InvoicesTable({
 
       // Company details below logo on left
       const companyX = margin;
-      let companyY = logoY + logoSize + 2;
+      const companyTextWidth = pageWidth * 0.5 - margin;
+      let companyY = logoY + logoHeight + spacing.logoToCompany;
 
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "bold");
       pdf.text(activeTemplate.company_name, companyX, companyY);
-      companyY += 4;
+      companyY += spacing.companyTitleToMeta;
 
       pdf.setFontSize(7);
       pdf.setFont("helvetica", "normal");
-      pdf.text(activeTemplate.company_address, companyX, companyY);
-      companyY += 3;
+      const companyAddressLines = pdf.splitTextToSize(
+        activeTemplate.company_address || "",
+        companyTextWidth,
+      );
+      if (companyAddressLines.length > 0) {
+        pdf.text(companyAddressLines, companyX, companyY);
+        companyY += companyAddressLines.length * spacing.lineGap;
+      }
       pdf.text(`Phone: ${activeTemplate.company_phone}`, companyX, companyY);
-      companyY += 3;
+      companyY += spacing.lineGap;
       pdf.text(`Email: ${activeTemplate.company_email}`, companyX, companyY);
+      const leftBlockBottomY = companyY + 1;
 
-      // INVOICE title and details on right
-      const rightX = pageWidth - margin - 60;
-      let rightY = logoY;
+      // INVOICE title and details on right (strictly aligned to right page margin)
+      const rightX = pageWidth - margin;
+      let rightY = logoY + 2;
 
       pdf.setFontSize(16);
       pdf.setFont("helvetica", "bold");
-      pdf.text("INVOICE", rightX, rightY);
-      rightY += 5;
+      pdf.text("INVOICE", rightX, rightY, { align: "right" });
+      rightY += spacing.sectionGap;
 
       pdf.setFontSize(7);
       pdf.setFont("helvetica", "normal");
-      pdf.text(`Invoice #: ${invoice.invoice_number}`, rightX, rightY);
-      rightY += 3;
+      pdf.text(`Invoice #: ${invoice.invoice_number}`, rightX, rightY, {
+        align: "right",
+      });
+      rightY += spacing.lineGap;
 
       if (invoice.reference_number) {
-        pdf.text(`Ref: ${invoice.reference_number}`, rightX, rightY);
-        rightY += 3;
+        pdf.text(`Ref: ${invoice.reference_number}`, rightX, rightY, {
+          align: "right",
+        });
+        rightY += spacing.lineGap;
       }
 
-      pdf.text(`Date: ${new Date(invoice.issue_date).toLocaleDateString("en-IN", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })}`, rightX, rightY);
-      rightY += 3;
+      pdf.text(
+        `Date: ${new Date(invoice.issue_date).toLocaleDateString("en-IN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })}`,
+        rightX,
+        rightY,
+        { align: "right" },
+      );
+      rightY += spacing.lineGap;
 
-      pdf.text(`Due Date: ${invoice.due_days_type === "end_of_month" ? "End of the billed month" : new Date(invoice.due_date).toLocaleDateString("en-IN", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })}`, rightX, rightY);
+      pdf.text(
+        `Due Date: ${
+          invoice.due_days_type === "end_of_month"
+            ? "End of the billed month"
+            : new Date(invoice.due_date).toLocaleDateString("en-IN", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })
+        }`,
+        rightX,
+        rightY,
+        { align: "right" },
+      );
+      const rightBlockBottomY = rightY + 1;
 
-      y = logoY + logoSize + 20;
+      y = Math.max(leftBlockBottomY, rightBlockBottomY) + spacing.sectionGap;
 
       // ===== BILL TO SECTION =====
       pdf.setFontSize(8);
       pdf.setFont("helvetica", "bold");
       pdf.text("Bill To:", margin, y);
-      y += 3;
+      y += spacing.lineGap;
 
       pdf.setFontSize(7);
       pdf.setFont("helvetica", "normal");
       pdf.text(invoice.clients?.name || 'N/A', margin, y);
-      y += 3;
+      y += spacing.lineGap;
       if (invoice.clients?.address) {
         pdf.text(invoice.clients.address, margin, y);
-        y += 3;
+        y += spacing.lineGap;
       }
       if (invoice.clients?.city && invoice.clients?.state) {
         pdf.text(`${invoice.clients.city}, ${invoice.clients.state} ${invoice.clients.zip_code || ''}`, margin, y);
-        y += 3;
+        y += spacing.lineGap;
       }
       if (invoice.clients?.email) {
         pdf.text(`Email: ${invoice.clients.email}`, margin, y);
-        y += 3;
+        y += spacing.lineGap;
       }
       if (invoice.clients?.phone) {
         pdf.text(`Phone: ${invoice.clients.phone}`, margin, y);
-        y += 3;
+        y += spacing.lineGap;
       }
 
-      y += 6;
+      y += spacing.sectionGap;
 
       // ===== ITEMS TABLE =====
       // Calculate column widths
@@ -711,8 +771,13 @@ export function InvoicesTable({
       }
 
       // Per bird amount
-      const perBirdValue = invoice.clients?.value_per_bird ? Number(invoice.clients.value_per_bird) : 0;
-      const perBirdAmount = invoice.clients?.enable_per_bird && perBirdValue !== 0 ? totalWeight * perBirdValue : 0;
+      const perBirdValue = invoice.clients?.value_per_bird
+        ? Number(invoice.clients.value_per_bird)
+        : 0;
+      const perBirdAmount =
+        invoice.clients?.enable_per_bird && perBirdValue !== 0
+          ? totalBirds * perBirdValue
+          : 0;
 
       if (perBirdAmount !== 0) {
         const perBirdStr = formatCurrency(perBirdAmount);

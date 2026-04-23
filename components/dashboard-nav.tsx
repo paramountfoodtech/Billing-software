@@ -202,7 +202,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
           >
             <Image
               src="/PFT logo.png"
-              alt="Billing Management System logo"
+              alt="Paramount Food Tech logo"
               width={44}
               height={44}
               className="h-11 w-11 rounded-lg object-cover shadow-sm flex-shrink-0"
@@ -211,7 +211,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             {!isSidebarCollapsed && (
               <div className="flex-1 min-w-0">
                 <h1 className="text-2xl font-bold text-slate-900 leading-tight">
-                  Invoice Pro
+                  Paramount Food Tech
                 </h1>
                 <p className="text-sm text-slate-500 mt-1 truncate">
                   {profile?.full_name}
