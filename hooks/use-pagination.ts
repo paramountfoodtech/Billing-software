@@ -19,7 +19,7 @@ interface PaginationState {
 
 export function usePagination({
   items,
-  itemsPerPage = 10,
+  itemsPerPage = 25,
 }: UsePaginationProps): PaginationState {
   const [currentPage, setCurrentPage] = useState(1)
 

@@ -96,6 +96,7 @@ interface InvoiceFormProps {
     tax_rate: number;
     discount: number;
     line_total?: number;
+    skinless_weight?: number | null;
   }>;
 }
 
@@ -110,6 +111,7 @@ interface InvoiceItem {
   bird_count?: number | null;
   enabled?: boolean;
   use_per_bird?: boolean;
+  skinless_weight?: number | null;
 }
 
 const sanitizeInvoiceNumberInput = (value: string) =>
@@ -262,6 +264,7 @@ export function InvoiceForm({
       enabled: true,
       use_per_bird: false,
       line_total: typeof it.line_total === "number" ? Number(it.line_total) : 0,
+      skinless_weight: (it as any).skinless_weight ? Number((it as any).skinless_weight) : null,
     }));
   });
 
@@ -314,6 +317,18 @@ export function InvoiceForm({
     const client = clients.find((c) => c.id === clientId);
     return client?.value_per_bird ? Number(client.value_per_bird) : 0;
   };
+
+  // Check if pricing rule uses Live category (case-insensitive)
+  const isLiveCategoryPricing = (productId: string, clientId: string) => {
+    if (!clientId || !productId) return false;
+    const pricingRule = clientPricingRules.find(
+      (rule) => rule.product_id === productId && rule.client_id === clientId,
+    );
+    if (!pricingRule?.price_category_id) return false;
+    const category = priceCategories.find((c) => c.id === pricingRule.price_category_id);
+    return category?.name?.toLowerCase() === "live";
+  };
+
   // Function to check if a pricing rule is applied for a product
   const getPricingRuleInfo = (productId: string, clientId: string) => {
     if (!clientId || !productId) return null;
@@ -1041,6 +1056,7 @@ export function InvoiceForm({
             line_total: item.line_total,
             bird_count: null,
             per_bird_adjustment: null,
+            skinless_weight: item.skinless_weight ?? null,
           };
         });
 
@@ -1356,6 +1372,9 @@ export function InvoiceForm({
                     1,
                   )
                 : null;
+              const showSkinlessWeight = formData.client_id
+                ? isLiveCategoryPricing(product.id, formData.client_id)
+                : false;
 
               return (
                 <div
@@ -1485,6 +1504,27 @@ export function InvoiceForm({
                           disabled
                         />
                       </div>
+
+                      {showSkinlessWeight && (
+                        <div className="space-y-2">
+                          <Label>Skinless Weight (kg)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="e.g., 5.5"
+                            value={item.skinless_weight ?? ""}
+                            onChange={(e) =>
+                              updateItemByIndex(index, (item) => ({
+                                ...item,
+                                skinless_weight: e.target.value
+                                  ? Number(e.target.value)
+                                  : null,
+                              }))
+                            }
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

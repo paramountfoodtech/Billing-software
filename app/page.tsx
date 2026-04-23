@@ -11,7 +11,7 @@ export default function HomePage() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Image
-              src="/BS%20Logo.jpeg"
+              src="/PFT logo.png"
               alt="Billing Management System logo"
               width={36}
               height={36}

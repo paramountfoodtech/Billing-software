@@ -87,7 +87,7 @@ export default function LoginPage() {
         <div className="flex flex-col gap-8">
           <div className="flex flex-col items-center gap-4">
             <Image
-              src="/BS_Logo-removebg-preview.png"
+              src="/PFT logo.png"
               alt="Billing Management System logo"
               width={64}
               height={64}

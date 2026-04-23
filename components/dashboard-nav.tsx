@@ -201,7 +201,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             )}
           >
             <Image
-              src="/BS%20Logo.jpeg"
+              src="/PFT logo.png"
               alt="Billing Management System logo"
               width={44}
               height={44}

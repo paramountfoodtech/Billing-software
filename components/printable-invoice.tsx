@@ -52,6 +52,7 @@ interface Invoice {
     line_total: string;
     bird_count: number | null;
     per_bird_adjustment: string | null;
+    skinless_weight: string | number | null;
   }>;
 }
 
@@ -69,7 +70,7 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
     company_address: "123 Business Street, City, State 12345",
     company_phone: "+91 00000 00000",
     company_email: "info@company.com",
-    company_logo_url: "/BS%20Logo.jpeg",
+    company_logo_url: "/PFT logo.png",
     company_logo_file: null,
     tax_label: "GST",
     terms_and_conditions:
@@ -94,6 +95,12 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
   // total weight (kg) is just sum of item quantities
   const totalWeight = invoice.invoice_items.reduce(
     (sum, item) => sum + Number(item.quantity || 0),
+    0,
+  );
+
+  // total skinless weight (kg) is sum of item skinless_weight
+  const totalSkinlessWeight = invoice.invoice_items.reduce(
+    (sum, item) => sum + Number(item.skinless_weight || 0),
     0,
   );
 
@@ -258,6 +265,16 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
                 <td></td>
                 <td></td>
               </tr>
+              {totalSkinlessWeight > 0 && (
+                <tr>
+                  <td className="py-2 font-semibold">Total skinless weight (kgs):</td>
+                  <td className="text-right font-semibold">
+                    {totalSkinlessWeight.toFixed(2)}
+                  </td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              )}
             </tfoot>
           </table>
 

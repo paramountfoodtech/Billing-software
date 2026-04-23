@@ -44,7 +44,7 @@ export function UsersTable({ users, userRole }: { users: User[]; userRole?: stri
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
   // Pagination state
-  const [itemsPerPage, setItemsPerPage] = useState(10)
+  const [itemsPerPage, setItemsPerPage] = useState(25)
 
   // Filter state
   const [filters, setFilters] = useState({

@@ -178,7 +178,7 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
   // Pagination state for categories
-  const [itemsPerPage, setItemsPerPage] = useState(10)
+  const [itemsPerPage, setItemsPerPage] = useState(25)
 
   // Filter state for categories
   const [categoryFilters, setCategoryFilters] = useState({

@@ -51,7 +51,7 @@ export default async function ReportsPage({
 
       supabase
         .from("invoices")
-        .select("id, client_id, issue_date, total_amount, invoice_items(quantity)")
+        .select("id, client_id, issue_date, total_amount, invoice_items(quantity, skinless_weight)")
         .gte("issue_date", monthStart)
         .lte("issue_date", monthEnd),
 
@@ -59,7 +59,8 @@ export default async function ReportsPage({
         .from("invoices")
         .select("client_id, total_amount, amount_paid, issue_date")
         .neq("status", "cancelled")
-        .neq("status", "paid"),
+        .neq("status", "paid")
+        .lte("issue_date", monthEnd),
 
       supabase
         .from("payments")
@@ -104,8 +105,14 @@ export default async function ReportsPage({
     const row = clientMap.get(invoice.client_id)
     if (!row) continue
     row.sale += Number(invoice.total_amount)
-    const items = (invoice.invoice_items as { quantity: string | number | null }[] | null) ?? []
-    const invoiceQty = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+    const items = (invoice.invoice_items as { quantity: string | number | null; skinless_weight: string | number | null }[] | null) ?? []
+    const invoiceQty = items.reduce((sum, item) => {
+      // Use skinless_weight if present and > 0, otherwise use quantity
+      const weight = item.skinless_weight && Number(item.skinless_weight) > 0 
+        ? Number(item.skinless_weight) 
+        : Number(item.quantity || 0)
+      return sum + weight
+    }, 0)
     row.saleKgs += invoiceQty
     if (invoice.issue_date === todayDate) {
       row.todaySaleQty += invoiceQty

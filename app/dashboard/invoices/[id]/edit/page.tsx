@@ -35,7 +35,7 @@ export default async function EditInvoicePage({
     .select(
       `
       *,
-      invoice_items (product_id, description, quantity, unit_price, tax_rate, discount, line_total, bird_count, per_bird_adjustment)
+      invoice_items (product_id, description, quantity, unit_price, tax_rate, discount, line_total, bird_count, per_bird_adjustment, skinless_weight)
     `,
     )
     .eq("id", id)
@@ -109,6 +109,7 @@ export default async function EditInvoicePage({
           tax_rate: Number(it.tax_rate),
           discount: Number(it.discount),
           line_total: Number(it.line_total),
+          skinless_weight: it.skinless_weight ? Number(it.skinless_weight) : null,
         }))}
       />
     </div>

@@ -74,7 +74,7 @@ export function ClientsTable({ clients }: ClientsTableProps) {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   // Pagination state
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   // Filter state
   const [filters, setFilters] = useState({

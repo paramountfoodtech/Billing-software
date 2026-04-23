@@ -25,7 +25,7 @@ interface InvoiceTemplateFormProps {
   existingTemplate?: InvoiceTemplate | null
 }
 
-const DEFAULT_LOGO_URL = "/BS%20Logo.jpeg"
+const DEFAULT_LOGO_URL = "/PFT logo.png"
 
 export function InvoiceTemplateForm({ existingTemplate }: InvoiceTemplateFormProps) {
   const router = useRouter()

@@ -36,7 +36,8 @@ export default async function InvoiceDetailPage({
         discount,
         line_total,
         bird_count,
-        per_bird_adjustment
+        per_bird_adjustment,
+        skinless_weight
       )
     `,
     )
