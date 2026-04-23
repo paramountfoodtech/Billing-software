@@ -2,6 +2,31 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 
+function resolveAppBaseUrl(request: Request): string {
+  const explicitBaseUrl =
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL;
+
+  if (explicitBaseUrl && explicitBaseUrl.trim().length > 0) {
+    return explicitBaseUrl.replace(/\/+$/, "");
+  }
+
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const host = forwardedHost || request.headers.get("host");
+  const protocol =
+    forwardedProto ||
+    (host && host.includes("localhost") ? "http" : "https");
+
+  if (host) {
+    return `${protocol}://${host}`;
+  }
+
+  const requestUrl = new URL(request.url);
+  return requestUrl.origin.replace(/\/+$/, "");
+}
+
 // This endpoint will be called by a cron job (Vercel Cron or external service)
 // Protect it with an authorization token
 export async function GET(request: Request) {
@@ -19,8 +44,7 @@ export async function GET(request: Request) {
 
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
-    //const requestOrigin = new URL(request.url).origin;
-    const requestOrigin = process.env.APP_URL!;
+    const requestOrigin = resolveAppBaseUrl(request);
     const reportType = searchParams.get("type"); // daily, weekly, monthly, semi-annual, annual
 
     if (reportType === "daily") {
