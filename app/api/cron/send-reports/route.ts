@@ -19,7 +19,8 @@ export async function GET(request: Request) {
 
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
-    const requestOrigin = new URL(request.url).origin;
+    //const requestOrigin = new URL(request.url).origin;
+    const requestOrigin = process.env.APP_URL!;
     const reportType = searchParams.get("type"); // daily, weekly, monthly, semi-annual, annual
 
     if (reportType === "daily") {
