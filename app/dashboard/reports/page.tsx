@@ -1,16 +1,15 @@
+import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
-import { MonthYearPicker } from "@/components/month-year-picker"
-import { ReportsTable } from "@/components/reports-table"
-import { ProductReportsTable } from "@/components/product-reports-table"
+import { ReportsPageClient } from "@/components/reports-page-client"
 
 export const revalidate = 0
 
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; year?: string }>
+  searchParams: Promise<{ month?: string; year?: string; tab?: string }>
 }) {
   const supabase = await createClient()
 
@@ -214,33 +213,23 @@ export default async function ReportsPage({
 
   return (
     <DashboardPageWrapper title="Reports">
-      <div className="w-full p-4 sm:p-6 lg:p-8">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              Monthly Report:{" "}
-              <span className="font-semibold text-foreground">{monthLabel}</span>
-            </p>
-          </div>
-          <MonthYearPicker currentYear={reportYear} currentMonth={reportMonth} />
-        </div>
-
-        <div className="space-y-8">
-          <div>
-            <h2 className="mb-3 text-lg font-semibold">Client Sales Report</h2>
-            <ReportsTable rows={rows} daysInMonth={daysInMonth} monthLabel={monthLabel} />
-          </div>
-          <div>
-            <h2 className="mb-3 text-lg font-semibold">Product Sales Report</h2>
-            <ProductReportsTable
-              rows={productRows}
-              daysInMonth={daysInMonth}
-              monthLabel={monthLabel}
-            />
-          </div>
-        </div>
-      </div>
+      <Suspense
+        fallback={
+          <div className="w-full p-8 text-sm text-muted-foreground">Loading reports…</div>
+        }
+      >
+        <ReportsPageClient
+          reportYear={reportYear}
+          reportMonth={reportMonth}
+          monthLabel={monthLabel}
+          monthStart={monthStart}
+          monthEnd={monthEnd}
+          daysInMonth={daysInMonth}
+          rows={rows}
+          productRows={productRows}
+          clients={clients.map((c) => ({ id: c.id, name: c.name }))}
+        />
+      </Suspense>
     </DashboardPageWrapper>
   )
 }

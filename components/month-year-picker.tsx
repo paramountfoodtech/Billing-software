@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 
 const MONTHS = [
@@ -15,6 +15,7 @@ interface MonthYearPickerProps {
 
 export function MonthYearPicker({ currentYear, currentMonth }: MonthYearPickerProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const today = new Date()
 
   // Generate years: 3 years back up to current year
@@ -24,7 +25,10 @@ export function MonthYearPicker({ currentYear, currentMonth }: MonthYearPickerPr
   )
 
   const navigate = (year: number, month: number) => {
-    router.push(`/dashboard/reports?year=${year}&month=${month}`)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("year", String(year))
+    params.set("month", String(month))
+    router.push(`/dashboard/reports?${params.toString()}`)
   }
 
   const handleMonthChange = (value: string) => {

@@ -65,7 +65,10 @@ export default async function EditInvoicePage({
       .select(
         "product_id, price_rule_type, price_rule_value, price_category_id, fixed_base_value, client_id, conditional_threshold, conditional_discount_below, conditional_discount_above_equal",
       ),
-    supabase.from("price_categories").select("id, name").order("name"),
+    supabase
+      .from("price_categories")
+      .select("id, name, is_active")
+      .order("name"),
     supabase
       .from("price_category_history")
       .select("price_category_id, price, effective_date"),
@@ -86,6 +89,9 @@ export default async function EditInvoicePage({
         clientPricingRules={pricingRulesResult.data || []}
         priceCategories={categoriesResult.data || []}
         priceHistory={historyResult.data || []}
+        canEditInvoiceNumber={
+          profile?.role === "admin" || profile?.role === "super_admin"
+        }
         initialInvoice={{
           id: invoice.id,
           client_id: invoice.client_id,

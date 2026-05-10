@@ -45,6 +45,7 @@ export function PaymentForm({
   preSelectedInvoiceId,
   preSelectedClientId,
 }: PaymentFormProps) {
+  const supabase = createClient();
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -58,6 +59,9 @@ export function PaymentForm({
   const [autoFilledInvoiceId, setAutoFilledInvoiceId] = useState<string | null>(
     null,
   );
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [isReferenceDuplicate, setIsReferenceDuplicate] = useState(false);
+  const [isCheckingReference, setIsCheckingReference] = useState(false);
 
   const [formData, setFormData] = useState({
     invoice_id: preSelectedInvoiceId || "",
@@ -139,11 +143,85 @@ export function PaymentForm({
     }
   }, [formData.invoice_id, invoices, autoFilledInvoiceId]);
 
+  // Resolve user's organization once for inline duplicate checks.
+  useEffect(() => {
+    let isActive = true;
+
+    const loadOrganizationId = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user || !isActive) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!isActive) return;
+      setOrganizationId(profile?.organization_id || null);
+    };
+
+    void loadOrganizationId();
+
+    return () => {
+      isActive = false;
+    };
+  }, [supabase]);
+
+  // Check for duplicate reference while typing to provide earlier feedback.
+  useEffect(() => {
+    let isActive = true;
+    const normalizedReference = formData.reference_number.trim();
+
+    if (!normalizedReference || !organizationId) {
+      setIsReferenceDuplicate(false);
+      setIsCheckingReference(false);
+      return;
+    }
+
+    setIsCheckingReference(true);
+
+    const timer = setTimeout(async () => {
+      const { data: existingPayment, error } = await supabase
+        .from("payments")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("reference_number", normalizedReference)
+        .limit(1);
+
+      if (!isActive) return;
+
+      if (error) {
+        setIsReferenceDuplicate(false);
+      } else {
+        setIsReferenceDuplicate(Boolean(existingPayment?.length));
+      }
+      setIsCheckingReference(false);
+    }, 350);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timer);
+    };
+  }, [formData.reference_number, organizationId, supabase]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
 
-    const supabase = createClient();
+    if (isReferenceDuplicate) {
+      toast({
+        variant: "destructive",
+        title: "Duplicate payment reference",
+        description:
+          "This payment reference already exists. Please use a unique reference.",
+      });
+      return;
+    }
+
+    setIsLoading(true);
 
     // Get current user
     const {
@@ -171,6 +249,30 @@ export function PaymentForm({
         throw new Error("User must belong to an organization");
       }
 
+      const normalizedReference = formData.reference_number.trim();
+
+      if (normalizedReference) {
+        const { data: existingPayment, error: duplicateCheckError } =
+          await supabase
+            .from("payments")
+            .select("id")
+            .eq("organization_id", profile.organization_id)
+            .eq("reference_number", normalizedReference)
+            .limit(1);
+
+        if (duplicateCheckError) throw duplicateCheckError;
+
+        if (existingPayment && existingPayment.length > 0) {
+          toast({
+            variant: "destructive",
+            title: "Duplicate payment reference",
+            description:
+              "This payment reference already exists. Please use a unique reference.",
+          });
+          return;
+        }
+      }
+
       const paymentAmount = Number(formData.amount);
 
       if (paymentMode === "bulk" && selectedClientId) {
@@ -193,7 +295,7 @@ export function PaymentForm({
           amount: formData.amount,
           payment_date: formData.payment_date,
           payment_method: formData.payment_method,
-          reference_number: formData.reference_number || null,
+          reference_number: normalizedReference || null,
           status: formData.status,
           notes: `Bulk payment for client - allocated across ${unpaidInvoices.length} invoices. ${formData.notes || ""}`,
           created_by: user.id,
@@ -247,7 +349,7 @@ export function PaymentForm({
           amount: formData.amount,
           payment_date: formData.payment_date,
           payment_method: formData.payment_method,
-          reference_number: formData.reference_number || null,
+          reference_number: normalizedReference || null,
           status: formData.status,
           notes: formData.notes || null,
           created_by: user.id,
@@ -648,6 +750,16 @@ export function PaymentForm({
                 }
                 placeholder="Transaction ID, Check #, etc."
               />
+              {isCheckingReference && formData.reference_number.trim() && (
+                <p className="text-xs text-muted-foreground">
+                  Checking reference number...
+                </p>
+              )}
+              {!isCheckingReference && isReferenceDuplicate && (
+                <p className="text-xs text-red-600">
+                  This reference number already exists. Please enter a unique one.
+                </p>
+              )}
             </div>
           </div>
 
@@ -685,6 +797,7 @@ export function PaymentForm({
               type="submit"
               disabled={
                 isLoading ||
+                isReferenceDuplicate ||
                 !formData.amount ||
                 (paymentMode === "individual" && !formData.invoice_id) ||
                 (paymentMode === "bulk" && !selectedClientId)

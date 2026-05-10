@@ -66,7 +66,7 @@ interface InvoiceFormProps {
   clients: Client[];
   products: Product[];
   clientPricingRules: ClientProductPricing[];
-  priceCategories?: Array<{ id: string; name: string }>;
+  priceCategories?: Array<{ id: string; name: string; is_active?: boolean }>;
   priceHistory?: Array<{
     price_category_id: string;
     price: number;
@@ -98,6 +98,7 @@ interface InvoiceFormProps {
     line_total?: number;
     skinless_weight?: number | null;
   }>;
+  canEditInvoiceNumber?: boolean;
 }
 
 interface InvoiceItem {
@@ -142,6 +143,7 @@ export function InvoiceForm({
   lastInvoiceNumber,
   initialInvoice,
   initialItems,
+  canEditInvoiceNumber = false,
 }: InvoiceFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -242,6 +244,7 @@ export function InvoiceForm({
   const [clientSearchValue, setClientSearchValue] = useState("");
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [productSearchValue, setProductSearchValue] = useState("");
+  const isEditMode = Boolean(initialInvoice?.id);
 
   // ensure per-bird settings from client are loaded when form initialises
   useEffect(() => {
@@ -663,6 +666,29 @@ export function InvoiceForm({
     );
   };
 
+  // Recalculate existing item rates when invoice date changes.
+  useEffect(() => {
+    if (!formData.client_id || items.length === 0) return;
+
+    setItems((prev) =>
+      prev.map((item) => {
+        if (!item.product_id) return item;
+        const recalculatedPrice = calculateClientPrice(
+          item.product_id,
+          formData.client_id,
+          formData.issue_date,
+          false,
+          1,
+        );
+        const updated = { ...item, unit_price: recalculatedPrice };
+        updated.line_total = calculateLineTotal(updated);
+        return updated;
+      }),
+    );
+    // Intentionally scoped to issue date and client; repricing should happen only then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.issue_date, formData.client_id]);
+
   const [totals, setTotals] = useState({
     subtotal: 0,
     tax_amount: 0,
@@ -931,6 +957,13 @@ export function InvoiceForm({
         return;
       }
 
+      const issueDateUpperBound = new Date().toISOString().split("T")[0];
+      if (formData.issue_date > issueDateUpperBound) {
+        setError("Issue date cannot be in the future.");
+        setIsLoading(false);
+        return;
+      }
+
       // Get user's organization
       const { data: profile } = await supabase
         .from("profiles")
@@ -1010,9 +1043,45 @@ export function InvoiceForm({
         invoiceId = invoice.id;
       } else {
         // Update invoice (edit mode)
+        const invoiceNumber = sanitizeInvoiceNumberInput(formData.invoice_number);
+
+        if (!invoiceNumber) {
+          setError("Invoice number is required.");
+          setIsLoading(false);
+          return;
+        }
+
+        if (invoiceNumber !== formData.invoice_number.trim()) {
+          setError(
+            "Invoice number can only contain letters, numbers, and hyphen (-).",
+          );
+          setIsLoading(false);
+          return;
+        }
+
+        if (canEditInvoiceNumber) {
+          const { data: existingInvoiceWithNumber } = await supabase
+            .from("invoices")
+            .select("id")
+            .eq("invoice_number", invoiceNumber)
+            .neq("id", invoiceId)
+            .maybeSingle();
+
+          if (existingInvoiceWithNumber) {
+            setError(
+              `Invoice number "${invoiceNumber}" already exists. Please use a different invoice number.`,
+            );
+            setIsLoading(false);
+            return;
+          }
+        }
+
         const { error: updateError } = await supabase
           .from("invoices")
           .update({
+            invoice_number: canEditInvoiceNumber
+              ? invoiceNumber
+              : initialInvoice?.invoice_number,
             client_id: formData.client_id,
             issue_date: formData.issue_date,
             due_date: formData.due_date,
@@ -1103,10 +1172,15 @@ export function InvoiceForm({
   // Warn when the selected issue date has no prices configured
   const missingPricesForDate = useMemo(() => {
     if (!priceCategories?.length || !formData.issue_date) return null;
+    const activeCategories = priceCategories.filter(
+      (category) => category.is_active !== false,
+    );
+    if (activeCategories.length === 0) return null;
+
     const pricesOnDate = (priceHistory ?? []).filter(
       (p) => p.effective_date === formData.issue_date,
     );
-    const missing = priceCategories.filter(
+    const missing = activeCategories.filter(
       (cat) => !pricesOnDate.some((p) => p.price_category_id === cat.id),
     );
     return missing.length > 0 ? missing : null;
@@ -1208,10 +1282,12 @@ export function InvoiceForm({
                   setFormData({ ...formData, invoice_number: sanitizedValue });
                 }}
                 placeholder="e.g., INV-001, INV-002"
-                disabled={!!initialInvoice?.id || continueInvoiceSequence}
+                disabled={
+                  (isEditMode && !canEditInvoiceNumber) || continueInvoiceSequence
+                }
                 pattern="[A-Za-z0-9-]+"
               />
-              {!initialInvoice?.id && (
+              {!isEditMode && (
                 <div className="flex items-center justify-between gap-3 rounded-md border p-2">
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium">Continue sequence</p>
@@ -1234,8 +1310,10 @@ export function InvoiceForm({
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                {initialInvoice?.id
-                  ? "Invoice number cannot be changed"
+                {isEditMode
+                  ? canEditInvoiceNumber
+                    ? "Admin can edit invoice number"
+                    : "Only admin can edit invoice number"
                   : continueInvoiceSequence
                     ? "Invoice number is locked while auto sequence is enabled"
                     : "Only letters, numbers, and hyphen (-) are allowed"}
@@ -1252,10 +1330,13 @@ export function InvoiceForm({
                 id="issue_date"
                 type="date"
                 required
+                max={today}
                 placeholder="Select issue date"
                 value={formData.issue_date}
+                disabled={isEditMode && !canEditInvoiceNumber}
                 onChange={(e) => {
                   const nextIssue = e.target.value;
+                  if (nextIssue > today) return;
                   const days = selectedDueDays ?? 30;
                   const daysType = selectedDueDaysType ?? "fixed_days";
                   setFormData({
@@ -1265,6 +1346,11 @@ export function InvoiceForm({
                   });
                 }}
               />
+              {isEditMode && !canEditInvoiceNumber && (
+                <p className="text-xs text-muted-foreground">
+                  Only admin can edit issue date.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -1736,7 +1822,13 @@ export function InvoiceForm({
             (clientPerBirdEnabled && globalBirdCount <= 0)
           }
         >
-          {isLoading ? "Creating..." : "Create Invoice"}
+          {isLoading
+            ? isEditMode
+              ? "Updating..."
+              : "Creating..."
+            : isEditMode
+              ? "Update Invoice"
+              : "Create Invoice"}
         </Button>
         <Button type="button" variant="outline" onClick={() => router.back()}>
           Cancel
