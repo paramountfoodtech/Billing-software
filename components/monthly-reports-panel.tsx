@@ -117,34 +117,49 @@ export function MonthlyReportsPanel({
       } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
-      const [{ data: invoicesRaw, error: invErr }, { data: paymentsResult, error: payErr }] =
-        await Promise.all([
-          supabase
-            .from("invoices")
-            .select("id, invoice_number, issue_date, total_amount, status")
-            .eq("client_id", clientId)
-            .neq("status", "cancelled")
-            .order("issue_date", { ascending: true })
-            .order("invoice_number", { ascending: true }),
-          supabase
-            .from("payments")
-            .select(
-              "payment_date, amount, status, invoice_id, invoices(invoice_number)",
-            )
-            .order("payment_date", { ascending: true }),
-        ])
+      const { data: invoicesRaw, error: invErr } = await supabase
+        .from("invoices")
+        .select("id, invoice_number, issue_date, total_amount, status")
+        .eq("client_id", clientId)
+        .neq("status", "cancelled")
+        .order("issue_date", { ascending: true })
+        .order("invoice_number", { ascending: true })
 
       if (invErr) throw invErr
-      if (payErr) throw payErr
 
-      const invoiceIdSet = new Set((invoicesRaw || []).map((inv) => inv.id))
-      const payments =
-        (paymentsResult.data || []).filter(
-          (p) =>
-            invoiceIdSet.has(p.invoice_id) &&
-            p.status !== "failed" &&
-            p.status !== "refunded",
-        ) || []
+      type PaymentRow = {
+        payment_date: string
+        amount: string | number | null
+        status: string
+        invoice_id: string
+        invoices: { invoice_number: string } | { invoice_number: string }[] | null
+      }
+
+      const payments: PaymentRow[] = []
+      const paymentPageSize = 1000
+      let paymentFrom = 0
+
+      while (true) {
+        const { data: paymentBatch, error: payErr } = await supabase
+          .from("payments")
+          .select(
+            "payment_date, amount, status, invoice_id, invoices!inner(invoice_number, client_id)",
+          )
+          .eq("invoices.client_id", clientId)
+          .order("payment_date", { ascending: true })
+          .range(paymentFrom, paymentFrom + paymentPageSize - 1)
+
+        if (payErr) throw payErr
+
+        const batch = paymentBatch || []
+        payments.push(...(batch as PaymentRow[]))
+        if (batch.length < paymentPageSize) break
+        paymentFrom += paymentPageSize
+      }
+
+      const activePayments = payments.filter(
+        (p) => p.status !== "failed" && p.status !== "refunded" && p.payment_date,
+      )
 
       type SaleAcc = {
         dateKey: string
@@ -187,7 +202,7 @@ export function MonthlyReportsPanel({
         string,
         { payment: number; invoiceNumbers: string[] }
       >()
-      for (const p of payments) {
+      for (const p of activePayments) {
         const amt = Number(p.amount || 0)
         if (amt <= 0) continue
         const existing = paymentsByDate.get(p.payment_date) ?? {
@@ -195,9 +210,10 @@ export function MonthlyReportsPanel({
           invoiceNumbers: [],
         }
         existing.payment += amt
-        const invNum =
-          ((p.invoices as { invoice_number?: string } | null)?.invoice_number as string) ||
-          ""
+        const invJoin = p.invoices
+        const invNum = Array.isArray(invJoin)
+          ? invJoin[0]?.invoice_number || ""
+          : invJoin?.invoice_number || ""
         if (invNum) {
           existing.invoiceNumbers.push(invNum)
         }

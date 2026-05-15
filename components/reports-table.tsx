@@ -268,31 +268,53 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
     const supabase = createClient()
 
     try {
-      const [invoicesResult, paymentsResult] = await Promise.all([
-        supabase
-          .from("invoices")
-          .select("id, invoice_number, issue_date, total_amount, status")
-          .eq("client_id", client.id)
-          .neq("status", "cancelled")
-          .order("issue_date", { ascending: true }),
-        supabase
-          .from("payments")
-          .select("id, payment_date, amount, reference_number, status, invoice_id, invoices(invoice_number)")
-          .order("payment_date", { ascending: true }),
-      ])
+      const invoicesResult = await supabase
+        .from("invoices")
+        .select("id, invoice_number, issue_date, total_amount, status")
+        .eq("client_id", client.id)
+        .neq("status", "cancelled")
+        .order("issue_date", { ascending: true })
 
       if (invoicesResult.error) throw invoicesResult.error
-      if (paymentsResult.error) throw paymentsResult.error
 
       const invoices = invoicesResult.data || []
-      const invoiceIdSet = new Set(invoices.map((inv) => inv.id))
-      const payments =
-        (paymentsResult.data || []).filter(
-          (payment) =>
-            invoiceIdSet.has(payment.invoice_id) &&
-            payment.status !== "failed" &&
-            payment.status !== "refunded",
-        ) || []
+
+      type StatementPaymentRow = {
+        payment_date: string
+        amount: string | number | null
+        status: string
+        invoice_id: string
+        invoices: { invoice_number: string } | { invoice_number: string }[] | null
+      }
+
+      const payments: StatementPaymentRow[] = []
+      const paymentPageSize = 1000
+      let paymentFrom = 0
+
+      while (true) {
+        const paymentsResult = await supabase
+          .from("payments")
+          .select(
+            "payment_date, amount, status, invoice_id, invoices!inner(invoice_number, client_id)",
+          )
+          .eq("invoices.client_id", client.id)
+          .order("payment_date", { ascending: true })
+          .range(paymentFrom, paymentFrom + paymentPageSize - 1)
+
+        if (paymentsResult.error) throw paymentsResult.error
+
+        const batch = paymentsResult.data || []
+        payments.push(...(batch as StatementPaymentRow[]))
+        if (batch.length < paymentPageSize) break
+        paymentFrom += paymentPageSize
+      }
+
+      const activePayments = payments.filter(
+        (payment) =>
+          payment.status !== "failed" &&
+          payment.status !== "refunded" &&
+          payment.payment_date,
+      )
 
       type TxnRow = {
         date: string
@@ -325,12 +347,13 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
         string,
         { credit: number; invoiceNumbers: string[] }
       >()
-      for (const payment of payments) {
+      for (const payment of activePayments) {
         const amt = Number(payment.amount || 0)
         if (amt <= 0) continue
-        const invNum =
-          ((payment.invoices as { invoice_number?: string } | null)
-            ?.invoice_number as string) || ""
+        const invJoin = payment.invoices
+        const invNum = Array.isArray(invJoin)
+          ? invJoin[0]?.invoice_number || ""
+          : invJoin?.invoice_number || ""
         const existing = paymentsByDate.get(payment.payment_date) ?? {
           credit: 0,
           invoiceNumbers: [],
