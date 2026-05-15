@@ -117,64 +117,34 @@ export function MonthlyReportsPanel({
       } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
-      const [
-        { data: priorInvoices, error: priorErr },
-        { data: invoicesRaw, error: invErr },
-        { data: clientInvoiceRows, error: idErr },
-      ] = await Promise.all([
-        supabase
-          .from("invoices")
-          .select("total_amount, amount_paid, issue_date, status")
-          .eq("client_id", clientId)
-          .lt("issue_date", monthStart)
-          .neq("status", "cancelled"),
-        supabase
-          .from("invoices")
-          .select("id, invoice_number, issue_date, total_amount, status")
-          .eq("client_id", clientId)
-          .gte("issue_date", monthStart)
-          .lte("issue_date", monthEnd)
-          .neq("status", "cancelled")
-          .order("issue_date", { ascending: true })
-          .order("invoice_number", { ascending: true }),
-        supabase.from("invoices").select("id").eq("client_id", clientId),
-      ])
+      const [{ data: invoicesRaw, error: invErr }, { data: paymentsResult, error: payErr }] =
+        await Promise.all([
+          supabase
+            .from("invoices")
+            .select("id, invoice_number, issue_date, total_amount, status")
+            .eq("client_id", clientId)
+            .neq("status", "cancelled")
+            .order("issue_date", { ascending: true })
+            .order("invoice_number", { ascending: true }),
+          supabase
+            .from("payments")
+            .select(
+              "payment_date, amount, status, invoice_id, invoices(invoice_number)",
+            )
+            .order("payment_date", { ascending: true }),
+        ])
 
-      if (priorErr) throw priorErr
       if (invErr) throw invErr
-      if (idErr) throw idErr
+      if (payErr) throw payErr
 
-      let previousBalance = 0
-      for (const inv of priorInvoices || []) {
-        const bal =
-          Number(inv.total_amount || 0) - Number(inv.amount_paid || 0)
-        if (bal > 0) previousBalance += bal
-      }
-
-      const invoiceIdList = (clientInvoiceRows || []).map((i) => i.id)
-
-      let paymentsRaw: {
-        payment_date: string
-        amount: string | number | null
-        status: string
-        invoice_id: string
-      }[] = []
-
-      if (invoiceIdList.length > 0) {
-        const { data: payData, error: payErr } = await supabase
-          .from("payments")
-          .select("payment_date, amount, status, invoice_id")
-          .in("invoice_id", invoiceIdList)
-          .gte("payment_date", monthStart)
-          .lte("payment_date", monthEnd)
-
-        if (payErr) throw payErr
-        paymentsRaw = payData || []
-      }
-
-      const payments = paymentsRaw.filter(
-        (p) => p.status !== "failed" && p.status !== "refunded",
-      )
+      const invoiceIdSet = new Set((invoicesRaw || []).map((inv) => inv.id))
+      const payments =
+        (paymentsResult.data || []).filter(
+          (p) =>
+            invoiceIdSet.has(p.invoice_id) &&
+            p.status !== "failed" &&
+            p.status !== "refunded",
+        ) || []
 
       type SaleAcc = {
         dateKey: string
@@ -213,22 +183,34 @@ export function MonthlyReportsPanel({
           sale,
         }))
 
-      const paymentsByDate = new Map<string, number>()
+      const paymentsByDate = new Map<
+        string,
+        { payment: number; invoiceNumbers: string[] }
+      >()
       for (const p of payments) {
         const amt = Number(p.amount || 0)
         if (amt <= 0) continue
-        paymentsByDate.set(
-          p.payment_date,
-          (paymentsByDate.get(p.payment_date) || 0) + amt,
-        )
+        const existing = paymentsByDate.get(p.payment_date) ?? {
+          payment: 0,
+          invoiceNumbers: [],
+        }
+        existing.payment += amt
+        const invNum =
+          ((p.invoices as { invoice_number?: string } | null)?.invoice_number as string) ||
+          ""
+        if (invNum) {
+          existing.invoiceNumbers.push(invNum)
+        }
+        paymentsByDate.set(p.payment_date, existing)
       }
 
       const paymentAccs = Array.from(paymentsByDate.entries())
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([dateKey, payment], idx) => ({
+        .map(([dateKey, { payment, invoiceNumbers }], idx) => ({
           dateKey,
           sortOrder: 100000 + idx,
           payment,
+          invoiceNumber: [...new Set(invoiceNumbers)].sort().join(", ") || "",
         }))
 
       type Merged =
@@ -238,6 +220,7 @@ export function MonthlyReportsPanel({
             dateKey: string
             sortOrder: number
             payment: number
+            invoiceNumber: string
           }
 
       const merged: Merged[] = [
@@ -249,14 +232,34 @@ export function MonthlyReportsPanel({
         return a.sortOrder - b.sortOrder
       })
 
-      let running = previousBalance
+      // Ledger logic (same as statement of account): full history for balance,
+      // display only transactions within the selected month.
+      let running = 0
+      let previousBalance = 0
+      let previousBalanceCaptured = false
       let totalSale = 0
       let totalPayment = 0
-
       const out: DisplayRow[] = []
 
-      for (let i = 0; i < merged.length; i++) {
-        const row = merged[i]
+      for (const row of merged) {
+        if (row.dateKey < monthStart) {
+          if (row.kind === "sale") {
+            running += row.sale
+          } else {
+            running -= row.payment
+          }
+          continue
+        }
+
+        if (row.dateKey > monthEnd) {
+          break
+        }
+
+        if (!previousBalanceCaptured) {
+          previousBalance = running
+          previousBalanceCaptured = true
+        }
+
         if (row.kind === "sale") {
           totalSale += row.sale
           running += row.sale
@@ -278,7 +281,7 @@ export function MonthlyReportsPanel({
             kind: "payment",
             dateKey: row.dateKey,
             sortOrder: row.sortOrder,
-            invoiceNumber: "",
+            invoiceNumber: row.invoiceNumber,
             sale: 0,
             payment: row.payment,
             dayTotal: null,
@@ -286,6 +289,10 @@ export function MonthlyReportsPanel({
             outstanding: running,
           })
         }
+      }
+
+      if (!previousBalanceCaptured) {
+        previousBalance = running
       }
 
       const name =
@@ -296,7 +303,7 @@ export function MonthlyReportsPanel({
         previousBalance,
         totalSale,
         totalPayment,
-        closingOutstanding: previousBalance + totalSale - totalPayment,
+        closingOutstanding: running,
       })
     } catch (e) {
       toast({
@@ -633,9 +640,9 @@ export function MonthlyReportsPanel({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Sales and payments are consolidated by date (multiple invoices or
-        payments on the same day appear as one row). Outstanding runs from the
-        previous month closing balance.
+        Same ledger as the statement of account (invoices add, payments reduce).
+        Opening balance includes all prior transactions; only this month&apos;s
+        rows are listed. Multiple invoices or payments on one day are consolidated.
       </p>
 
       <div className="rounded-lg border bg-white overflow-x-auto">
