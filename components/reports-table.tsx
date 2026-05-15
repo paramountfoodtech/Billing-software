@@ -16,6 +16,12 @@ import { TablePagination } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils"
+import {
+  buildPdfColumnLayout,
+  measurePdfTextBlockHeight,
+  wrapInvoiceListForPdf,
+  type PdfColumnDef,
+} from "@/lib/pdf-invoice-wrap"
 import { createClient } from "@/lib/supabase/client"
 
 type ClientRow = {
@@ -294,26 +300,77 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
         invoiceNumber: string
         debit: number
         credit: number
+        outstanding: number
       }
 
-      const statementRows: TxnRow[] = [
-        ...invoices.map((inv) => ({
-          date: inv.issue_date,
-          particulars: "Invoice",
-          invoiceNumber: inv.invoice_number,
-          debit: Number(inv.total_amount || 0),
-          credit: 0,
-        })),
-        ...payments.map((payment) => ({
-          date: payment.payment_date,
-          particulars: "Payment",
-          invoiceNumber:
-            ((payment.invoices as { invoice_number?: string } | null)?.invoice_number as string) ||
-            "-",
+      const invoicesByDate = new Map<
+        string,
+        { debit: number; invoiceNumbers: string[] }
+      >()
+      for (const inv of invoices) {
+        const total = Number(inv.total_amount || 0)
+        if (total <= 0) continue
+        const existing = invoicesByDate.get(inv.issue_date) ?? {
           debit: 0,
-          credit: Number(payment.amount || 0),
+          invoiceNumbers: [],
+        }
+        existing.debit += total
+        if (inv.invoice_number) {
+          existing.invoiceNumbers.push(inv.invoice_number)
+        }
+        invoicesByDate.set(inv.issue_date, existing)
+      }
+
+      const paymentsByDate = new Map<
+        string,
+        { credit: number; invoiceNumbers: string[] }
+      >()
+      for (const payment of payments) {
+        const amt = Number(payment.amount || 0)
+        if (amt <= 0) continue
+        const invNum =
+          ((payment.invoices as { invoice_number?: string } | null)
+            ?.invoice_number as string) || ""
+        const existing = paymentsByDate.get(payment.payment_date) ?? {
+          credit: 0,
+          invoiceNumbers: [],
+        }
+        existing.credit += amt
+        if (invNum) {
+          existing.invoiceNumbers.push(invNum)
+        }
+        paymentsByDate.set(payment.payment_date, existing)
+      }
+
+      const sortedTxns = [
+        ...Array.from(invoicesByDate.entries()).map(([date, { debit, invoiceNumbers }]) => ({
+          date,
+          particulars: "Invoice" as const,
+          invoiceNumber: [...invoiceNumbers].sort().join(", "),
+          debit,
+          credit: 0,
+          sortOrder: 0,
         })),
-      ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        ...Array.from(paymentsByDate.entries()).map(([date, { credit, invoiceNumbers }]) => ({
+          date,
+          particulars: "Payment" as const,
+          invoiceNumber:
+            [...new Set(invoiceNumbers)].sort().join(", ") || "-",
+          debit: 0,
+          credit,
+          sortOrder: 1,
+        })),
+      ].sort((a, b) => {
+        const byDate = a.date.localeCompare(b.date)
+        if (byDate !== 0) return byDate
+        return a.sortOrder - b.sortOrder
+      })
+
+      let runningOutstanding = 0
+      const statementRows: TxnRow[] = sortedTxns.map((row) => {
+        runningOutstanding += row.debit - row.credit
+        return { ...row, outstanding: runningOutstanding }
+      })
 
       if (statementRows.length === 0) {
         toast({
@@ -327,43 +384,55 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
 
       const { jsPDF } = await import("jspdf")
       const pdf = new jsPDF({
-        orientation: "portrait",
+        orientation: "landscape",
         unit: "mm",
         format: "a4",
       })
 
       const pageWidth = pdf.internal.pageSize.getWidth()
       const pageHeight = pdf.internal.pageSize.getHeight()
-      const margin = 12
+      const margin = 10
       const tableWidth = pageWidth - margin * 2
       const rightEdge = pageWidth - margin
-      const colWidths = {
-        date: tableWidth * 0.18,
-        particulars: tableWidth * 0.30,
-        invoice: tableWidth * 0.17,
-        debit: tableWidth * 0.175,
-        credit: tableWidth * 0.175,
-      }
-      const colX = {
-        date: margin,
-        particulars: margin + colWidths.date,
-        invoice: margin + colWidths.date + colWidths.particulars,
-        debit: margin + colWidths.date + colWidths.particulars + colWidths.invoice,
-        credit:
-          margin +
-          colWidths.date +
-          colWidths.particulars +
-          colWidths.invoice +
-          colWidths.debit,
-      }
-      const rowHeight = 5
-      const headerHeight = 7
+      const cellPad = 2
+      const rowPadY = 2.5
+      const bodyFontSize = 7
+      const headerH = 8
+
+      const columns: PdfColumnDef[] = [
+        { id: "date", label: "Date", widthFrac: 0.1, align: "left" },
+        { id: "particulars", label: "Particulars", widthFrac: 0.12, align: "left" },
+        { id: "invoice", label: "Invoice #", widthFrac: 0.34, align: "left" },
+        { id: "debit", label: "Debit", widthFrac: 0.14, align: "right" },
+        { id: "credit", label: "Credit", widthFrac: 0.14, align: "right" },
+        { id: "outstanding", label: "Outstanding", widthFrac: 0.16, align: "right" },
+      ]
+
+      const colLayout = buildPdfColumnLayout(columns, margin, tableWidth, cellPad)
+
+      const colById = Object.fromEntries(colLayout.map((c) => [c.id, c]))
+      const invoiceCol = colById.invoice
 
       const fmt = (n: number) =>
         n.toLocaleString("en-IN", {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         })
+
+      pdf.setFont("helvetica", "normal")
+      pdf.setFontSize(bodyFontSize)
+      const singleLineH = pdf.getTextDimensions("Xy").h
+
+      const drawRight = (text: string, colId: string, yPos: number) => {
+        pdf.text(text, colById[colId].textX, yPos, {
+          align: "right",
+          baseline: "top",
+        })
+      }
+
+      const drawLeft = (text: string, colId: string, yPos: number) => {
+        pdf.text(text, colById[colId].textX, yPos, { baseline: "top" })
+      }
 
       let y = margin
       pdf.setFont("helvetica", "bold")
@@ -384,29 +453,35 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
         margin,
         y,
       )
-      y += 6
+      y += 7
 
       const drawHeader = () => {
+        const headerTop = y
+        const headerTextY = headerTop + rowPadY
         pdf.setDrawColor(180, 180, 180)
         pdf.setLineWidth(0.25)
         pdf.setFillColor(246, 248, 250)
-        pdf.rect(margin, y - 5, tableWidth, headerHeight, "F")
+        pdf.rect(margin, headerTop, tableWidth, headerH, "F")
         pdf.setFont("helvetica", "bold")
         pdf.setFontSize(8)
-        pdf.text("Date", colX.date + 1.5, y)
-        pdf.text("Particulars", colX.particulars + 1.5, y)
-        pdf.text("Invoice #", colX.invoice + 1.5, y)
-        pdf.text("Debit", colX.debit + colWidths.debit - 1.5, y, {
-          align: "right",
-        })
-        pdf.text("Credit", rightEdge - 1.5, y, { align: "right" })
 
-        pdf.rect(margin, y - 5, tableWidth, headerHeight)
-        pdf.line(colX.particulars, y - 5, colX.particulars, y + 2)
-        pdf.line(colX.invoice, y - 5, colX.invoice, y + 2)
-        pdf.line(colX.debit, y - 5, colX.debit, y + 2)
-        pdf.line(colX.credit, y - 5, colX.credit, y + 2)
-        y += 5
+        for (const col of colLayout) {
+          const labelX = col.textX
+          if (col.align === "right") {
+            pdf.text(col.label, labelX, headerTextY, {
+              align: "right",
+              baseline: "top",
+            })
+          } else {
+            pdf.text(col.label, labelX, headerTextY, { baseline: "top" })
+          }
+          if (col.x > margin) {
+            pdf.line(col.x, headerTop, col.x, headerTop + headerH)
+          }
+        }
+
+        pdf.rect(margin, headerTop, tableWidth, headerH)
+        y = headerTop + headerH
       }
 
       drawHeader()
@@ -414,64 +489,81 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
       let totalCredit = 0
 
       for (const row of statementRows) {
-        if (y > pageHeight - margin - 16) {
-          pdf.addPage()
-          y = margin + 6
-          drawHeader()
-        }
-
         totalDebit += row.debit
         totalCredit += row.credit
 
         pdf.setFont("helvetica", "normal")
-        pdf.setFontSize(8)
-        pdf.text(
-          new Date(row.date).toLocaleDateString("en-IN", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          }),
-          colX.date + 1.5,
-          y,
+        pdf.setFontSize(bodyFontSize)
+
+        const invoiceLines = wrapInvoiceListForPdf(
+          pdf,
+          row.invoiceNumber,
+          invoiceCol.textMaxW,
         )
-        pdf.text(row.particulars, colX.particulars + 1.5, y)
-        pdf.text(row.invoiceNumber, colX.invoice + 1.5, y)
-        pdf.text(
-          row.debit > 0 ? `Rs. ${fmt(row.debit)}` : "-",
-          colX.debit + colWidths.debit - 1.5,
-          y,
-          { align: "right" },
+        const invoiceBlockH = measurePdfTextBlockHeight(
+          pdf,
+          invoiceLines,
+          singleLineH,
         )
-        pdf.text(row.credit > 0 ? `Rs. ${fmt(row.credit)}` : "-", rightEdge - 1.5, y, {
-          align: "right",
+        const contentH = Math.max(singleLineH, invoiceBlockH)
+        const dynamicRowH = rowPadY + contentH + rowPadY
+
+        if (y + dynamicRowH > pageHeight - margin - 14) {
+          pdf.addPage()
+          y = margin + 4
+          drawHeader()
+          pdf.setFont("helvetica", "normal")
+          pdf.setFontSize(bodyFontSize)
+        }
+
+        const rowTop = y
+        const textTop = rowTop + rowPadY
+        const dateStr = new Date(row.date).toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
         })
 
+        drawLeft(dateStr, "date", textTop)
+        drawLeft(row.particulars, "particulars", textTop)
+        pdf.text(invoiceLines.join("\n"), invoiceCol.textX, textTop, {
+          baseline: "top",
+          lineHeightFactor: 1.25,
+        })
+        drawRight(row.debit > 0 ? fmt(row.debit) : "-", "debit", textTop)
+        drawRight(row.credit > 0 ? fmt(row.credit) : "-", "credit", textTop)
+        drawRight(fmt(row.outstanding), "outstanding", textTop)
+
+        const rowBottom = rowTop + dynamicRowH
         pdf.setDrawColor(230, 230, 230)
-        pdf.line(margin, y + 1.8, rightEdge, y + 1.8)
-        y += rowHeight
+        pdf.line(margin, rowBottom, rightEdge, rowBottom)
+        y = rowBottom
       }
 
-      const balance = totalDebit - totalCredit
-      y += 1
-      if (y > pageHeight - margin - 16) {
+      const closingOutstanding =
+        statementRows.length > 0
+          ? statementRows[statementRows.length - 1].outstanding
+          : totalDebit - totalCredit
+
+      if (y > pageHeight - margin - 20) {
         pdf.addPage()
-        y = margin + 6
+        y = margin + 4
+        drawHeader()
       }
 
+      y += rowPadY
       pdf.setDrawColor(80, 80, 80)
       pdf.setLineWidth(0.4)
       pdf.line(margin, y, rightEdge, y)
-      y += 6
+      y += rowPadY + 1
+
       pdf.setFont("helvetica", "bold")
-      pdf.setFontSize(9)
-      pdf.text(`Total Debit: Rs. ${fmt(totalDebit)}`, margin, y)
-      pdf.text(`Total Credit: Rs. ${fmt(totalCredit)}`, rightEdge, y, {
-        align: "right",
-      })
-      y += 5
-      pdf.text(`Closing Balance: Rs. ${fmt(balance)}`, rightEdge, y, {
-        align: "right",
-      })
+      pdf.setFontSize(8)
+      const totalsTop = y
+      drawLeft("Totals", "particulars", totalsTop)
+      drawRight(fmt(totalDebit), "debit", totalsTop)
+      drawRight(fmt(totalCredit), "credit", totalsTop)
+      drawRight(fmt(closingOutstanding), "outstanding", totalsTop)
 
       pdf.save(`statement-${client.name.replace(/\s+/g, "-").toLowerCase()}-${getTimestamp()}.pdf`)
       toast({

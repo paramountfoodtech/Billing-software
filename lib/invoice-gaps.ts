@@ -65,44 +65,68 @@ export function findMissedInvoiceNumbers(
   });
 }
 
-/**
- * Group missed invoice numbers for display (e.g., "INV-001, INV-002...INV-005")
- */
-export function groupMissedInvoices(missedNumbers: string[]): string {
-  if (missedNumbers.length === 0) return "";
-  if (missedNumbers.length === 1) return missedNumbers[0];
+function extractTrailingNumeric(invoiceNumber: string): number | null {
+  const match = invoiceNumber.match(/(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
 
-  const groups: string[] = [];
-  let currentGroup = [missedNumbers[0]];
+/**
+ * Format a consecutive run of missed numbers (e.g. "2-9", "INV-002-009")
+ */
+function formatMissedRange(start: string, end: string): string {
+  if (start === end) return start;
+
+  const startMatch = start.match(/^(.*?)(\d+)$/);
+  const endMatch = end.match(/^(.*?)(\d+)$/);
+  if (startMatch && endMatch && startMatch[1] === endMatch[1]) {
+    const prefix = startMatch[1];
+    return `${prefix}${startMatch[2]}-${endMatch[2]}`;
+  }
+
+  return `${start}-${end}`;
+}
+
+export type MissedInvoiceRange = {
+  label: string;
+  numbers: string[];
+};
+
+/**
+ * Group missed invoice numbers into ranges at each gap break
+ * (e.g. existing 1, 10, 15 → [{ label: "2-9", numbers: [...] }, { label: "11-14", ... }])
+ */
+export function groupMissedInvoices(missedNumbers: string[]): MissedInvoiceRange[] {
+  if (missedNumbers.length === 0) return [];
+
+  const ranges: MissedInvoiceRange[] = [];
+  let rangeStart = missedNumbers[0];
+  let rangeEnd = missedNumbers[0];
+  let rangeNumbers = [missedNumbers[0]];
 
   for (let i = 1; i < missedNumbers.length; i++) {
-    // Check if this is consecutive with previous
+    const prevNum = extractTrailingNumeric(rangeEnd);
+    const currNum = extractTrailingNumeric(missedNumbers[i]);
     const isConsecutive =
-      Number(missedNumbers[i].match(/\d+/)?.[0]) ===
-      Number(missedNumbers[i - 1].match(/\d+/)?.[0]) + 1;
+      prevNum !== null && currNum !== null && currNum === prevNum + 1;
 
-    if (isConsecutive && currentGroup.length < 3) {
-      currentGroup.push(missedNumbers[i]);
+    if (isConsecutive) {
+      rangeEnd = missedNumbers[i];
+      rangeNumbers.push(missedNumbers[i]);
     } else {
-      if (currentGroup.length === 1) {
-        groups.push(currentGroup[0]);
-      } else {
-        groups.push(
-          `${currentGroup[0]}...${currentGroup[currentGroup.length - 1]}`
-        );
-      }
-      currentGroup = [missedNumbers[i]];
+      ranges.push({
+        label: formatMissedRange(rangeStart, rangeEnd),
+        numbers: rangeNumbers,
+      });
+      rangeStart = missedNumbers[i];
+      rangeEnd = missedNumbers[i];
+      rangeNumbers = [missedNumbers[i]];
     }
   }
 
-  // Add last group
-  if (currentGroup.length === 1) {
-    groups.push(currentGroup[0]);
-  } else {
-    groups.push(
-      `${currentGroup[0]}...${currentGroup[currentGroup.length - 1]}`
-    );
-  }
+  ranges.push({
+    label: formatMissedRange(rangeStart, rangeEnd),
+    numbers: rangeNumbers,
+  });
 
-  return groups.join(", ");
+  return ranges;
 }

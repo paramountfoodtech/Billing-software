@@ -48,7 +48,7 @@ export default async function InvoicesPage() {
   // Calculate missed invoice numbers for super admin
   const missedNumbers =
     userRole === "super_admin" ? findMissedInvoiceNumbers(invoices || []) : [];
-  const groupedMissed = groupMissedInvoices(missedNumbers);
+  const missedRanges = groupMissedInvoices(missedNumbers);
 
   return (
     <DashboardPageWrapper title="Invoices">
@@ -57,7 +57,7 @@ export default async function InvoicesPage() {
           {userRole === "super_admin" && missedNumbers.length > 0 && (
             <MissedInvoiceNumbers
               missedNumbers={missedNumbers}
-              grouped={groupedMissed}
+              ranges={missedRanges}
             />
           )}
           <Button asChild className="w-full sm:w-auto">
