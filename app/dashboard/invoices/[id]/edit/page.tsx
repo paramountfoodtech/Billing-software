@@ -10,7 +10,7 @@ export default async function EditInvoicePage({
   const { id } = await params;
   const supabase = await createClient();
 
-  // Accountants can create invoices, but cannot edit existing ones.
+  // Only super admins may edit existing invoices.
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -21,13 +21,15 @@ export default async function EditInvoicePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organization_id")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (profile?.role === "accountant") {
+  if (profile?.role !== "super_admin" || !profile.organization_id) {
     notFound();
   }
+
+  const organizationId = profile.organization_id;
 
   // Fetch invoice and its items (include product_id)
   const { data: invoice } = await supabase
@@ -50,6 +52,7 @@ export default async function EditInvoicePage({
     clientsResult,
     productsResult,
     pricingRulesResult,
+    pricingHistoryResult,
     categoriesResult,
     historyResult,
   ] = await Promise.all([
@@ -58,20 +61,39 @@ export default async function EditInvoicePage({
       .select(
         "id, name, email, due_days, due_days_type, enable_per_bird, value_per_bird",
       )
+      .eq("organization_id", organizationId)
       .order("name"),
-    supabase.from("products").select("*").eq("is_active", true).order("name"),
+    supabase
+      .from("products")
+      .select(
+        "id, name, description, paper_price, unit_price, unit, tax_rate, is_active",
+      )
+      .eq("organization_id", organizationId)
+      .eq("is_active", true)
+      .order("name"),
     supabase
       .from("client_product_pricing")
       .select(
         "product_id, price_rule_type, price_rule_value, price_category_id, fixed_base_value, client_id, conditional_threshold, conditional_discount_below, conditional_discount_above_equal",
-      ),
+      )
+      .eq("organization_id", organizationId)
+      .eq("client_id", invoice.client_id),
+    supabase
+      .from("client_product_pricing_history")
+      .select(
+        "client_id, product_id, price_rule_type, price_rule_value, price_category_id, fixed_base_value, conditional_threshold, conditional_discount_below, conditional_discount_above_equal, effective_from, created_at",
+      )
+      .eq("organization_id", organizationId)
+      .eq("client_id", invoice.client_id),
     supabase
       .from("price_categories")
       .select("id, name, is_active")
+      .eq("organization_id", organizationId)
       .order("name"),
     supabase
       .from("price_category_history")
-      .select("price_category_id, price, effective_date"),
+      .select("price_category_id, price, effective_date")
+      .eq("organization_id", organizationId),
   ]);
 
   return (
@@ -87,11 +109,10 @@ export default async function EditInvoicePage({
         clients={clientsResult.data || []}
         products={productsResult.data || []}
         clientPricingRules={pricingRulesResult.data || []}
+        clientPricingHistory={pricingHistoryResult.data || []}
         priceCategories={categoriesResult.data || []}
         priceHistory={historyResult.data || []}
-        canEditInvoiceNumber={
-          profile?.role === "admin" || profile?.role === "super_admin"
-        }
+        canEditInvoiceNumber={profile?.role === "super_admin"}
         initialInvoice={{
           id: invoice.id,
           client_id: invoice.client_id,

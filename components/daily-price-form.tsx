@@ -12,6 +12,10 @@ import { Spinner } from "@/components/ui/spinner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertTriangle } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  getProfileDisplayName,
+  logEntryHistory,
+} from "@/lib/entry-history"
 
 interface PriceCategory {
   id: string
@@ -193,12 +197,27 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
           created_by: userData.user.id,
         }))
 
-      // Upsert all prices at once
-      const { error } = await supabase
+      const userName = await getProfileDisplayName(supabase, userData.user.id)
+
+      const { data: upsertedRows, error } = await supabase
         .from("price_category_history")
         .upsert(priceUpdates, { onConflict: "price_category_id,effective_date" })
+        .select("id, price_category_id, price")
 
       if (error) throw error
+
+      for (const row of upsertedRows ?? []) {
+        const hadExisting = !!getPriceForDate(row.price_category_id, formData.effective_date)
+        await logEntryHistory(supabase, {
+          organizationId: userProfile.organization_id,
+          entityType: "price_history",
+          entityId: row.id,
+          action: hadExisting ? "updated" : "created",
+          userId: userData.user.id,
+          userName,
+          summary: `₹${Number(row.price).toFixed(2)} effective ${formData.effective_date}`,
+        })
+      }
 
       // Show warning toast if invoices exist for the updated date
       if (existingInvoicesCount > 0) {

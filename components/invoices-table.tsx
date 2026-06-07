@@ -30,6 +30,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { TablePagination } from "@/components/table-pagination";
 import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
+import { EntryHistoryButton } from "@/components/entry-history-button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,10 +52,14 @@ interface Invoice {
   status: string;
   total_amount: string;
   amount_paid: string;
+  created_at?: string;
   clients: {
     name: string;
     email: string;
   };
+  profiles?: {
+    full_name: string;
+  } | null;
 }
 
 interface InvoicesTableProps {
@@ -333,14 +338,14 @@ export function InvoicesTable({
     }));
 
     const pdfColumns: ExportColumn[] = [
-      { key: "invoice_number", label: "Invoice #" },
-      { key: "client_name", label: "Client" },
-      { key: "issue_date_fmt", label: "Issue Date" },
-      { key: "due_date_display", label: "Due Date" },
-      { key: "total_fmt", label: "Total" },
-      { key: "paid_fmt", label: "Paid" },
-      { key: "due_fmt", label: "Due" },
-      { key: "status_label", label: "Status" },
+      { key: "invoice_number", label: "Invoice #", widthFrac: 0.09 },
+      { key: "client_name", label: "Client", widthFrac: 0.24 },
+      { key: "issue_date_fmt", label: "Issue Date", widthFrac: 0.1 },
+      { key: "due_date_display", label: "Due Date", widthFrac: 0.12 },
+      { key: "total_fmt", label: "Total", widthFrac: 0.1, align: "right" },
+      { key: "paid_fmt", label: "Paid", widthFrac: 0.1, align: "right" },
+      { key: "due_fmt", label: "Due", widthFrac: 0.1, align: "right" },
+      { key: "status_label", label: "Status", widthFrac: 0.15 },
     ];
 
     const rangeLabel =
@@ -409,29 +414,27 @@ export function InvoicesTable({
       terms_and_conditions: "Payment is due within 30 days. Late payments may incur additional charges.",
     };
 
-    // Fetch full invoice data for each processed invoice
-    const fullInvoices = await Promise.all(
-      processedInvoices.map(async (inv) => {
-        const { data: invoice, error } = await supabase
-          .from("invoices")
-          .select(`
-            *,
-            clients(name, email, phone, address, city, state, zip_code, enable_per_bird, value_per_bird),
-            invoice_items(*)
-          `)
-          .eq("id", inv.id)
-          .single();
+    const invoiceIds = processedInvoices.map((inv) => inv.id);
+    const { data: fetchedInvoices, error: fetchError } = await supabase
+      .from("invoices")
+      .select(`
+        *,
+        clients(name, email, phone, address, city, state, zip_code, enable_per_bird, value_per_bird),
+        invoice_items(*)
+      `)
+      .in("id", invoiceIds);
 
-        if (error) {
-          console.error("Error fetching invoice:", inv.id, error);
-          return null;
-        }
+    if (fetchError) {
+      console.error("Error fetching invoices for export:", fetchError);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load invoice data for export.",
+      });
+      return;
+    }
 
-        return invoice;
-      })
-    );
-
-    const validInvoices = fullInvoices.filter(inv => inv !== null);
+    const validInvoices = fetchedInvoices || [];
 
     if (validInvoices.length === 0) {
       toast({
@@ -656,8 +659,13 @@ export function InvoicesTable({
 
       pdf.setFontSize(7);
       pdf.setFont("helvetica", "normal");
-      pdf.text(invoice.clients?.name || 'N/A', margin, y);
-      y += spacing.lineGap;
+      const billToWidth = pageWidth * 0.5 - margin;
+      const clientNameLines = pdf.splitTextToSize(
+        invoice.clients?.name || "N/A",
+        billToWidth,
+      );
+      pdf.text(clientNameLines, margin, y);
+      y += clientNameLines.length * spacing.lineGap;
       if (invoice.clients?.address) {
         pdf.text(invoice.clients.address, margin, y);
         y += spacing.lineGap;
@@ -1137,12 +1145,18 @@ export function InvoicesTable({
                       </TableCell>
                       <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                         <div className="flex justify-end gap-1 sm:gap-2">
+                          <EntryHistoryButton
+                            entityType="invoice"
+                            entityId={invoice.id}
+                            createdAt={invoice.created_at}
+                            createdByName={invoice.profiles?.full_name}
+                          />
                           <Button variant="ghost" size="sm" asChild>
                             <Link href={`/dashboard/invoices/${invoice.id}`}>
                               <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                             </Link>
                           </Button>
-                          {userRole !== "accountant" &&
+                          {userRole === "super_admin" &&
                             (invoice.status === "draft" ||
                               invoice.status === "recorded") && (
                             <Button variant="ghost" size="sm" asChild>

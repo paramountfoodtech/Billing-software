@@ -22,6 +22,7 @@ import {
   wrapInvoiceListForPdf,
   type PdfColumnDef,
 } from "@/lib/pdf-invoice-wrap"
+import { buildStatementRows } from "@/lib/ledger-report"
 import { createClient } from "@/lib/supabase/client"
 
 type ClientRow = {
@@ -239,15 +240,15 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
     }))
 
     const columns: ExportColumn[] = [
-      { key: "name", label: "Client" },
-      { key: "oldBalFmt", label: "Old Balance" },
-      { key: "saleFmt", label: "Current Month Sale - Value" },
-      { key: "todaySaleQtyFmt", label: "Today's Sale - Qty" },
-      { key: "todaySaleValueFmt", label: "Today's Sale - Value" },
-      { key: "saleKgsFmt", label: "Total Sale in KGs" },
-      { key: "avgQtyFmt", label: "Average Quantity per Day" },
-      { key: "paymentsFmt", label: "Payments" },
-      { key: "outstandingFmt", label: "Outstanding" },
+      { key: "name", label: "Client", widthFrac: 0.18 },
+      { key: "oldBalFmt", label: "Old Balance", widthFrac: 0.1, align: "right" },
+      { key: "saleFmt", label: "Current Month Sale - Value", widthFrac: 0.12, align: "right" },
+      { key: "todaySaleQtyFmt", label: "Today's Sale - Qty", widthFrac: 0.09, align: "right" },
+      { key: "todaySaleValueFmt", label: "Today's Sale - Value", widthFrac: 0.1, align: "right" },
+      { key: "saleKgsFmt", label: "Total Sale in KGs", widthFrac: 0.09, align: "right" },
+      { key: "avgQtyFmt", label: "Average Quantity per Day", widthFrac: 0.11, align: "right" },
+      { key: "paymentsFmt", label: "Payments", widthFrac: 0.1, align: "right" },
+      { key: "outstandingFmt", label: "Outstanding", widthFrac: 0.11, align: "right" },
     ]
 
     await exportToPDF(
@@ -274,6 +275,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
         .eq("client_id", client.id)
         .neq("status", "cancelled")
         .order("issue_date", { ascending: true })
+        .order("invoice_number", { ascending: true })
 
       if (invoicesResult.error) throw invoicesResult.error
 
@@ -316,84 +318,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
           payment.payment_date,
       )
 
-      type TxnRow = {
-        date: string
-        particulars: string
-        invoiceNumber: string
-        debit: number
-        credit: number
-        outstanding: number
-      }
-
-      const invoicesByDate = new Map<
-        string,
-        { debit: number; invoiceNumbers: string[] }
-      >()
-      for (const inv of invoices) {
-        const total = Number(inv.total_amount || 0)
-        if (total <= 0) continue
-        const existing = invoicesByDate.get(inv.issue_date) ?? {
-          debit: 0,
-          invoiceNumbers: [],
-        }
-        existing.debit += total
-        if (inv.invoice_number) {
-          existing.invoiceNumbers.push(inv.invoice_number)
-        }
-        invoicesByDate.set(inv.issue_date, existing)
-      }
-
-      const paymentsByDate = new Map<
-        string,
-        { credit: number; invoiceNumbers: string[] }
-      >()
-      for (const payment of activePayments) {
-        const amt = Number(payment.amount || 0)
-        if (amt <= 0) continue
-        const invJoin = payment.invoices
-        const invNum = Array.isArray(invJoin)
-          ? invJoin[0]?.invoice_number || ""
-          : invJoin?.invoice_number || ""
-        const existing = paymentsByDate.get(payment.payment_date) ?? {
-          credit: 0,
-          invoiceNumbers: [],
-        }
-        existing.credit += amt
-        if (invNum) {
-          existing.invoiceNumbers.push(invNum)
-        }
-        paymentsByDate.set(payment.payment_date, existing)
-      }
-
-      const sortedTxns = [
-        ...Array.from(invoicesByDate.entries()).map(([date, { debit, invoiceNumbers }]) => ({
-          date,
-          particulars: "Invoice" as const,
-          invoiceNumber: [...invoiceNumbers].sort().join(", "),
-          debit,
-          credit: 0,
-          sortOrder: 0,
-        })),
-        ...Array.from(paymentsByDate.entries()).map(([date, { credit, invoiceNumbers }]) => ({
-          date,
-          particulars: "Payment" as const,
-          invoiceNumber:
-            [...new Set(invoiceNumbers)].sort().join(", ") || "-",
-          debit: 0,
-          credit,
-          sortOrder: 1,
-        })),
-      ].sort((a, b) => {
-        const byDate = a.date.localeCompare(b.date)
-        if (byDate !== 0) return byDate
-        return a.sortOrder - b.sortOrder
-      })
-
-      let runningOutstanding = 0
-      const statementRows: TxnRow[] = sortedTxns.map((row) => {
-        runningOutstanding += row.debit - row.credit
-        return { ...row, outstanding: runningOutstanding }
-      })
+      const statementRows = buildStatementRows(invoices, activePayments)
 
       if (statementRows.length === 0) {
         toast({
@@ -463,8 +388,9 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
       pdf.text("Statement of Account", margin, y)
       y += 6
       pdf.setFontSize(10)
-      pdf.text(client.name, margin, y)
-      y += 5
+      const clientNameLines = pdf.splitTextToSize(client.name, tableWidth)
+      pdf.text(clientNameLines, margin, y)
+      y += clientNameLines.length * 4 + 1
       pdf.setFont("helvetica", "normal")
       pdf.setFontSize(8)
       pdf.text(
@@ -547,7 +473,9 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
           year: "numeric",
         })
 
-        drawLeft(dateStr, "date", textTop)
+        if (row.showDate) {
+          drawLeft(dateStr, "date", textTop)
+        }
         drawLeft(row.particulars, "particulars", textTop)
         pdf.text(invoiceLines.join("\n"), invoiceCol.textX, textTop, {
           baseline: "top",

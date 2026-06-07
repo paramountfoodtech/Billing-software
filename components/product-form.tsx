@@ -10,6 +10,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
+import {
+  getProfileDisplayName,
+  logEntryHistory,
+} from "@/lib/entry-history"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -81,6 +85,16 @@ export function ProductForm({ product, userRole }: ProductFormProps) {
           .eq("id", product.id)
 
         if (error) throw error
+
+        const userName = await getProfileDisplayName(supabase, user.id)
+        await logEntryHistory(supabase, {
+          organizationId: profile.organization_id,
+          entityType: "product",
+          entityId: product.id,
+          action: "updated",
+          userId: user.id,
+          userName,
+        })
         
         toast({
           variant: "success",
@@ -89,19 +103,35 @@ export function ProductForm({ product, userRole }: ProductFormProps) {
         })
       } else {
         // Create new product (defaults for deprecated pricing fields)
-        const { error } = await supabase.from("products").insert({
-          name: formData.name,
-          description: formData.description,
-          is_active: formData.is_active,
-          unit_price: 0,
-          paper_price: 0,
-          unit: "unit",
-          tax_rate: 0,
-          created_by: user.id,
-          organization_id: profile.organization_id,
-        })
+        const { data: created, error } = await supabase
+          .from("products")
+          .insert({
+            name: formData.name,
+            description: formData.description,
+            is_active: formData.is_active,
+            unit_price: 0,
+            paper_price: 0,
+            unit: "unit",
+            tax_rate: 0,
+            created_by: user.id,
+            organization_id: profile.organization_id,
+          })
+          .select("id")
+          .single()
 
         if (error) throw error
+
+        const userName = await getProfileDisplayName(supabase, user.id)
+        if (created?.id) {
+          await logEntryHistory(supabase, {
+            organizationId: profile.organization_id,
+            entityType: "product",
+            entityId: created.id,
+            action: "created",
+            userId: user.id,
+            userName,
+          })
+        }
         
         toast({
           variant: "success",

@@ -16,10 +16,17 @@ import { createClient } from "@/lib/supabase/client"
 import { exportToCSV, type ExportColumn } from "@/lib/export-utils"
 import {
   buildPdfColumnLayout,
+  drawPdfCellCentered,
   measurePdfTextBlockHeight,
   wrapInvoiceListForPdf,
   type PdfColumnDef,
 } from "@/lib/pdf-invoice-wrap"
+import {
+  buildDisplayLedgerRows,
+  buildLedgerTransactions,
+  resolveDisplayRange,
+  type DisplayLedgerRow,
+} from "@/lib/ledger-report"
 import { FileDown, FileText } from "lucide-react"
 
 type ClientOption = { id: string; name: string }
@@ -55,16 +62,15 @@ function formatStatementDate(isoDate: string): string {
 const fmtMoney = (n: number) =>
   n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-type DisplayRow = {
-  kind: "sale" | "payment"
-  dateKey: string
-  sortOrder: number
-  invoiceNumber: string
-  sale: number
-  payment: number
-  dayTotal: number | null
-  showDayTotal: boolean
-  outstanding: number
+function formatPeriodLabel(
+  monthLabel: string,
+  rangeStart: string,
+  rangeEnd: string,
+  fromDate: string,
+  toDate: string,
+): string {
+  if (!fromDate && !toDate) return monthLabel
+  return `${formatStatementDate(rangeStart)} to ${formatStatementDate(rangeEnd)}`
 }
 
 export function MonthlyReportsPanel({
@@ -79,7 +85,7 @@ export function MonthlyReportsPanel({
   const [clientId, setClientId] = useState<string>("")
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [displayRows, setDisplayRows] = useState<DisplayRow[]>([])
+  const [displayRows, setDisplayRows] = useState<DisplayLedgerRow[]>([])
   const [clientName, setClientName] = useState("")
   const [summary, setSummary] = useState({
     previousBalance: 0,
@@ -87,6 +93,22 @@ export function MonthlyReportsPanel({
     totalPayment: 0,
     closingOutstanding: 0,
   })
+  const [fromDate, setFromDate] = useState("")
+  const [toDate, setToDate] = useState("")
+
+  const { rangeStart, rangeEnd } = resolveDisplayRange(
+    monthStart,
+    monthEnd,
+    fromDate,
+    toDate,
+  )
+  const periodLabel = formatPeriodLabel(
+    monthLabel,
+    rangeStart,
+    rangeEnd,
+    fromDate,
+    toDate,
+  )
 
   const clientOptions = useMemo(
     () => clients.map((c) => ({ value: c.id, label: c.name })),
@@ -96,6 +118,11 @@ export function MonthlyReportsPanel({
   const clientsRef = useRef(clients)
   clientsRef.current = clients
 
+  useEffect(() => {
+    setFromDate("")
+    setToDate("")
+  }, [monthStart, monthEnd])
+
   const loadReport = useCallback(async () => {
     if (!clientId) {
       setDisplayRows([])
@@ -104,6 +131,15 @@ export function MonthlyReportsPanel({
         totalSale: 0,
         totalPayment: 0,
         closingOutstanding: 0,
+      })
+      return
+    }
+
+    if (fromDate && toDate && fromDate > toDate) {
+      toast({
+        variant: "destructive",
+        title: "Invalid date range",
+        description: "From date must be on or before To date.",
       })
       return
     }
@@ -127,15 +163,12 @@ export function MonthlyReportsPanel({
 
       if (invErr) throw invErr
 
-      type PaymentRow = {
+      const payments: Array<{
         payment_date: string
         amount: string | number | null
         status: string
-        invoice_id: string
         invoices: { invoice_number: string } | { invoice_number: string }[] | null
-      }
-
-      const payments: PaymentRow[] = []
+      }> = []
       const paymentPageSize = 1000
       let paymentFrom = 0
 
@@ -152,175 +185,28 @@ export function MonthlyReportsPanel({
         if (payErr) throw payErr
 
         const batch = paymentBatch || []
-        payments.push(...(batch as PaymentRow[]))
+        payments.push(...batch)
         if (batch.length < paymentPageSize) break
         paymentFrom += paymentPageSize
       }
 
-      const activePayments = payments.filter(
-        (p) => p.status !== "failed" && p.status !== "refunded" && p.payment_date,
+      const transactions = buildLedgerTransactions(
+        invoicesRaw || [],
+        payments,
       )
+      const { rangeStart: effectiveStart, rangeEnd: effectiveEnd } =
+        resolveDisplayRange(monthStart, monthEnd, fromDate, toDate)
 
-      type SaleAcc = {
-        dateKey: string
-        sortOrder: number
-        invoiceNumber: string
-        sale: number
-      }
-
-      const salesByDate = new Map<
-        string,
-        { sale: number; invoiceNumbers: string[] }
-      >()
-
-      for (const inv of invoicesRaw || []) {
-        const total = Number(inv.total_amount || 0)
-        if (total <= 0) continue
-
-        const dateKey = inv.issue_date
-        const existing = salesByDate.get(dateKey) ?? {
-          sale: 0,
-          invoiceNumbers: [],
-        }
-        existing.sale += total
-        if (inv.invoice_number) {
-          existing.invoiceNumbers.push(inv.invoice_number)
-        }
-        salesByDate.set(dateKey, existing)
-      }
-
-      const saleAccs: SaleAcc[] = Array.from(salesByDate.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([dateKey, { sale, invoiceNumbers }], idx) => ({
-          dateKey,
-          sortOrder: idx,
-          invoiceNumber: [...invoiceNumbers].sort().join(", "),
-          sale,
-        }))
-
-      const paymentsByDate = new Map<
-        string,
-        { payment: number; invoiceNumbers: string[] }
-      >()
-      for (const p of activePayments) {
-        const amt = Number(p.amount || 0)
-        if (amt <= 0) continue
-        const existing = paymentsByDate.get(p.payment_date) ?? {
-          payment: 0,
-          invoiceNumbers: [],
-        }
-        existing.payment += amt
-        const invJoin = p.invoices
-        const invNum = Array.isArray(invJoin)
-          ? invJoin[0]?.invoice_number || ""
-          : invJoin?.invoice_number || ""
-        if (invNum) {
-          existing.invoiceNumbers.push(invNum)
-        }
-        paymentsByDate.set(p.payment_date, existing)
-      }
-
-      const paymentAccs = Array.from(paymentsByDate.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([dateKey, { payment, invoiceNumbers }], idx) => ({
-          dateKey,
-          sortOrder: 100000 + idx,
-          payment,
-          invoiceNumber: [...new Set(invoiceNumbers)].sort().join(", ") || "",
-        }))
-
-      type Merged =
-        | ({ kind: "sale" } & SaleAcc)
-        | {
-            kind: "payment"
-            dateKey: string
-            sortOrder: number
-            payment: number
-            invoiceNumber: string
-          }
-
-      const merged: Merged[] = [
-        ...saleAccs.map((s) => ({ kind: "sale" as const, ...s })),
-        ...paymentAccs.map((p) => ({ kind: "payment" as const, ...p })),
-      ].sort((a, b) => {
-        const c = a.dateKey.localeCompare(b.dateKey)
-        if (c !== 0) return c
-        return a.sortOrder - b.sortOrder
+      const { rows, summary } = buildDisplayLedgerRows(transactions, {
+        rangeStart: effectiveStart,
+        rangeEnd: effectiveEnd,
       })
-
-      // Ledger logic (same as statement of account): full history for balance,
-      // display only transactions within the selected month.
-      let running = 0
-      let previousBalance = 0
-      let previousBalanceCaptured = false
-      let totalSale = 0
-      let totalPayment = 0
-      const out: DisplayRow[] = []
-
-      for (const row of merged) {
-        if (row.dateKey < monthStart) {
-          if (row.kind === "sale") {
-            running += row.sale
-          } else {
-            running -= row.payment
-          }
-          continue
-        }
-
-        if (row.dateKey > monthEnd) {
-          break
-        }
-
-        if (!previousBalanceCaptured) {
-          previousBalance = running
-          previousBalanceCaptured = true
-        }
-
-        if (row.kind === "sale") {
-          totalSale += row.sale
-          running += row.sale
-          out.push({
-            kind: "sale",
-            dateKey: row.dateKey,
-            sortOrder: row.sortOrder,
-            invoiceNumber: row.invoiceNumber,
-            sale: row.sale,
-            payment: 0,
-            dayTotal: row.sale,
-            showDayTotal: true,
-            outstanding: running,
-          })
-        } else {
-          totalPayment += row.payment
-          running -= row.payment
-          out.push({
-            kind: "payment",
-            dateKey: row.dateKey,
-            sortOrder: row.sortOrder,
-            invoiceNumber: row.invoiceNumber,
-            sale: 0,
-            payment: row.payment,
-            dayTotal: null,
-            showDayTotal: false,
-            outstanding: running,
-          })
-        }
-      }
-
-      if (!previousBalanceCaptured) {
-        previousBalance = running
-      }
 
       const name =
         clientsRef.current.find((c) => c.id === clientId)?.name || ""
       setClientName(name)
-      setDisplayRows(out)
-      setSummary({
-        previousBalance,
-        totalSale,
-        totalPayment,
-        closingOutstanding: running,
-      })
+      setDisplayRows(rows)
+      setSummary(summary)
     } catch (e) {
       toast({
         variant: "destructive",
@@ -331,7 +217,7 @@ export function MonthlyReportsPanel({
     } finally {
       setLoading(false)
     }
-  }, [clientId, monthStart, monthEnd, toast])
+  }, [clientId, monthStart, monthEnd, fromDate, toDate, toast])
 
   useEffect(() => {
     loadReport()
@@ -357,7 +243,7 @@ export function MonthlyReportsPanel({
     ]
 
     const data = displayRows.map((r) => ({
-      date: formatStatementDate(r.dateKey),
+      date: r.showDate ? formatStatementDate(r.dateKey) : "",
       invNum: r.invoiceNumber,
       sale: r.sale > 0 ? fmtMoney(r.sale) : "",
       dayTotal:
@@ -408,10 +294,14 @@ export function MonthlyReportsPanel({
     })
 
     const safeName = clientName.replace(/\s+/g, "-").toLowerCase()
+    const rangeSuffix =
+      fromDate || toDate
+        ? `${rangeStart}_to_${rangeEnd}`
+        : `${reportYear}-${String(reportMonth).padStart(2, "0")}`
     exportToCSV(
       data,
       columns,
-      `monthly-report-${safeName}-${reportYear}-${String(reportMonth).padStart(2, "0")}.csv`,
+      `monthly-report-${safeName}-${rangeSuffix}.csv`,
     )
     toast({ variant: "success", title: "Exported", description: "CSV downloaded." })
   }
@@ -479,11 +369,12 @@ export function MonthlyReportsPanel({
       pdf.text("Monthly Sales Statement", margin, y)
       y += 6
       pdf.setFontSize(10)
-      pdf.text(clientName, margin, y)
-      y += 5
+      const clientNameLines = pdf.splitTextToSize(clientName, tableWidth)
+      pdf.text(clientNameLines, margin, y)
+      y += clientNameLines.length * 4 + 1
       pdf.setFont("helvetica", "normal")
       pdf.setFontSize(8)
-      pdf.text(`Period: ${monthLabel}`, margin, y)
+      pdf.text(`Period: ${periodLabel}`, margin, y)
       y += 7
 
       const drawHeader = () => {
@@ -497,7 +388,12 @@ export function MonthlyReportsPanel({
         pdf.setFontSize(8)
 
         for (const col of colLayout) {
-          if (col.align === "right") {
+          if (col.id === "dayTotal") {
+            pdf.text(col.label, col.x + col.width / 2, headerTextY, {
+              align: "center",
+              baseline: "top",
+            })
+          } else if (col.align === "right") {
             pdf.text(col.label, col.textX, headerTextY, {
               align: "right",
               baseline: "top",
@@ -516,10 +412,10 @@ export function MonthlyReportsPanel({
 
       drawHeader()
 
+      const rowHeights: number[] = []
       for (const r of displayRows) {
         pdf.setFont("helvetica", "normal")
         pdf.setFontSize(bodyFontSize)
-
         const invoiceLines = wrapInvoiceListForPdf(
           pdf,
           r.invoiceNumber,
@@ -531,7 +427,12 @@ export function MonthlyReportsPanel({
           singleLineH,
         )
         const contentH = Math.max(singleLineH, invoiceBlockH)
-        const dynamicRowH = rowPadY + contentH + rowPadY
+        rowHeights.push(rowPadY + contentH + rowPadY)
+      }
+
+      for (let idx = 0; idx < displayRows.length; idx++) {
+        const r = displayRows[idx]
+        const dynamicRowH = rowHeights[idx]
 
         if (y + dynamicRowH > pageHeight - margin - 14) {
           pdf.addPage()
@@ -544,17 +445,41 @@ export function MonthlyReportsPanel({
         const rowTop = y
         const textTop = rowTop + rowPadY
 
-        drawLeft(formatStatementDate(r.dateKey), "date", textTop)
+        pdf.setFont("helvetica", "normal")
+        pdf.setFontSize(bodyFontSize)
+
+        const invoiceLines = wrapInvoiceListForPdf(
+          pdf,
+          r.invoiceNumber,
+          invoiceCol.textMaxW,
+        )
+
+        if (r.showDate) {
+          drawLeft(formatStatementDate(r.dateKey), "date", textTop)
+        }
+
         pdf.text(invoiceLines.join("\n"), invoiceCol.textX, textTop, {
           baseline: "top",
           lineHeightFactor: 1.25,
         })
         drawRight(r.sale > 0 ? fmtMoney(r.sale) : "", "sale", textTop)
-        drawRight(
-          r.showDayTotal && r.dayTotal != null ? fmtMoney(r.dayTotal) : "",
-          "dayTotal",
-          textTop,
-        )
+
+        if (r.showDayTotal && r.dayTotal != null) {
+          let saleBlockH = 0
+          for (let k = idx; k < idx + r.dayTotalRowSpan; k++) {
+            saleBlockH += rowHeights[k]
+          }
+          const dayCol = colById.dayTotal
+          drawPdfCellCentered(
+            pdf,
+            fmtMoney(r.dayTotal),
+            dayCol.x,
+            dayCol.width,
+            rowTop,
+            saleBlockH,
+          )
+        }
+
         drawRight(r.payment > 0 ? fmtMoney(r.payment) : "", "payment", textTop)
         drawRight(fmtMoney(r.outstanding), "outstanding", textTop)
 
@@ -594,9 +519,11 @@ export function MonthlyReportsPanel({
       }
 
       const safeName = clientName.replace(/\s+/g, "-").toLowerCase()
-      pdf.save(
-        `monthly-report-${safeName}-${reportYear}-${String(reportMonth).padStart(2, "0")}.pdf`,
-      )
+      const rangeSuffix =
+        fromDate || toDate
+          ? `${rangeStart}_to_${rangeEnd}`
+          : `${reportYear}-${String(reportMonth).padStart(2, "0")}`
+      pdf.save(`monthly-report-${safeName}-${rangeSuffix}.pdf`)
       toast({
         variant: "success",
         title: "Exported",
@@ -616,16 +543,46 @@ export function MonthlyReportsPanel({
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-        <div className="space-y-2 max-w-md w-full">
-          <label className="text-sm font-medium">Client</label>
-          <SearchableSelect
-            value={clientId}
-            onValueChange={setClientId}
-            options={clientOptions}
-            placeholder="Select client…"
-            searchPlaceholder="Search clients…"
-            triggerClassName="w-full"
-          />
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="space-y-2 max-w-md w-full sm:w-64">
+            <label className="text-sm font-medium">Client</label>
+            <SearchableSelect
+              value={clientId}
+              onValueChange={setClientId}
+              options={clientOptions}
+              placeholder="Select client…"
+              searchPlaceholder="Search clients…"
+              triggerClassName="w-full"
+            />
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">
+                From
+              </label>
+              <input
+                type="date"
+                className="flex h-9 w-full min-w-[140px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                value={fromDate}
+                min={monthStart}
+                max={toDate || monthEnd}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">
+                To
+              </label>
+              <input
+                type="date"
+                className="flex h-9 w-full min-w-[140px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+                value={toDate}
+                min={fromDate || monthStart}
+                max={monthEnd}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button
@@ -656,9 +613,10 @@ export function MonthlyReportsPanel({
       </div>
 
       <p className="text-xs text-muted-foreground">
+        Period: <span className="font-medium text-foreground">{periodLabel}</span>.
         Same ledger as the statement of account (invoices add, payments reduce).
-        Opening balance includes all prior transactions; only this month&apos;s
-        rows are listed. Multiple invoices or payments on one day are consolidated.
+        Opening balance is before the period start; rows are sorted by date then
+        invoice number. Use From/To to narrow within the selected month.
       </p>
 
       <div className="rounded-lg border bg-white overflow-x-auto">
@@ -716,26 +674,38 @@ export function MonthlyReportsPanel({
                   colSpan={6}
                   className="text-center text-muted-foreground py-12"
                 >
-                  No invoices or payments for {monthLabel}.
+                  No invoices or payments for {periodLabel}.
                 </TableCell>
               </TableRow>
             ) : (
               displayRows.map((r, idx) => (
-                <TableRow key={`${r.kind}-${r.dateKey}-${r.sortOrder}-${idx}`}>
-                  <TableCell className="px-3 py-2.5 whitespace-nowrap align-top text-muted-foreground">
-                    {formatStatementDate(r.dateKey)}
-                  </TableCell>
+                <TableRow key={`${r.kind}-${r.dateKey}-${r.invoiceNumber}-${idx}`}>
+                  {r.showDate && (
+                    <TableCell
+                      rowSpan={r.dateRowSpan}
+                      className="px-3 py-2.5 whitespace-nowrap align-top text-muted-foreground bg-muted/30 border-r"
+                    >
+                      {formatStatementDate(r.dateKey)}
+                    </TableCell>
+                  )}
                   <TableCell className="px-3 py-2.5 min-w-0 align-top font-mono text-[11px] sm:text-xs leading-relaxed break-words [overflow-wrap:anywhere]">
                     {r.invoiceNumber || "—"}
                   </TableCell>
                   <TableCell className="px-3 py-2.5 text-right align-top tabular-nums">
                     {r.sale > 0 ? `₹${fmtMoney(r.sale)}` : ""}
                   </TableCell>
-                  <TableCell className="px-3 py-2.5 text-right align-top font-medium tabular-nums">
-                    {r.showDayTotal && r.dayTotal != null
-                      ? `₹${fmtMoney(r.dayTotal)}`
-                      : ""}
-                  </TableCell>
+                  {r.showDayTotal && (
+                    <TableCell
+                      rowSpan={r.dayTotalRowSpan}
+                      className="px-3 py-2.5 text-right align-middle font-medium tabular-nums bg-amber-50/60 border-l border-r"
+                    >
+                      {r.dayTotal != null ? `₹${fmtMoney(r.dayTotal)}` : ""}
+                    </TableCell>
+                  )}
+                  {!r.showDayTotal &&
+                    (r.kind === "payment" || r.dayTotalRowSpan === 0) && (
+                      <TableCell className="px-3 py-2.5 text-right align-top bg-amber-50/60 border-l border-r" />
+                    )}
                   <TableCell className="px-3 py-2.5 text-right align-top text-green-700 tabular-nums">
                     {r.payment > 0 ? `₹${fmtMoney(r.payment)}` : ""}
                   </TableCell>

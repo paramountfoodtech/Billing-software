@@ -21,7 +21,7 @@ async function UsersContent({ userRole }: { userRole: string }) {
     .select("*, organizations(name)")
     .order("created_at", { ascending: false })
 
-  return <UsersTable key={Date.now()} users={users || []} userRole={userRole} />
+  return <UsersTable users={users || []} userRole={userRole} />
 }
 
 export default async function UsersPage() {

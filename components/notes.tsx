@@ -37,51 +37,47 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
 
   const canAddNotes = userRole === "super_admin" || userRole === "admin"
 
-  // Fetch notes on mount and set up real-time subscription
-  useEffect(() => {
-    const fetchNotes = async () => {
-      const tableName = referenceType === "invoice" ? "invoice_notes" : "payment_notes"
-      const foreignKey = referenceType === "invoice" ? "invoice_id" : "payment_id"
-
-      // Fetch notes without join first
-      const { data: fetchedNotes, error: fetchError } = await supabase
-        .from(tableName)
-        .select("id, note, created_at, created_by")
-        .eq(foreignKey, referenceId)
-        .order("created_at", { ascending: false })
-
-      if (fetchedNotes && fetchedNotes.length > 0) {
-        // Fetch profiles for all notes
-        const createdByIds = fetchedNotes.map((note: any) => note.created_by)
-        
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, full_name, role")
-          .in("id", createdByIds)
-
-        // Combine notes with profiles
-        const notesWithProfiles = fetchedNotes.map((note: any) => {
-          const profile = profiles?.find((p: any) => p.id === note.created_by)
-          return {
-            id: note.id,
-            note: note.note,
-            created_at: note.created_at,
-            profiles: profile ? {
-              full_name: profile.full_name,
-              role: profile.role
-            } : null
-          }
-        }).filter((note: any) => note.profiles !== null)
-
-        setNotes(notesWithProfiles)
-      } else {
-        setNotes([])
-      }
+  const hydrateNotesWithProfiles = async (
+    fetchedNotes: Array<{
+      id: string
+      note: string
+      created_at: string
+      created_by: string
+    }>,
+  ) => {
+    if (fetchedNotes.length === 0) {
+      setNotes([])
+      return
     }
 
-    fetchNotes()
+    const createdByIds = fetchedNotes.map((note) => note.created_by)
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, role")
+      .in("id", createdByIds)
 
-    // Set up real-time subscription
+    const notesWithProfiles = fetchedNotes
+      .map((note) => {
+        const profile = profiles?.find((p) => p.id === note.created_by)
+        return {
+          id: note.id,
+          note: note.note,
+          created_at: note.created_at,
+          profiles: profile
+            ? {
+                full_name: profile.full_name,
+                role: profile.role,
+              }
+            : null,
+        }
+      })
+      .filter((note) => note.profiles !== null) as Note[]
+
+    setNotes(notesWithProfiles)
+  }
+
+  // Set up real-time subscription (server already passed initial notes)
+  useEffect(() => {
     const tableName = referenceType === "invoice" ? "invoice_notes" : "payment_notes"
     const channel = supabase
       .channel(`${tableName}-${referenceId}`)
@@ -103,29 +99,8 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
             .eq(foreignKey, referenceId)
             .order("created_at", { ascending: false })
 
-          if (updatedNotes && updatedNotes.length > 0) {
-            // Fetch profiles
-            const createdByIds = updatedNotes.map((note: any) => note.created_by)
-            const { data: profiles } = await supabase
-              .from("profiles")
-              .select("id, full_name, role")
-              .in("id", createdByIds)
-
-            // Combine
-            const notesWithProfiles = updatedNotes.map((note: any) => {
-              const profile = profiles?.find((p: any) => p.id === note.created_by)
-              return {
-                id: note.id,
-                note: note.note,
-                created_at: note.created_at,
-                profiles: profile ? {
-                  full_name: profile.full_name,
-                  role: profile.role
-                } : null
-              }
-            }).filter((note: any) => note.profiles !== null)
-
-            setNotes(notesWithProfiles)
+          if (updatedNotes) {
+            await hydrateNotesWithProfiles(updatedNotes)
           }
         },
       )

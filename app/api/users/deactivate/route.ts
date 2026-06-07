@@ -1,19 +1,38 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient as createServerClient } from "@/lib/supabase/server"
+import {
+  requireSuperAdmin,
+  verifyUserInOrganization,
+} from "@/lib/api-auth"
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireSuperAdmin()
+    if (auth.error) return auth.error
+
     const { id } = await request.json()
-    
+
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "Missing or invalid 'id'" }, { status: 400 })
     }
 
-    // Use service role to ban the auth user (prevents sign-in)
+    if (id === auth.user.id) {
+      return NextResponse.json(
+        { error: "You cannot deactivate your own account" },
+        { status: 400 },
+      )
+    }
+
+    const inOrg = await verifyUserInOrganization(
+      id,
+      auth.profile.organization_id,
+    )
+    if (!inOrg) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
     const admin = createAdminClient()
     const { error: banError } = await admin.auth.admin.updateUserById(id, {
-      // Effectively a long-term ban (~100 years)
       ban_duration: "876000h",
     } as any)
 
@@ -21,7 +40,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: banError.message }, { status: 500 })
     }
 
-    // Use admin client for profile update to bypass RLS
     const { error: profileError } = await admin
       .from("profiles")
       .update({ is_active: false, updated_at: new Date().toISOString() })

@@ -13,6 +13,11 @@ import { useToast } from "@/hooks/use-toast"
 import { Spinner } from "@/components/ui/spinner"
 import { Pencil, Trash2, Plus } from "lucide-react"
 import Link from "next/link"
+import { EntryHistoryButton } from "@/components/entry-history-button"
+import {
+  getProfileDisplayName,
+  logEntryHistory,
+} from "@/lib/entry-history"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +34,8 @@ interface PriceCategory {
   name: string
   description: string | null
   is_active?: boolean
+  created_at?: string
+  profiles?: { full_name: string } | null
 }
 
 interface CategoriesManagementProps {
@@ -89,7 +96,7 @@ export function CategoriesManagement({ priceCategories }: CategoriesManagementPr
 
       if (!userProfile?.organization_id) throw new Error("Organization not found")
 
-      const { error } = await supabase
+      const { data: created, error } = await supabase
         .from("price_categories")
         .insert({
           name: formData.name.trim(),
@@ -97,8 +104,22 @@ export function CategoriesManagement({ priceCategories }: CategoriesManagementPr
           organization_id: userProfile.organization_id,
           created_by: userData.user.id,
         })
+        .select("id")
+        .single()
 
       if (error) throw error
+
+      if (created?.id) {
+        const userName = await getProfileDisplayName(supabase, userData.user.id)
+        await logEntryHistory(supabase, {
+          organizationId: userProfile.organization_id,
+          entityType: "price_category",
+          entityId: created.id,
+          action: "created",
+          userId: userData.user.id,
+          userName,
+        })
+      }
 
       toast({
         variant: "success",
@@ -150,12 +171,34 @@ export function CategoriesManagement({ priceCategories }: CategoriesManagementPr
     const supabase = createClient()
 
     try {
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) throw new Error("Not authenticated")
+
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", userData.user.id)
+        .single()
+
+      if (!userProfile?.organization_id) throw new Error("Organization not found")
+
       const { error } = await supabase
         .from("price_categories")
         .update({ is_active: !currentStatus })
         .eq("id", id)
 
       if (error) throw error
+
+      const userName = await getProfileDisplayName(supabase, userData.user.id)
+      await logEntryHistory(supabase, {
+        organizationId: userProfile.organization_id,
+        entityType: "price_category",
+        entityId: id,
+        action: "updated",
+        userId: userData.user.id,
+        userName,
+        summary: !currentStatus ? "Activated" : "Deactivated",
+      })
 
       toast({
         variant: "success",
@@ -259,7 +302,13 @@ export function CategoriesManagement({ priceCategories }: CategoriesManagementPr
                   </Label>
                 </div>
 
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-2 pt-2 items-center">
+                  <EntryHistoryButton
+                    entityType="price_category"
+                    entityId={category.id}
+                    createdAt={category.created_at}
+                    createdByName={category.profiles?.full_name}
+                  />
                   <Button variant="outline" size="sm" asChild>
                     <Link href={`/dashboard/prices/${category.id}/edit`}>
                       <Pencil className="h-3 w-3 mr-1" />

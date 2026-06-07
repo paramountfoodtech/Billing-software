@@ -14,6 +14,10 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { ClientSelector } from "@/components/client-selector";
+import {
+  getProfileDisplayName,
+  logEntryHistory,
+} from "@/lib/entry-history";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Invoice {
@@ -250,6 +254,7 @@ export function PaymentForm({
       }
 
       const normalizedReference = formData.reference_number.trim();
+      let paymentId: string | null = null;
 
       if (normalizedReference) {
         const { data: existingPayment, error: duplicateCheckError } =
@@ -290,19 +295,24 @@ export function PaymentForm({
           );
 
         // Create a single payment record for tracking
-        const { error: paymentError } = await supabase.from("payments").insert({
-          invoice_id: unpaidInvoices[0]?.id || formData.invoice_id, // Link to first unpaid invoice
-          amount: formData.amount,
-          payment_date: formData.payment_date,
-          payment_method: formData.payment_method,
-          reference_number: normalizedReference || null,
-          status: formData.status,
-          notes: `Bulk payment for client - allocated across ${unpaidInvoices.length} invoices. ${formData.notes || ""}`,
-          created_by: user.id,
-          organization_id: profile.organization_id,
-        });
+        const { data: paymentRow, error: paymentError } = await supabase
+          .from("payments")
+          .insert({
+            invoice_id: unpaidInvoices[0]?.id || formData.invoice_id,
+            amount: formData.amount,
+            payment_date: formData.payment_date,
+            payment_method: formData.payment_method,
+            reference_number: normalizedReference || null,
+            status: formData.status,
+            notes: `Bulk payment for client - allocated across ${unpaidInvoices.length} invoices. ${formData.notes || ""}`,
+            created_by: user.id,
+            organization_id: profile.organization_id,
+          })
+          .select("id")
+          .single();
 
         if (paymentError) throw paymentError;
+        paymentId = paymentRow?.id ?? null;
 
         // Allocate payment across invoices
         for (const invoice of unpaidInvoices) {
@@ -344,19 +354,24 @@ export function PaymentForm({
         if (!selectedInvoice) throw new Error("Please select an invoice");
 
         // Insert payment
-        const { error: paymentError } = await supabase.from("payments").insert({
-          invoice_id: formData.invoice_id,
-          amount: formData.amount,
-          payment_date: formData.payment_date,
-          payment_method: formData.payment_method,
-          reference_number: normalizedReference || null,
-          status: formData.status,
-          notes: formData.notes || null,
-          created_by: user.id,
-          organization_id: profile.organization_id,
-        });
+        const { data: paymentRow, error: paymentError } = await supabase
+          .from("payments")
+          .insert({
+            invoice_id: formData.invoice_id,
+            amount: formData.amount,
+            payment_date: formData.payment_date,
+            payment_method: formData.payment_method,
+            reference_number: normalizedReference || null,
+            status: formData.status,
+            notes: formData.notes || null,
+            created_by: user.id,
+            organization_id: profile.organization_id,
+          })
+          .select("id")
+          .single();
 
         if (paymentError) throw paymentError;
+        paymentId = paymentRow?.id ?? null;
 
         // Update invoice amount_paid
         const newAmountPaid =
@@ -381,6 +396,18 @@ export function PaymentForm({
           .eq("id", formData.invoice_id);
 
         if (invoiceError) throw invoiceError;
+      }
+
+      if (paymentId) {
+        const userName = await getProfileDisplayName(supabase, user.id);
+        await logEntryHistory(supabase, {
+          organizationId: profile.organization_id,
+          entityType: "payment",
+          entityId: paymentId,
+          action: "created",
+          userId: user.id,
+          userName,
+        });
       }
 
       toast({

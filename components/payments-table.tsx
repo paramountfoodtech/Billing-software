@@ -38,6 +38,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
+import { EntryHistoryButton } from "@/components/entry-history-button";
 
 interface Payment {
   id: string;
@@ -47,6 +48,10 @@ interface Payment {
   payment_method: string;
   reference_number: string | null;
   status: string;
+  created_at?: string;
+  profiles?: {
+    full_name: string;
+  } | null;
   invoices: {
     id: string;
     invoice_number: string;
@@ -400,13 +405,13 @@ export function PaymentsTable({
     }));
 
     const pdfColumns: ExportColumn[] = [
-      { key: "payment_date_fmt", label: "Date" },
-      { key: "invoice_number", label: "Invoice #" },
-      { key: "client_name", label: "Client" },
-      { key: "amount_fmt", label: "Amount" },
-      { key: "method_label", label: "Method" },
-      { key: "reference_number", label: "Reference" },
-      { key: "status_label", label: "Status" },
+      { key: "payment_date_fmt", label: "Date", widthFrac: 0.1 },
+      { key: "invoice_number", label: "Invoice #", widthFrac: 0.1 },
+      { key: "client_name", label: "Client", widthFrac: 0.22 },
+      { key: "amount_fmt", label: "Amount", widthFrac: 0.1, align: "right" },
+      { key: "method_label", label: "Method", widthFrac: 0.12 },
+      { key: "reference_number", label: "Reference", widthFrac: 0.16 },
+      { key: "status_label", label: "Status", widthFrac: 0.2 },
     ];
 
     const rangeLabel =
@@ -605,12 +610,18 @@ export function PaymentsTable({
                       </TableCell>
                       <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                         <div className="flex justify-end gap-1 sm:gap-2">
+                          <EntryHistoryButton
+                            entityType="payment"
+                            entityId={payment.id}
+                            createdAt={payment.created_at}
+                            createdByName={payment.profiles?.full_name}
+                          />
                           <Button variant="ghost" size="sm" asChild>
                             <Link href={`/dashboard/payments/${payment.id}`}>
                               <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                             </Link>
                           </Button>
-                          {userRole !== "accountant" && (
+                          {userRole === "super_admin" && (
                             <Button
                               variant="ghost"
                               size="sm"

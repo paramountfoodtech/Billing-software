@@ -1,16 +1,29 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient as createServerClient } from "@/lib/supabase/server"
+import {
+  requireSuperAdmin,
+  verifyUserInOrganization,
+} from "@/lib/api-auth"
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireSuperAdmin()
+    if (auth.error) return auth.error
+
     const { id } = await request.json()
-    
+
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "Missing or invalid 'id'" }, { status: 400 })
     }
 
-    // Use service role to unban the auth user (allows sign-in)
+    const inOrg = await verifyUserInOrganization(
+      id,
+      auth.profile.organization_id,
+    )
+    if (!inOrg) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
     const admin = createAdminClient()
     const { error: unbanError } = await admin.auth.admin.updateUserById(id, {
       ban_duration: "none",
@@ -20,7 +33,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: unbanError.message }, { status: 500 })
     }
 
-    // Use admin client for profile update to bypass RLS
     const { error: profileError } = await admin
       .from("profiles")
       .update({ is_active: true, updated_at: new Date().toISOString() })

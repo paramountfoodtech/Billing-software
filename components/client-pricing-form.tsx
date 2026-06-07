@@ -12,6 +12,14 @@ import { useState, useEffect, useMemo } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
 import { getPriceForCategoryOnDate } from "@/lib/utils";
+import {
+  getProfileDisplayName,
+  logEntryHistory,
+} from "@/lib/entry-history";
+import {
+  buildClientPricingHistoryRow,
+  logClientPricingHistory,
+} from "@/lib/client-pricing-history";
 
 interface Client {
   id: string;
@@ -371,6 +379,36 @@ export function ClientPricingForm({
     }
 
     try {
+      const userName = await getProfileDisplayName(supabase, user.id);
+
+      const recordPricingHistory = async (
+        pricingId: string,
+        clientId: string,
+        productId: string,
+        ruleData: {
+          price_rule_type: string;
+          price_rule_value?: number | null;
+          price_category_id?: string | null;
+          fixed_base_value?: number | null;
+          conditional_threshold?: number | null;
+          conditional_discount_below?: number | null;
+          conditional_discount_above_equal?: number | null;
+          notes?: string | null;
+        },
+      ) => {
+        await logClientPricingHistory(
+          supabase,
+          buildClientPricingHistoryRow(
+            profile.organization_id,
+            pricingId,
+            clientId,
+            productId,
+            ruleData,
+            user.id,
+          ),
+        );
+      };
+
       if (existingRule?.id) {
         // Update existing rule (single product mode)
         const rule = productRules[existingRule.product_id];
@@ -409,6 +447,20 @@ export function ClientPricingForm({
           .eq("id", existingRule.id);
 
         if (error) throw error;
+        await logEntryHistory(supabase, {
+          organizationId: profile.organization_id,
+          entityType: "client_pricing",
+          entityId: existingRule.id,
+          action: "updated",
+          userId: user.id,
+          userName,
+        });
+        await recordPricingHistory(
+          existingRule.id,
+          existingRule.client_id,
+          existingRule.product_id,
+          updateData,
+        );
         toast({
           variant: "success",
           title: "Success",
@@ -461,6 +513,65 @@ export function ClientPricingForm({
 
         if (updatePromises.length > 0) {
           await Promise.all(updatePromises);
+          for (const rule of rulesToUpdate) {
+            if (rule.id) {
+              await logEntryHistory(supabase, {
+                organizationId: profile.organization_id,
+                entityType: "client_pricing",
+                entityId: rule.id,
+                action: "updated",
+                userId: user.id,
+                userName,
+              });
+
+              const historyData: {
+                price_rule_type: string;
+                price_rule_value?: number | null;
+                price_category_id?: string | null;
+                fixed_base_value?: number | null;
+                conditional_threshold?: number | null;
+                conditional_discount_below?: number | null;
+                conditional_discount_above_equal?: number | null;
+                notes?: string | null;
+              } = {
+                price_rule_type: rule.price_rule_type,
+                notes: rule.notes,
+              };
+
+              if (rule.price_rule_type === "conditional_discount") {
+                historyData.conditional_threshold = Number(
+                  rule.conditional_threshold,
+                );
+                historyData.conditional_discount_below = Number(
+                  rule.conditional_discount_below,
+                );
+                historyData.conditional_discount_above_equal = Number(
+                  rule.conditional_discount_above_equal,
+                );
+                historyData.price_rule_value = null;
+              } else {
+                historyData.price_rule_value = Number(rule.price_rule_value);
+                historyData.conditional_threshold = null;
+                historyData.conditional_discount_below = null;
+                historyData.conditional_discount_above_equal = null;
+              }
+
+              if (rule.use_fixed_value) {
+                historyData.fixed_base_value = Number(rule.fixed_value);
+                historyData.price_category_id = null;
+              } else {
+                historyData.price_category_id = rule.price_category_id;
+                historyData.fixed_base_value = null;
+              }
+
+              await recordPricingHistory(
+                rule.id,
+                selectedClient,
+                rule.product_id,
+                historyData,
+              );
+            }
+          }
         }
 
         if (rulesToCreate.length > 0) {
@@ -503,9 +614,10 @@ export function ClientPricingForm({
             return baseData;
           });
 
-          const { error } = await supabase
+          const { data: createdRules, error } = await supabase
             .from("client_product_pricing")
-            .insert(rulesToInsert);
+            .insert(rulesToInsert)
+            .select("id, product_id");
 
           if (error) {
             if (error.code === "23505") {
@@ -514,6 +626,28 @@ export function ClientPricingForm({
               );
             }
             throw error;
+          }
+          for (const row of createdRules ?? []) {
+            await logEntryHistory(supabase, {
+              organizationId: profile.organization_id,
+              entityType: "client_pricing",
+              entityId: row.id,
+              action: "created",
+              userId: user.id,
+              userName,
+            });
+
+            const insertedRule = rulesToInsert.find(
+              (rule) => rule.product_id === row.product_id,
+            );
+            if (insertedRule) {
+              await recordPricingHistory(
+                row.id,
+                selectedClient,
+                row.product_id,
+                insertedRule,
+              );
+            }
           }
         }
 
@@ -565,9 +699,10 @@ export function ClientPricingForm({
             return baseData;
           });
 
-        const { error } = await supabase
+        const { data: createdRules, error } = await supabase
           .from("client_product_pricing")
-          .insert(rulesToInsert);
+          .insert(rulesToInsert)
+          .select("id, product_id");
 
         if (error) {
           if (error.code === "23505") {
@@ -576,6 +711,29 @@ export function ClientPricingForm({
             );
           }
           throw error;
+        }
+
+        for (const row of createdRules ?? []) {
+          await logEntryHistory(supabase, {
+            organizationId: profile.organization_id,
+            entityType: "client_pricing",
+            entityId: row.id,
+            action: "created",
+            userId: user.id,
+            userName,
+          });
+
+          const insertedRule = rulesToInsert.find(
+            (rule) => rule.product_id === row.product_id,
+          );
+          if (insertedRule) {
+            await recordPricingHistory(
+              row.id,
+              selectedClient,
+              row.product_id,
+              insertedRule,
+            );
+          }
         }
 
         toast({

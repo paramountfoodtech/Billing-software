@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { PrintableInvoice } from "@/components/printable-invoice";
 import { Notes } from "@/components/notes";
+import { EntryHistoryButton } from "@/components/entry-history-button";
 
 export default async function InvoiceDetailPage({
   params,
@@ -38,7 +39,8 @@ export default async function InvoiceDetailPage({
         bird_count,
         per_bird_adjustment,
         skinless_weight
-      )
+      ),
+      profiles!invoices_created_by_fkey(full_name)
     `,
     )
     .eq("id", id)
@@ -106,6 +108,14 @@ export default async function InvoiceDetailPage({
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
+      <div className="flex justify-end">
+        <EntryHistoryButton
+          entityType="invoice"
+          entityId={id}
+          createdAt={invoice.created_at}
+          createdByName={invoice.profiles?.full_name}
+        />
+      </div>
       <PrintableInvoice invoice={invoice} template={template} />
       <Notes
         notes={invoiceNotes || []}

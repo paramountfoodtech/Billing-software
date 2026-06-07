@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, FileText } from "lucide-react";
 import Link from "next/link";
 import { Notes } from "@/components/notes";
+import { EntryHistoryButton } from "@/components/entry-history-button";
 
 const statusConfig = {
   pending: { label: "Pending", className: "bg-yellow-100 text-yellow-800" },
@@ -112,12 +113,20 @@ export default async function PaymentDetailPage({
             </Link>
           </Button>
         </div>
-        <Button variant="outline" asChild>
-          <Link href={`/dashboard/invoices/${payment.invoices.id}`}>
-            <FileText className="h-4 w-4 mr-2" />
-            View Invoice
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <EntryHistoryButton
+            entityType="payment"
+            entityId={id}
+            createdAt={payment.created_at}
+            createdByName={payment.profiles?.full_name}
+          />
+          <Button variant="outline" asChild>
+            <Link href={`/dashboard/invoices/${payment.invoices.id}`}>
+              <FileText className="h-4 w-4 mr-2" />
+              View Invoice
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Payment Details Card */}

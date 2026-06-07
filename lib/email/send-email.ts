@@ -12,7 +12,8 @@ export async function sendEmail({ to, subject, html, from }: SendEmailParams) {
     // Prefer server-only env vars, fallback to NEXT_PUBLIC for backward compatibility
     const resendApiKey =
       process.env.RESEND_API_KEY || process.env.NEXT_PUBLIC_RESEND_API_KEY
-    const emailFrom = process.env.EMAIL_FROM || process.env.NEXT_PUBLIC_EMAIL_FROM
+    const emailFrom =
+      process.env.EMAIL_FROM || process.env.NEXT_PUBLIC_EMAIL_FROM
 
     // Validate API key is set
     if (!resendApiKey) {

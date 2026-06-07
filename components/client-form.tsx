@@ -11,6 +11,10 @@ import { Switch } from "@/components/ui/switch";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
+import {
+  getProfileDisplayName,
+  logEntryHistory,
+} from "@/lib/entry-history";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -197,6 +201,16 @@ export function ClientForm({ client }: ClientFormProps) {
 
         if (error) throw error;
 
+        const userName = await getProfileDisplayName(supabase, user.id);
+        await logEntryHistory(supabase, {
+          organizationId: profile.organization_id,
+          entityType: "client",
+          entityId: client.id,
+          action: "updated",
+          userId: user.id,
+          userName,
+        });
+
         toast({
           variant: "success",
           title: "Client updated",
@@ -204,15 +218,31 @@ export function ClientForm({ client }: ClientFormProps) {
         });
       } else {
         // Create new client
-        const { error } = await supabase.from("clients").insert({
-          ...formData,
-          due_days: dueDays,
-          value_per_bird: valuePerBird,
-          created_by: user.id,
-          organization_id: profile.organization_id,
-        });
+        const { data: created, error } = await supabase
+          .from("clients")
+          .insert({
+            ...formData,
+            due_days: dueDays,
+            value_per_bird: valuePerBird,
+            created_by: user.id,
+            organization_id: profile.organization_id,
+          })
+          .select("id")
+          .single();
 
         if (error) throw error;
+
+        const userName = await getProfileDisplayName(supabase, user.id);
+        if (created?.id) {
+          await logEntryHistory(supabase, {
+            organizationId: profile.organization_id,
+            entityType: "client",
+            entityId: created.id,
+            action: "created",
+            userId: user.id,
+            userName,
+          });
+        }
 
         // Send invitation email to new client (non-critical)
         await sendClientInvitation(formData.email, formData.name);

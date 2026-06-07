@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendEmail } from "@/lib/email/send-email";
 import { NextResponse } from "next/server";
 
 function resolveAppBaseUrl(request: Request): string {
@@ -300,20 +301,13 @@ async function generateAndSendDailyReport(appBaseUrl: string) {
     generatedAt: today,
   });
 
-  const response = await fetch(
-    `${appBaseUrl}/api/email/send-report`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: superAdminEmail,
-        subject: `Daily Report – ${monthLabel} (as of ${today.toLocaleDateString("en-IN")})`,
-        html,
-      }),
-    },
-  );
+  const result = await sendEmail({
+    to: superAdminEmail,
+    subject: `Daily Report – ${monthLabel} (as of ${today.toLocaleDateString("en-IN")})`,
+    html,
+  });
 
-  return response.ok ? "sent" : "failed";
+  return result.success ? "sent" : "failed";
 }
 
 // ─── Existing report types (weekly / monthly / semi-annual / annual) ──────────
@@ -375,21 +369,13 @@ async function generateAndSendReport(
     },
   });
 
-  // Send via email service
-  const response = await fetch(
-    `${appBaseUrl}/api/email/send-report`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: email,
-        subject: `${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report - ${dateRange.label}`,
-        html: reportHtml,
-      }),
-    },
-  );
+  const result = await sendEmail({
+    to: email,
+    subject: `${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report - ${dateRange.label}`,
+    html: reportHtml,
+  });
 
-  return response.ok ? "sent" : "failed";
+  return result.success ? "sent" : "failed";
 }
 
 function getDateRangeForReportType(reportType: string) {

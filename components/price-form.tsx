@@ -9,6 +9,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
+import {
+  getProfileDisplayName,
+  logEntryHistory,
+} from "@/lib/entry-history"
 
 interface PriceFormProps {
   initialData?: {
@@ -53,6 +57,17 @@ export function PriceForm({ initialData, initialPrice }: PriceFormProps) {
       const supabase = createClient()
 
       try {
+        const { data: userData } = await supabase.auth.getUser()
+        if (!userData.user) throw new Error("Not authenticated")
+
+        const { data: userProfile } = await supabase
+          .from("profiles")
+          .select("organization_id")
+          .eq("id", userData.user.id)
+          .single()
+
+        if (!userProfile?.organization_id) throw new Error("Organization not found")
+
         const { error } = await supabase
           .from("price_categories")
           .update({
@@ -63,6 +78,16 @@ export function PriceForm({ initialData, initialPrice }: PriceFormProps) {
           .eq("id", initialData.id)
 
         if (error) throw error
+
+        const userName = await getProfileDisplayName(supabase, userData.user.id)
+        await logEntryHistory(supabase, {
+          organizationId: userProfile.organization_id,
+          entityType: "price_category",
+          entityId: initialData.id,
+          action: "updated",
+          userId: userData.user.id,
+          userName,
+        })
 
         toast({
           variant: "success",
@@ -147,6 +172,9 @@ export function PriceForm({ initialData, initialPrice }: PriceFormProps) {
 
       let categoryId = existing && existing.length > 0 ? existing[0].id : null
 
+      const userName = await getProfileDisplayName(supabase, userData.user.id)
+      let categoryWasCreated = false
+
       if (!categoryId) {
         const { data: created, error: catError } = await supabase
           .from("price_categories")
@@ -161,9 +189,17 @@ export function PriceForm({ initialData, initialPrice }: PriceFormProps) {
 
         if (catError) throw catError
         categoryId = created?.id
+        categoryWasCreated = true
       }
 
-      const { error } = await supabase
+      const { data: existingHistory } = await supabase
+        .from("price_category_history")
+        .select("id")
+        .eq("price_category_id", categoryId!)
+        .eq("effective_date", formData.effective_date)
+        .maybeSingle()
+
+      const { data: historyRow, error } = await supabase
         .from("price_category_history")
         .upsert(
           {
@@ -175,8 +211,33 @@ export function PriceForm({ initialData, initialPrice }: PriceFormProps) {
           },
           { onConflict: "price_category_id,effective_date" }
         )
+        .select("id")
+        .single()
 
       if (error) throw error
+
+      if (categoryWasCreated && categoryId) {
+        await logEntryHistory(supabase, {
+          organizationId: userProfile.organization_id,
+          entityType: "price_category",
+          entityId: categoryId,
+          action: "created",
+          userId: userData.user.id,
+          userName,
+        })
+      }
+
+      if (historyRow?.id) {
+        await logEntryHistory(supabase, {
+          organizationId: userProfile.organization_id,
+          entityType: "price_history",
+          entityId: historyRow.id,
+          action: existingHistory ? "updated" : "created",
+          userId: userData.user.id,
+          userName,
+          summary: `₹${Number(formData.price).toFixed(2)} effective ${formData.effective_date}`,
+        })
+      }
 
       toast({
         variant: "success",

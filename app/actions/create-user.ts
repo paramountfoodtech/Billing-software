@@ -127,19 +127,31 @@ export async function updateUser(
     return { error: "Not authenticated" }
   }
 
-  const { data: adminProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+  const { data: adminProfile } = await supabase
+    .from("profiles")
+    .select("role, organization_id")
+    .eq("id", user.id)
+    .single()
 
   if (adminProfile?.role !== "super_admin") {
     return { error: "Only super admins can update users" }
   }
 
   try {
-    // Get current user state to check if activation status is changing
-    const { data: currentProfile } = await supabase
+    const { data: targetProfile } = await supabase
       .from("profiles")
-      .select("is_active")
+      .select("is_active, organization_id")
       .eq("id", userId)
       .single()
+
+    if (
+      !targetProfile ||
+      targetProfile.organization_id !== adminProfile.organization_id
+    ) {
+      return { error: "User not found in your organization" }
+    }
+
+    const currentProfile = targetProfile
 
     // If toggling activation state, handle via Admin API (auth + profile)
     if (currentProfile && currentProfile.is_active !== formData.is_active) {

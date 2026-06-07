@@ -40,6 +40,7 @@ import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
 import { Input } from "@/components/ui/input"
+import { EntryHistoryButton } from "@/components/entry-history-button"
 
 interface PriceCategory {
   id: string
@@ -135,6 +136,11 @@ function SortableCategoryRow({
       </TableCell>
       <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
         <div className="flex justify-end gap-1 sm:gap-2">
+          <EntryHistoryButton
+            entityType="price_category"
+            entityId={category.id}
+            createdAt={category.created_at}
+          />
           <Button variant="ghost" size="sm" asChild>
             <Link href={`/dashboard/prices/${category.id}/edit`}>
               <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -539,17 +545,24 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
                         })}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setDeleteTarget({ id: price.id, type: 'price' })
-                            setDeleteDialogOpen(true)
-                          }}
-                          disabled={isDeleting}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
+                        <div className="flex justify-end gap-1 sm:gap-2">
+                          <EntryHistoryButton
+                            entityType="price_history"
+                            entityId={price.id}
+                            createdAt={price.created_at}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setDeleteTarget({ id: price.id, type: 'price' })
+                              setDeleteDialogOpen(true)
+                            }}
+                            disabled={isDeleting}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )

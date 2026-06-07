@@ -49,6 +49,22 @@ export type PdfColumnDef = {
   align: "left" | "right"
 }
 
+/** Draw text centered horizontally and vertically within a PDF table cell. */
+export function drawPdfCellCentered(
+  pdf: jsPDF,
+  text: string,
+  cellX: number,
+  cellWidth: number,
+  cellTop: number,
+  cellHeight: number,
+) {
+  if (!text) return
+  const dims = pdf.getTextDimensions(text)
+  const x = cellX + cellWidth / 2
+  const y = cellTop + cellHeight / 2 - dims.h / 2
+  pdf.text(text, x, y, { align: "center", baseline: "top" })
+}
+
 export function buildPdfColumnLayout(
   columns: PdfColumnDef[],
   margin: number,

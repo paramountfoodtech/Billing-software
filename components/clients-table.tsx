@@ -38,6 +38,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
+import { EntryHistoryButton } from "@/components/entry-history-button";
 
 interface Client {
   id: string;
@@ -403,6 +404,12 @@ export function ClientsTable({ clients }: ClientsTableProps) {
                 </TableCell>
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                   <div className="flex justify-end gap-1 sm:gap-2">
+                    <EntryHistoryButton
+                      entityType="client"
+                      entityId={client.id}
+                      createdAt={client.created_at}
+                      createdByName={client.profiles?.full_name}
+                    />
                     <Button variant="ghost" size="sm" asChild>
                       <Link href={`/dashboard/clients/${client.id}/edit`}>
                         <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />

@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server"
 import { sendEmail } from "@/lib/email/send-email"
+import { verifyInternalSecret } from "@/lib/api-auth"
 
 export async function POST(request: Request) {
+  if (!verifyInternalSecret(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   try {
     const { to, subject, html } = await request.json()
 

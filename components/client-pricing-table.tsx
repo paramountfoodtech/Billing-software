@@ -27,6 +27,7 @@ import { TablePagination } from "@/components/table-pagination";
 import { useToast } from "@/hooks/use-toast";
 import { getPriceForCategoryOnDate } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { EntryHistoryButton } from "@/components/entry-history-button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -560,6 +561,11 @@ export function ClientPricingTable({
                   {userRole !== "admin" && (
                     <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                       <div className="flex justify-end gap-1 sm:gap-2">
+                        <EntryHistoryButton
+                          entityType="client_pricing"
+                          entityId={rule.id}
+                          createdAt={rule.created_at}
+                        />
                         <Button variant="ghost" size="sm" asChild>
                           <Link
                             href={`/dashboard/client-pricing/${rule.id}/edit`}

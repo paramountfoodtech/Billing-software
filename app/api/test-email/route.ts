@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from "next/server"
-import { sendEmail } from "@/lib/email/send-email"
-import { getTeamMemberWelcomeEmail } from "@/lib/email/templates/team-member-welcome"
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
+  const { sendEmail } = await import("@/lib/email/send-email")
+  const { getTeamMemberWelcomeEmail } = await import(
+    "@/lib/email/templates/team-member-welcome"
+  )
+
   try {
-    const { searchParams } = new URL(req.url)
+    const { searchParams } = new URL(_req.url)
     const to = searchParams.get("to") || "hsprojects449@gmail.com"
     const from = searchParams.get("from") || process.env.EMAIL_FROM || "onboarding@resend.dev"
     const name = searchParams.get("name") || "Test User"
     const org = searchParams.get("org") || "Test Organization"
 
-    // Send test email
     const emailHtml = getTeamMemberWelcomeEmail({
       name,
       email: to,
@@ -29,16 +35,19 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: result.success,
-      message: result.success 
-        ? `Test email sent! Check inbox for ${to}` 
+      message: result.success
+        ? `Test email sent! Check inbox for ${to}`
         : `Failed: ${result.error}`,
       data: result,
       meta: { to, from },
     })
-  } catch (error: any) {
-    return NextResponse.json({
-      success: false,
-      error: error.message,
-    }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }

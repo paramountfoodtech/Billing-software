@@ -39,13 +39,41 @@ export function calculatePriceFromRule(
  * @param priceHistory Array of price history entries
  * @returns The price effective on that date, or null if not found
  */
+export type PriceCategoryHistoryEntry = {
+  price_category_id: string
+  price: number
+  effective_date: string
+}
+
+export function buildPriceCategoryDateLookup(
+  priceHistory: PriceCategoryHistoryEntry[],
+): Map<string, number> {
+  const lookup = new Map<string, number>()
+  for (const entry of priceHistory) {
+    lookup.set(
+      `${entry.price_category_id}:${entry.effective_date}`,
+      Number(entry.price),
+    )
+  }
+  return lookup
+}
+
 export function getPriceForCategoryOnDate(
   categoryId: string,
   onDate: string,
-  priceHistory: Array<{ price_category_id: string; price: number; effective_date: string }>
+  priceHistory: PriceCategoryHistoryEntry[],
 ): number | null {
   const price = priceHistory.find(
-    (p) => p.price_category_id === categoryId && p.effective_date === onDate
+    (p) => p.price_category_id === categoryId && p.effective_date === onDate,
   )
   return price ? Number(price.price) : null
+}
+
+export function getPriceForCategoryOnDateFromLookup(
+  categoryId: string,
+  onDate: string,
+  lookup: Map<string, number>,
+): number | null {
+  const price = lookup.get(`${categoryId}:${onDate}`)
+  return price !== undefined ? price : null
 }

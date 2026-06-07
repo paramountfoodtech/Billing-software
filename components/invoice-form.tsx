@@ -22,13 +22,41 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
-import { AlertTriangle, Check, ChevronDown, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import {
+  getProfileDisplayName,
+  logEntryHistory,
+} from "@/lib/entry-history";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { getPriceForCategoryOnDate } from "@/lib/utils";
+import {
+  buildPriceCategoryDateLookup,
+  getPriceForCategoryOnDateFromLookup,
+} from "@/lib/utils";
+import {
+  buildClientPricingRuleIndex,
+  getClientPricingRuleForDate,
+  type ClientPricingHistoryEntry,
+} from "@/lib/client-pricing-history";
 
 interface Client {
   id: string;
@@ -72,6 +100,7 @@ interface InvoiceFormProps {
     price: number;
     effective_date: string;
   }>;
+  clientPricingHistory?: ClientPricingHistoryEntry[];
   lastInvoiceNumber?: string | null;
   initialInvoice?: {
     id: string;
@@ -140,6 +169,7 @@ export function InvoiceForm({
   clientPricingRules,
   priceCategories = [],
   priceHistory = [],
+  clientPricingHistory = [],
   lastInvoiceNumber,
   initialInvoice,
   initialItems,
@@ -149,6 +179,10 @@ export function InvoiceForm({
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshPricesDialogOpen, setRefreshPricesDialogOpen] = useState(false);
+  const [issueDateChangeDialogOpen, setIssueDateChangeDialogOpen] =
+    useState(false);
+  const [pendingIssueDate, setPendingIssueDate] = useState<string | null>(null);
   const { toast } = useToast();
 
   const deriveInvoiceRatesFromInitial = () => {
@@ -245,11 +279,62 @@ export function InvoiceForm({
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [productSearchValue, setProductSearchValue] = useState("");
   const isEditMode = Boolean(initialInvoice?.id);
+  const pricingBaselineRef = useRef({
+    clientId: initialInvoice?.client_id || "",
+    issueDate: initialInvoice?.issue_date || today,
+  });
 
-  // ensure per-bird settings from client are loaded when form initialises
+  const pricingRuleIndex = useMemo(
+    () => buildClientPricingRuleIndex(clientPricingHistory),
+    [clientPricingHistory],
+  );
+
+  const priceCategoryLookup = useMemo(
+    () => buildPriceCategoryDateLookup(priceHistory),
+    [priceHistory],
+  );
+
+  const resolvePricingRule = (
+    clientId: string,
+    productId: string,
+    issueDate?: string,
+  ) => {
+    if (!clientId || !productId) return null;
+    return getClientPricingRuleForDate(
+      clientId,
+      productId,
+      issueDate || formData.issue_date,
+      clientPricingHistory,
+      clientPricingRules,
+      pricingRuleIndex,
+    );
+  };
+
+  const getCategoryPriceForDate = (categoryId: string, issueDate: string) =>
+    getPriceForCategoryOnDateFromLookup(
+      categoryId,
+      issueDate,
+      priceCategoryLookup,
+    );
+
+  // Load client per-bird settings on mount without overwriting saved line prices in edit mode.
   useEffect(() => {
-    if (formData.client_id) {
-      handleClientChange(formData.client_id);
+    if (!formData.client_id) return;
+
+    const client = clients.find((c) => c.id === formData.client_id);
+    if (!client) return;
+
+    const days = client.due_days ?? 30;
+    const daysType = client.due_days_type ?? "fixed_days";
+
+    setSelectedDueDays(days);
+    setSelectedDueDaysType(daysType);
+    setClientPerBirdEnabled(!!client.enable_per_bird);
+    setClientPerBirdValue(Number(client.value_per_bird || 0));
+
+    if (!isEditMode) {
+      const newDue = computeDueDateByType(formData.issue_date, daysType, days);
+      setFormData((prev) => ({ ...prev, due_date: newDue }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -322,23 +407,27 @@ export function InvoiceForm({
   };
 
   // Check if pricing rule uses Live category (case-insensitive)
-  const isLiveCategoryPricing = (productId: string, clientId: string) => {
+  const isLiveCategoryPricing = (
+    productId: string,
+    clientId: string,
+    issueDate?: string,
+  ) => {
     if (!clientId || !productId) return false;
-    const pricingRule = clientPricingRules.find(
-      (rule) => rule.product_id === productId && rule.client_id === clientId,
-    );
+    const pricingRule = resolvePricingRule(clientId, productId, issueDate);
     if (!pricingRule?.price_category_id) return false;
     const category = priceCategories.find((c) => c.id === pricingRule.price_category_id);
     return category?.name?.toLowerCase() === "live";
   };
 
   // Function to check if a pricing rule is applied for a product
-  const getPricingRuleInfo = (productId: string, clientId: string) => {
+  const getPricingRuleInfo = (
+    productId: string,
+    clientId: string,
+    issueDate?: string,
+  ) => {
     if (!clientId || !productId) return null;
 
-    const pricingRule = clientPricingRules.find(
-      (rule) => rule.product_id === productId && rule.client_id === clientId,
-    );
+    const pricingRule = resolvePricingRule(clientId, productId, issueDate);
 
     if (pricingRule) {
       const ruleValue = Number(pricingRule.price_rule_value);
@@ -392,8 +481,10 @@ export function InvoiceForm({
 
     // Check if there's a client-specific pricing rule
     if (clientId) {
-      const pricingRule = clientPricingRules.find(
-        (rule) => rule.product_id === productId && rule.client_id === clientId,
+      const pricingRule = resolvePricingRule(
+        clientId,
+        productId,
+        issueDate || formData.issue_date,
       );
 
       if (pricingRule) {
@@ -405,10 +496,9 @@ export function InvoiceForm({
         } else if (pricingRule.price_category_id) {
           // Get category price as base — only use if price was explicitly entered for this date
           const effectiveDate = issueDate || formData.issue_date;
-          const categoryPrice = getPriceForCategoryOnDate(
+          const categoryPrice = getCategoryPriceForDate(
             pricingRule.price_category_id,
             effectiveDate,
-            priceHistory,
           );
           basePrice = categoryPrice !== null ? categoryPrice : 0;
         }
@@ -490,10 +580,7 @@ export function InvoiceForm({
     let ruleValueDisplay: string | null = null;
 
     const pricingRule = clientId
-      ? clientPricingRules.find(
-          (rule) =>
-            rule.product_id === productId && rule.client_id === clientId,
-        )
+      ? resolvePricingRule(clientId, productId, issueDate)
       : null;
 
     if (pricingRule) {
@@ -506,10 +593,9 @@ export function InvoiceForm({
         basePrice = categoryPrice;
       } else if (pricingRule.price_category_id) {
         const effectiveDate = issueDate || formData.issue_date;
-        categoryPrice = getPriceForCategoryOnDate(
+        categoryPrice = getCategoryPriceForDate(
           pricingRule.price_category_id,
           effectiveDate,
-          priceHistory,
         );
         basePrice = categoryPrice !== null ? categoryPrice : 0;
         const selectedCategory = priceCategories.find(
@@ -630,6 +716,31 @@ export function InvoiceForm({
   const [clientPerBirdEnabled, setClientPerBirdEnabled] = useState(false);
   const [clientPerBirdValue, setClientPerBirdValue] = useState(0);
 
+  const recalculateAllItemPrices = () => {
+    if (!formData.client_id || items.length === 0) return;
+
+    setItems((prev) =>
+      prev.map((item) => {
+        if (!item.product_id) return item;
+        const recalculatedPrice = calculateClientPrice(
+          item.product_id,
+          formData.client_id,
+          formData.issue_date,
+          false,
+          1,
+        );
+        const updated = {
+          ...item,
+          unit_price: recalculatedPrice,
+          bird_count: undefined,
+          use_per_bird: false,
+        };
+        updated.line_total = calculateLineTotal(updated);
+        return updated;
+      }),
+    );
+  };
+
   const handleClientChange = (clientId: string) => {
     const client = clients.find((c) => c.id === clientId);
     const days = client?.due_days ?? 30;
@@ -646,7 +757,6 @@ export function InvoiceForm({
     setItems((prev) =>
       prev.map((item) => {
         if (!item.product_id) return item;
-        // per-item per-bird no longer used; always false
         const recalculated = calculateClientPrice(
           item.product_id,
           clientId,
@@ -666,25 +776,68 @@ export function InvoiceForm({
     );
   };
 
-  // Recalculate existing item rates when invoice date changes.
+  const handleRefreshPrices = () => {
+    if (!formData.client_id || items.length === 0) return;
+    setRefreshPricesDialogOpen(true);
+  };
+
+  const confirmRefreshPrices = () => {
+    recalculateAllItemPrices();
+    setRefreshPricesDialogOpen(false);
+    toast({
+      title: "Prices refreshed",
+      description: `Line prices updated for ${formData.issue_date}.`,
+    });
+  };
+
+  const applyIssueDateChange = (nextIssue: string) => {
+    const days = selectedDueDays ?? 30;
+    const daysType = selectedDueDaysType ?? "fixed_days";
+    setFormData({
+      ...formData,
+      issue_date: nextIssue,
+      due_date: computeDueDateByType(nextIssue, daysType, days),
+    });
+  };
+
+  const handleIssueDateChange = (nextIssue: string) => {
+    if (nextIssue > today) return;
+
+    if (
+      isEditMode &&
+      items.length > 0 &&
+      nextIssue !== formData.issue_date
+    ) {
+      setPendingIssueDate(nextIssue);
+      setIssueDateChangeDialogOpen(true);
+      return;
+    }
+
+    applyIssueDateChange(nextIssue);
+  };
+
+  const confirmIssueDateChange = () => {
+    if (!pendingIssueDate) return;
+    applyIssueDateChange(pendingIssueDate);
+    setPendingIssueDate(null);
+    setIssueDateChangeDialogOpen(false);
+  };
+
+  // Recalculate item rates when issue date or client changes (create mode, or edit after user changes date).
   useEffect(() => {
     if (!formData.client_id || items.length === 0) return;
 
-    setItems((prev) =>
-      prev.map((item) => {
-        if (!item.product_id) return item;
-        const recalculatedPrice = calculateClientPrice(
-          item.product_id,
-          formData.client_id,
-          formData.issue_date,
-          false,
-          1,
-        );
-        const updated = { ...item, unit_price: recalculatedPrice };
-        updated.line_total = calculateLineTotal(updated);
-        return updated;
-      }),
-    );
+    if (isEditMode) {
+      const baseline = pricingBaselineRef.current;
+      if (
+        formData.client_id === baseline.clientId &&
+        formData.issue_date === baseline.issueDate
+      ) {
+        return;
+      }
+    }
+
+    recalculateAllItemPrices();
     // Intentionally scoped to issue date and client; repricing should happen only then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.issue_date, formData.client_id]);
@@ -814,10 +967,10 @@ export function InvoiceForm({
       if (enabled) {
         // Prevent enabling selection if no pricing rule exists for the selected client
         if (formData.client_id) {
-          const hasRule = clientPricingRules.some(
-            (rule) =>
-              rule.product_id === productId &&
-              rule.client_id === formData.client_id,
+          const hasRule = !!resolvePricingRule(
+            formData.client_id,
+            productId,
+            formData.issue_date,
           );
           if (!hasRule) {
             return prev;
@@ -1145,6 +1298,16 @@ export function InvoiceForm({
         if (itemsError) throw itemsError;
       }
 
+      const userName = await getProfileDisplayName(supabase, user.id);
+      await logEntryHistory(supabase, {
+        organizationId: profile.organization_id,
+        entityType: "invoice",
+        entityId: invoiceId!,
+        action: initialInvoice?.id ? "updated" : "created",
+        userId: user.id,
+        userName,
+      });
+
       router.push(`/dashboard/invoices/${invoiceId}`);
       router.refresh();
     } catch (error: unknown) {
@@ -1158,12 +1321,14 @@ export function InvoiceForm({
   const filteredClients = clients.filter((client) =>
     client.name.toLowerCase().includes(clientSearchValue.toLowerCase()),
   );
-  const availableProducts = products.filter((p) =>
-    clientPricingRules.some(
-      (rule) =>
-        rule.product_id === p.id &&
-        rule.client_id === formData.client_id,
-    ),
+  const availableProducts = useMemo(
+    () =>
+      products.filter(
+        (p) =>
+          !!formData.client_id &&
+          !!resolvePricingRule(formData.client_id, p.id, formData.issue_date),
+      ),
+    [products, formData.client_id, formData.issue_date, pricingRuleIndex, clientPricingRules],
   );
   const filteredProducts = availableProducts.filter((product) =>
     product.name.toLowerCase().includes(productSearchValue.toLowerCase()),
@@ -1187,6 +1352,7 @@ export function InvoiceForm({
   }, [priceCategories, priceHistory, formData.issue_date]);
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-6">
       <Card>
         <CardHeader>
@@ -1334,17 +1500,7 @@ export function InvoiceForm({
                 placeholder="Select issue date"
                 value={formData.issue_date}
                 disabled={isEditMode && !canEditInvoiceNumber}
-                onChange={(e) => {
-                  const nextIssue = e.target.value;
-                  if (nextIssue > today) return;
-                  const days = selectedDueDays ?? 30;
-                  const daysType = selectedDueDaysType ?? "fixed_days";
-                  setFormData({
-                    ...formData,
-                    issue_date: nextIssue,
-                    due_date: computeDueDateByType(nextIssue, daysType, days),
-                  });
-                }}
+                onChange={(e) => handleIssueDateChange(e.target.value)}
               />
               {isEditMode && !canEditInvoiceNumber && (
                 <p className="text-xs text-muted-foreground">
@@ -1414,11 +1570,24 @@ export function InvoiceForm({
       )}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Line Items</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Add products to this invoice.
-          </p>
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <div>
+            <CardTitle>Line Items</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Add products to this invoice.
+            </p>
+          </div>
+          {formData.client_id && items.length > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleRefreshPrices}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh prices
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Existing Line Items */}
@@ -1443,7 +1612,11 @@ export function InvoiceForm({
                 1,
               );
               const ruleInfo = formData.client_id
-                ? getPricingRuleInfo(product.id, formData.client_id)
+                ? getPricingRuleInfo(
+                    product.id,
+                    formData.client_id,
+                    formData.issue_date,
+                  )
                 : null;
               const showMissingRuleWarning = formData.client_id && !ruleInfo;
               const clientAdj = formData.client_id
@@ -1459,7 +1632,11 @@ export function InvoiceForm({
                   )
                 : null;
               const showSkinlessWeight = formData.client_id
-                ? isLiveCategoryPricing(product.id, formData.client_id)
+                ? isLiveCategoryPricing(
+                    product.id,
+                    formData.client_id,
+                    formData.issue_date,
+                  )
                 : false;
 
               return (
@@ -1835,5 +2012,57 @@ export function InvoiceForm({
         </Button>
       </div>
     </form>
+
+    <AlertDialog
+      open={refreshPricesDialogOpen}
+      onOpenChange={setRefreshPricesDialogOpen}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Refresh line prices?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will recalculate all line prices using pricing rules and
+            category prices for {formData.issue_date}. Saved unit prices will
+            be overwritten.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={confirmRefreshPrices}>
+            Refresh prices
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog
+      open={issueDateChangeDialogOpen}
+      onOpenChange={(open) => {
+        setIssueDateChangeDialogOpen(open);
+        if (!open) setPendingIssueDate(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Change issue date?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Changing the issue date to{" "}
+            {pendingIssueDate ? (
+              <span className="font-medium">{pendingIssueDate}</span>
+            ) : (
+              "the selected date"
+            )}{" "}
+            will recalculate line prices using pricing rules for the new date.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={confirmIssueDateChange}>
+            Change date
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

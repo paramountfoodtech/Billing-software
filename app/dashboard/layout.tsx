@@ -21,7 +21,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/auth/login")
   }
 
-  let { data: profile, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle()
+  let { data: profile, error } = await supabase
+    .from("profiles")
+    .select("id, email, full_name, role, organization_id, is_active")
+    .eq("id", user.id)
+    .maybeSingle()
 
   // If profile doesn't exist, create one with default role
   if (!profile && !error) {
@@ -31,12 +35,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
         id: user.id,
         email: user.email || "",
         full_name: user.user_metadata?.full_name || "User",
-        role: user.user_metadata?.role || "accountant",
+        role: "accountant",
       })
-      .select()
+      .select("id, email, full_name, role, organization_id, is_active")
       .single()
 
     profile = newProfile
+  }
+
+  if (profile?.is_active === false) {
+    await supabase.auth.signOut()
+    redirect("/auth/login")
   }
 
   return (

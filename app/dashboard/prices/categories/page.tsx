@@ -11,7 +11,7 @@ async function CategoriesContent({ organizationId }: { organizationId: string })
 
   const { data: priceCategories } = await supabase
     .from("price_categories")
-    .select("*")
+    .select("*, profiles!price_categories_created_by_fkey(full_name)")
     .eq("organization_id", organizationId)
     .order("name", { ascending: true })
 
