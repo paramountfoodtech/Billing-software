@@ -6,6 +6,7 @@ import {
   buildPdfColumnLayout,
   measurePdfTextBlockHeight,
 } from "@/lib/pdf-invoice-wrap"
+import { getIndianToday } from "@/lib/date-time"
 
 export interface ExportColumn {
   key: string
@@ -85,7 +86,7 @@ export function exportToJSON(
  * Get current timestamp for filename
  */
 export function getTimestamp(): string {
-  return new Date().toISOString().split("T")[0]
+  return getIndianToday()
 }
 
 function normalizeWidthFracs(columns: ExportColumn[]): number[] {

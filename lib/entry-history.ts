@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { formatIndianDateTime } from "@/lib/date-time"
 
 export type EntryEntityType =
   | "invoice"
@@ -84,13 +85,7 @@ export async function fetchEntryHistory(
 }
 
 export function formatHistoryTimestamp(iso: string): string {
-  return new Date(iso).toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatIndianDateTime(iso)
 }
 
 export function actionLabel(action: EntryHistoryAction): string {

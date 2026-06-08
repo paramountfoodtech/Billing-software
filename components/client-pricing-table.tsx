@@ -25,6 +25,7 @@ import { useState, useMemo, ReactNode } from "react";
 import { usePagination } from "@/hooks/use-pagination";
 import { TablePagination } from "@/components/table-pagination";
 import { useToast } from "@/hooks/use-toast";
+import { formatIndianDate, getIndianToday } from "@/lib/date-time";
 import { getPriceForCategoryOnDate } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
@@ -92,7 +93,7 @@ export function ClientPricingTable({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [ruleToDelete, setRuleToDelete] = useState<string | null>(null);
-  const today = new Date().toISOString().split("T")[0];
+  const today = getIndianToday();
 
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null);
@@ -150,7 +151,7 @@ export function ClientPricingTable({
                 : `× ${rule.price_rule_value}`,
       "Final Price": `₹${calculateFinalPrice(rule).toFixed(2)}`,
       Notes: rule.notes || "",
-      "Created At": new Date(rule.created_at).toLocaleDateString(),
+      "Created At": formatIndianDate(rule.created_at),
     }));
 
     const headers = Object.keys(exportData[0]);
@@ -176,7 +177,7 @@ export function ClientPricingTable({
     link.setAttribute("href", url);
     link.setAttribute(
       "download",
-      `pricing-rules-${new Date().toISOString().split("T")[0]}.csv`,
+      `pricing-rules-${getIndianToday()}.csv`,
     );
     link.style.visibility = "hidden";
     document.body.appendChild(link);

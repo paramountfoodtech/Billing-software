@@ -7,6 +7,7 @@ import { ArrowLeft, FileText } from "lucide-react";
 import Link from "next/link";
 import { Notes } from "@/components/notes";
 import { EntryHistoryButton } from "@/components/entry-history-button";
+import { formatIndianDate } from "@/lib/date-time";
 
 const statusConfig = {
   pending: { label: "Pending", className: "bg-yellow-100 text-yellow-800" },
@@ -146,7 +147,7 @@ export default async function PaymentDetailPage({
               <div>
                 <p className="text-sm text-muted-foreground">Payment Date</p>
                 <p className="font-medium">
-                  {new Date(payment.payment_date).toLocaleDateString("en-IN", {
+                  {formatIndianDate(payment.payment_date, {
                     year: "numeric",
                     month: "long",
                     day: "numeric",
@@ -211,7 +212,7 @@ export default async function PaymentDetailPage({
               <div>
                 <p className="text-sm text-muted-foreground">Recorded At</p>
                 <p className="font-medium">
-                  {new Date(payment.created_at).toLocaleDateString("en-IN", {
+                  {formatIndianDate(payment.created_at, {
                     year: "numeric",
                     month: "long",
                     day: "numeric",

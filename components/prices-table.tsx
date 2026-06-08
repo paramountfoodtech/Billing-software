@@ -5,6 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Pencil, Trash2, Download, ArrowUpDown, ArrowUp, ArrowDown, GripVertical } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import {
+  formatIndianDate,
+  formatIndianDateTime,
+  getIndianToday,
+} from "@/lib/date-time"
 import { useRouter } from "next/navigation"
 import { useState, useMemo } from "react"
 import { usePagination } from "@/hooks/use-pagination"
@@ -124,14 +129,7 @@ function SortableCategoryRow({
       </TableCell>
       <TableCell className="hidden md:table-cell text-muted-foreground px-2 sm:px-4 py-2 sm:py-3 text-xs">
         {latestPrice
-          ? new Date(latestPrice.created_at).toLocaleString("en-IN", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            })
+          ? formatIndianDateTime(latestPrice.created_at, { hour12: true })
           : "-"}
       </TableCell>
       <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
@@ -205,7 +203,7 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
   }
 
   const getLatestPrice = (categoryId: string, asOfDate?: string) => {
-    const filterDate = asOfDate || new Date().toISOString().split("T")[0]
+    const filterDate = asOfDate || getIndianToday()
     return priceHistory.find(
       (p) => p.price_category_id === categoryId && p.effective_date === filterDate,
     ) ?? null
@@ -370,7 +368,7 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
         key: "effective_date",
         label: "Effective Date",
         formatter: (date) =>
-          new Date(date).toLocaleDateString("en-IN", {
+          formatIndianDate(date, {
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
@@ -531,14 +529,14 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
                       <TableCell className="font-medium">{category?.name}</TableCell>
                       <TableCell className="font-semibold text-green-600">₹{Number(price.price).toFixed(2)}</TableCell>
                       <TableCell>
-                        {new Date(price.effective_date).toLocaleDateString("en-IN", {
+                        {formatIndianDate(price.effective_date, {
                           year: "numeric",
                           month: "short",
                           day: "numeric",
                         })}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {new Date(price.created_at).toLocaleDateString("en-IN", {
+                        {formatIndianDate(price.created_at, {
                           year: "numeric",
                           month: "short",
                           day: "numeric",

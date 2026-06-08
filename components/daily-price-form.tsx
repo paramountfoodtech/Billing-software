@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
+import { getIndianToday } from "@/lib/date-time"
 import { useToast } from "@/hooks/use-toast"
 import { Spinner } from "@/components/ui/spinner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -45,7 +46,7 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
   const [existingInvoicesCount, setExistingInvoicesCount] = useState(0)
   const [updateExistingInvoices, setUpdateExistingInvoices] = useState(false)
   const [existingPricesCount, setExistingPricesCount] = useState(0)
-  const today = new Date().toISOString().split("T")[0]
+  const today = getIndianToday()
   const initialDateParam = searchParams?.get("date") || undefined
   const initialEffectiveDate = initialDateParam && initialDateParam <= today ? initialDateParam : today
   

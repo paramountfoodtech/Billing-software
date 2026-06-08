@@ -28,6 +28,7 @@ import {
   type DisplayLedgerRow,
 } from "@/lib/ledger-report"
 import { FileDown, FileText } from "lucide-react"
+import { formatIndianStatementDate } from "@/lib/date-time"
 
 type ClientOption = { id: string; name: string }
 
@@ -41,22 +42,7 @@ export type MonthlyReportsPanelProps = {
 }
 
 function formatStatementDate(isoDate: string): string {
-  const d = new Date(isoDate + "T12:00:00")
-  const mon = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ][d.getMonth()]
-  return `${mon}/${d.getDate()}/${d.getFullYear()}`
+  return formatIndianStatementDate(isoDate)
 }
 
 const fmtMoney = (n: number) =>

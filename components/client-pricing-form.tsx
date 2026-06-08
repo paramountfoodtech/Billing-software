@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
+import { getIndianToday } from "@/lib/date-time";
 import { getPriceForCategoryOnDate } from "@/lib/utils";
 import {
   getProfileDisplayName,
@@ -115,7 +116,7 @@ export function ClientPricingForm({
       effective_date: string;
     }>
   >(priceHistory);
-  const today = new Date().toISOString().split("T")[0];
+  const today = getIndianToday();
 
   const [selectedClient, setSelectedClient] = useState(
     existingRule?.client_id || existingRules?.[0]?.client_id || "",

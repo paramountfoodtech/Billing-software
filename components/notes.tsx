@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { MessageSquare, Send } from "lucide-react"
+import { formatIndianDate } from "@/lib/date-time"
 
 interface Note {
   id: string
@@ -247,7 +248,7 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
                     </Badge>
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {new Date(note.created_at).toLocaleDateString("en-IN", {
+                    {formatIndianDate(note.created_at, {
                       year: "numeric",
                       month: "short",
                       day: "numeric",

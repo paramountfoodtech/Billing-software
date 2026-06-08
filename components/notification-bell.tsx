@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
+import { formatIndianDate, formatIndianTime } from "@/lib/date-time"
 
 interface Notification {
   id: string
@@ -172,11 +173,8 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                         <p className="text-xs text-slate-600 mt-1 line-clamp-2">{notification.message}</p>
                         <div className="flex items-center gap-2 mt-2">
                           <span className="text-xs text-slate-500">
-                            {new Date(notification.created_at).toLocaleDateString()} at{" "}
-                            {new Date(notification.created_at).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {formatIndianDate(notification.created_at)} at{" "}
+                            {formatIndianTime(notification.created_at)}
                           </span>
                           {!notification.is_read && (
                             <button

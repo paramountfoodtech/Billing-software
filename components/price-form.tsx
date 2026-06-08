@@ -13,6 +13,7 @@ import {
   getProfileDisplayName,
   logEntryHistory,
 } from "@/lib/entry-history"
+import { getIndianToday } from "@/lib/date-time"
 
 interface PriceFormProps {
   initialData?: {
@@ -30,7 +31,7 @@ export function PriceForm({ initialData, initialPrice }: PriceFormProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
-  const today = new Date().toISOString().split("T")[0]
+  const today = getIndianToday()
 
   const [formData, setFormData] = useState({
     categoryName: initialData?.name || "",
@@ -138,7 +139,7 @@ export function PriceForm({ initialData, initialPrice }: PriceFormProps) {
       return
     }
 
-    const todayDate = new Date().toISOString().split("T")[0]
+    const todayDate = getIndianToday()
     if (formData.effective_date > todayDate) {
       toast({
         variant: "destructive",
@@ -319,10 +320,10 @@ export function PriceForm({ initialData, initialPrice }: PriceFormProps) {
               value={formData.effective_date}
               onChange={(e) => {
                 const val = e.target.value
-                const maxDate = new Date().toISOString().split("T")[0]
+                const maxDate = getIndianToday()
                 setFormData({ ...formData, effective_date: val > maxDate ? maxDate : val })
               }}
-              max={new Date().toISOString().split("T")[0]}
+              max={getIndianToday()}
               required
             />
             <p className="text-xs text-muted-foreground">Price will be effective from this date</p>

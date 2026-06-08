@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatIndianTime } from "@/lib/date-time";
 
 export function DashboardRefresh() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export function DashboardRefresh() {
   return (
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
       {lastUpdated && (
-        <span>Updated {lastUpdated.toLocaleTimeString()}</span>
+        <span>Updated {formatIndianTime(lastUpdated)}</span>
       )}
       <Button
         variant="ghost"

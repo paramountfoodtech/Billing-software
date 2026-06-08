@@ -28,6 +28,7 @@ import type { MissedInvoiceRange } from "@/lib/invoice-gaps";
 import type { DiscardedInvoiceNumber } from "@/lib/discarded-invoice-numbers";
 import { cn } from "@/lib/utils";
 import { getProfileDisplayName } from "@/lib/entry-history";
+import { formatIndianDateTime } from "@/lib/date-time";
 
 interface MissedInvoiceNumbersProps {
   missedNumbers: string[];
@@ -422,7 +423,7 @@ export function MissedInvoiceNumbers({
                     </p>
                     <p className="text-[10px] text-muted-foreground/80 mt-1">
                       {discard.discarded_by_name || "Unknown"} ·{" "}
-                      {new Date(discard.discarded_at).toLocaleString("en-IN", {
+                      {formatIndianDateTime(discard.discarded_at, {
                         day: "2-digit",
                         month: "short",
                         year: "numeric",

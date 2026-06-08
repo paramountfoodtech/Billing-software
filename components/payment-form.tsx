@@ -19,6 +19,7 @@ import {
   logEntryHistory,
 } from "@/lib/entry-history";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getIndianToday } from "@/lib/date-time";
 
 interface Invoice {
   id: string;
@@ -70,7 +71,7 @@ export function PaymentForm({
   const [formData, setFormData] = useState({
     invoice_id: preSelectedInvoiceId || "",
     amount: "",
-    payment_date: new Date().toISOString().split("T")[0],
+    payment_date: getIndianToday(),
     payment_method: "bank_transfer",
     reference_number: "",
     status: "completed",

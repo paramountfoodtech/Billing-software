@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { formatIndianDate } from "@/lib/date-time";
 import { useRouter } from "next/navigation";
 import { useState, useMemo } from "react";
 import { usePagination } from "@/hooks/use-pagination";
@@ -225,7 +226,7 @@ export function ClientsTable({ clients }: ClientsTableProps) {
         key: "created_at",
         label: "Created Date",
         formatter: (date) =>
-          new Date(date).toLocaleDateString("en-IN", {
+          formatIndianDate(date, {
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
@@ -396,7 +397,7 @@ export function ClientsTable({ clients }: ClientsTableProps) {
                   )}
                 </TableCell>
                 <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs text-muted-foreground">
-                  {new Date(client.created_at).toLocaleDateString("en-IN", {
+                  {formatIndianDate(client.created_at, {
                     year: "numeric",
                     month: "short",
                     day: "numeric",

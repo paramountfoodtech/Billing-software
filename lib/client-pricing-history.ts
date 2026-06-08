@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getIndianToday } from "@/lib/date-time";
 
 export interface ClientPricingRuleSnapshot {
   client_id: string;
@@ -105,7 +106,7 @@ export function buildClientPricingHistoryRow(
   createdBy: string,
   effectiveFrom?: string,
 ) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getIndianToday();
 
   return {
     organization_id: organizationId,

@@ -49,6 +49,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import {
+  addCalendarDays,
+  endOfMonthDateKey,
+  getIndianToday,
+} from "@/lib/date-time";
+import {
   buildPriceCategoryDateLookup,
   getPriceForCategoryOnDateFromLookup,
 } from "@/lib/utils";
@@ -242,10 +247,8 @@ export function InvoiceForm({
     tax_percent: number | null;
   }>(deriveInvoiceRatesFromInitial);
 
-  const today = new Date().toISOString().split("T")[0];
-  const defaultDue = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
+  const today = getIndianToday();
+  const defaultDue = addCalendarDays(today, 30);
   const [selectedDueDays, setSelectedDueDays] = useState<number | null>(null);
   const [selectedDueDaysType, setSelectedDueDaysType] = useState<string | null>(
     null,
@@ -685,10 +688,9 @@ export function InvoiceForm({
     issueDate: string,
     days: number | null | undefined,
   ) => {
-    const base = issueDate ? new Date(issueDate) : new Date();
+    const baseDate = issueDate || today;
     const increment = Number.isFinite(days ?? null) ? Number(days ?? 0) : 0;
-    base.setDate(base.getDate() + increment);
-    return base.toISOString().split("T")[0];
+    return addCalendarDays(baseDate, increment);
   };
 
   const computeDueDateByType = (
@@ -697,19 +699,14 @@ export function InvoiceForm({
     days: number | null | undefined,
   ) => {
     const isEndOfMonth = daysType === "end_of_month";
+    const baseDate = issueDate || today;
 
     if (isEndOfMonth) {
-      // Calculate end of billed month
-      const base = issueDate ? new Date(issueDate) : new Date();
       const extraMonths = Number.isFinite(days ?? null) ? Number(days ?? 0) : 0;
-
-      // Move to the last day of the current month + extra months
-      base.setMonth(base.getMonth() + extraMonths + 1, 0); // Set to day 0 of next month = last day of current month
-      return base.toISOString().split("T")[0];
-    } else {
-      // Fixed days calculation
-      return computeDueDate(issueDate, days);
+      return endOfMonthDateKey(baseDate, extraMonths);
     }
+
+    return computeDueDate(baseDate, days);
   };
 
   // Recalculate all item prices when client changes; leave selection untouched
@@ -1110,7 +1107,7 @@ export function InvoiceForm({
         return;
       }
 
-      const issueDateUpperBound = new Date().toISOString().split("T")[0];
+      const issueDateUpperBound = getIndianToday();
       if (formData.issue_date > issueDateUpperBound) {
         setError("Issue date cannot be in the future.");
         setIsLoading(false);

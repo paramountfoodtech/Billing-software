@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { getIndianToday } from "@/lib/date-time"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -15,7 +16,7 @@ interface Props {
 export default function PricesAccountantSimple({ organizationId }: Props) {
   const router = useRouter()
   const supabase = createClient()
-  const today = new Date().toISOString().split("T")[0]
+  const today = getIndianToday()
   const [date, setDate] = useState<string>(today)
   const [checking, setChecking] = useState(false)
   const [existsCount, setExistsCount] = useState<number>(0)

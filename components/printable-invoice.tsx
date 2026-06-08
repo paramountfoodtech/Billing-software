@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Printer } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatIndianDate } from "@/lib/date-time";
 
 interface InvoiceTemplate {
   company_name: string;
@@ -193,7 +194,7 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
                 )}
                 <p>
                   Date:{" "}
-                  {new Date(invoice.issue_date).toLocaleDateString("en-IN", {
+                  {formatIndianDate(invoice.issue_date, {
                     year: "numeric",
                     month: "long",
                     day: "numeric",
@@ -203,7 +204,7 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
                   Due Date:{" "}
                   {invoice.due_days_type === "end_of_month"
                     ? "End of the billed month"
-                    : new Date(invoice.due_date).toLocaleDateString("en-IN", {
+                    : formatIndianDate(invoice.due_date, {
                         year: "numeric",
                         month: "long",
                         day: "numeric",

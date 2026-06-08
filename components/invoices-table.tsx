@@ -29,6 +29,7 @@ import { useState, useMemo, ReactNode } from "react";
 import { usePagination } from "@/hooks/use-pagination";
 import { TablePagination } from "@/components/table-pagination";
 import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils";
+import { formatIndianDate } from "@/lib/date-time";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import {
@@ -254,7 +255,7 @@ export function InvoicesTable({
       due_date_display:
         invoice.due_days_type === "end_of_month"
           ? "End of the billed month"
-          : new Date(invoice.due_date).toLocaleDateString("en-IN", {
+          : formatIndianDate(invoice.due_date, {
               year: "numeric",
               month: "2-digit",
               day: "2-digit",
@@ -272,7 +273,7 @@ export function InvoicesTable({
         key: "issue_date",
         label: "Issue Date",
         formatter: (date) =>
-          new Date(date).toLocaleDateString("en-IN", {
+          formatIndianDate(date, {
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
@@ -316,7 +317,7 @@ export function InvoicesTable({
     const enrichedInvoices = processedInvoices.map((invoice) => ({
       ...invoice,
       client_name: invoice.clients.name,
-      issue_date_fmt: new Date(invoice.issue_date).toLocaleDateString("en-IN", {
+      issue_date_fmt: formatIndianDate(invoice.issue_date, {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -324,7 +325,7 @@ export function InvoicesTable({
       due_date_display:
         invoice.due_days_type === "end_of_month"
           ? "End of billed month"
-          : new Date(invoice.due_date).toLocaleDateString("en-IN", {
+          : formatIndianDate(invoice.due_date, {
               year: "numeric",
               month: "2-digit",
               day: "2-digit",
@@ -622,7 +623,7 @@ export function InvoicesTable({
       }
 
       pdf.text(
-        `Date: ${new Date(invoice.issue_date).toLocaleDateString("en-IN", {
+        `Date: ${formatIndianDate(invoice.issue_date, {
           year: "numeric",
           month: "long",
           day: "numeric",
@@ -637,7 +638,7 @@ export function InvoicesTable({
         `Due Date: ${
           invoice.due_days_type === "end_of_month"
             ? "End of the billed month"
-            : new Date(invoice.due_date).toLocaleDateString("en-IN", {
+            : formatIndianDate(invoice.due_date, {
                 year: "numeric",
                 month: "long",
                 day: "numeric",
@@ -1083,10 +1084,11 @@ export function InvoicesTable({
                         </div>
                       </TableCell>
                       <TableCell className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs">
-                        {new Date(invoice.issue_date).toLocaleDateString(
-                          "en-IN",
-                          { year: "numeric", month: "2-digit", day: "2-digit" },
-                        )}
+                        {formatIndianDate(invoice.issue_date, {
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                        })}
                       </TableCell>
                       <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs">
                         {invoice.due_days_type === "end_of_month" ? (
@@ -1094,14 +1096,11 @@ export function InvoicesTable({
                             End of the billed month
                           </span>
                         ) : (
-                          new Date(invoice.due_date).toLocaleDateString(
-                            "en-IN",
-                            {
-                              year: "numeric",
-                              month: "2-digit",
-                              day: "2-digit",
-                            },
-                          )
+                          formatIndianDate(invoice.due_date, {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                          })
                         )}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">

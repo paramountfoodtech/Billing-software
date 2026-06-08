@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { formatIndianDate } from "@/lib/date-time";
 import { useRouter } from "next/navigation";
 import { useState, useMemo, ReactNode } from "react";
 import { usePagination } from "@/hooks/use-pagination";
@@ -364,7 +365,7 @@ export function PaymentsTable({
         key: "payment_date",
         label: "Payment Date",
         formatter: (date) =>
-          new Date(date).toLocaleDateString("en-IN", {
+          formatIndianDate(date, {
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
@@ -394,7 +395,7 @@ export function PaymentsTable({
       invoice_number: p.invoices.invoice_number,
       client_name: p.invoices.clients.name,
       amount_fmt: `Rs.${Number(p.amount).toFixed(2)}`,
-      payment_date_fmt: new Date(p.payment_date).toLocaleDateString("en-IN", {
+      payment_date_fmt: formatIndianDate(p.payment_date, {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -567,14 +568,11 @@ export function PaymentsTable({
                   return (
                     <TableRow key={payment.id}>
                       <TableCell className="px-2 sm:px-4 py-2 sm:py-3 text-xs">
-                        {new Date(payment.payment_date).toLocaleDateString(
-                          "en-IN",
-                          {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          },
-                        )}
+                        {formatIndianDate(payment.payment_date, {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
                       </TableCell>
                       <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
                         <Link

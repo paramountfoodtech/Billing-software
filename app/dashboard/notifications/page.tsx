@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Trash2, ExternalLink } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { formatIndianDate } from "@/lib/date-time"
 
 interface Notification {
   id: string
@@ -136,7 +137,7 @@ export default function NotificationsPage() {
                     <p className="text-sm text-slate-600 mb-3">{notification.message}</p>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">
-                        {new Date(notification.created_at).toLocaleDateString("en-IN", {
+                        {formatIndianDate(notification.created_at, {
                           year: "numeric",
                           month: "short",
                           day: "numeric",
