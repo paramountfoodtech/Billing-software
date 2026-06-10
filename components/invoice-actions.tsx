@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical, Send, CheckCircle, XCircle } from "lucide-react";
+import { IconTooltip } from "@/components/icon-tooltip";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -55,11 +56,13 @@ export function InvoiceActions({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" disabled={isUpdating}>
-          <MoreVertical className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
+      <IconTooltip label="Invoice actions">
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" disabled={isUpdating}>
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+      </IconTooltip>
       <DropdownMenuContent align="end">
         {currentStatus === "draft" && (
           <DropdownMenuItem onClick={() => updateStatus("recorded")}>

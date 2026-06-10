@@ -12,6 +12,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select"
 import { createUser, updateUser } from "@/app/actions/create-user"
 import { useToast } from "@/hooks/use-toast"
 import { Eye, EyeOff } from "lucide-react"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface Organization {
   id: string
@@ -138,16 +139,20 @@ export function UserForm({ organizations, initialData }: UserFormProps) {
                 minLength={6}
                 className="pr-10"
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                onClick={() => setShowPassword((prev) => !prev)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
+              <IconTooltip
+                label={showPassword ? "Hide password" : "Show password"}
               >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </IconTooltip>
             </div>
           </div>
         )}

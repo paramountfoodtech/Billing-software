@@ -20,6 +20,7 @@ import {
 } from "@/lib/entry-history";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getIndianToday } from "@/lib/date-time";
+import { isPaymentReferenceDuplicate } from "@/lib/payment-reference";
 
 interface Invoice {
   id: string;
@@ -190,19 +191,18 @@ export function PaymentForm({
     setIsCheckingReference(true);
 
     const timer = setTimeout(async () => {
-      const { data: existingPayment, error } = await supabase
-        .from("payments")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("reference_number", normalizedReference)
-        .limit(1);
+      const { isDuplicate, error } = await isPaymentReferenceDuplicate(
+        supabase,
+        organizationId,
+        normalizedReference,
+      );
 
       if (!isActive) return;
 
       if (error) {
         setIsReferenceDuplicate(false);
       } else {
-        setIsReferenceDuplicate(Boolean(existingPayment?.length));
+        setIsReferenceDuplicate(isDuplicate);
       }
       setIsCheckingReference(false);
     }, 350);
@@ -258,17 +258,16 @@ export function PaymentForm({
       let paymentId: string | null = null;
 
       if (normalizedReference) {
-        const { data: existingPayment, error: duplicateCheckError } =
-          await supabase
-            .from("payments")
-            .select("id")
-            .eq("organization_id", profile.organization_id)
-            .eq("reference_number", normalizedReference)
-            .limit(1);
+        const { isDuplicate, error: duplicateCheckError } =
+          await isPaymentReferenceDuplicate(
+            supabase,
+            profile.organization_id,
+            normalizedReference,
+          );
 
         if (duplicateCheckError) throw duplicateCheckError;
 
-        if (existingPayment && existingPayment.length > 0) {
+        if (isDuplicate) {
           toast({
             variant: "destructive",
             title: "Duplicate payment reference",

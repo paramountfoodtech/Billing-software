@@ -28,6 +28,7 @@ import type { MissedInvoiceRange } from "@/lib/invoice-gaps";
 import type { DiscardedInvoiceNumber } from "@/lib/discarded-invoice-numbers";
 import { cn } from "@/lib/utils";
 import { getProfileDisplayName } from "@/lib/entry-history";
+import { IconTooltip } from "@/components/icon-tooltip";
 import { formatIndianDateTime } from "@/lib/date-time";
 
 interface MissedInvoiceNumbersProps {
@@ -376,15 +377,17 @@ export function MissedInvoiceNumbers({
 
           {discardedNumbers.length > 0 && (
             <DialogFooter className="flex-shrink-0 border-t pt-4 sm:justify-start">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full border-slate-300 bg-slate-50 hover:bg-slate-100 sm:w-auto"
-                onClick={() => setDiscardedDialogOpen(true)}
-              >
-                <Trash2 className="h-4 w-4 mr-2 text-slate-600" />
-                Discarded ({discardedNumbers.length})
-              </Button>
+              <IconTooltip label={`Discarded (${discardedNumbers.length})`}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-slate-300 bg-slate-50 hover:bg-slate-100 sm:w-auto"
+                  onClick={() => setDiscardedDialogOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2 text-slate-600" />
+                  Discarded ({discardedNumbers.length})
+                </Button>
+              </IconTooltip>
             </DialogFooter>
           )}
         </DialogContent>
@@ -521,19 +524,27 @@ export function MissedInvoiceNumbers({
             >
               Cancel
             </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDiscard}
-              disabled={isSubmitting || !discardNote.trim()}
+            <IconTooltip
+              label={
+                isSingleTarget
+                  ? "Discard"
+                  : `Discard (${actionTarget?.numbers.length})`
+              }
             >
-              {isSubmitting ? (
-                <Spinner className="h-4 w-4 mr-2" />
-              ) : (
-                <Trash2 className="h-4 w-4 mr-2" />
-              )}
-              Discard{!isSingleTarget ? ` (${actionTarget?.numbers.length})` : ""}
-            </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleDiscard}
+                disabled={isSubmitting || !discardNote.trim()}
+              >
+                {isSubmitting ? (
+                  <Spinner className="h-4 w-4 mr-2" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                Discard{!isSingleTarget ? ` (${actionTarget?.numbers.length})` : ""}
+              </Button>
+            </IconTooltip>
           </DialogFooter>
         </DialogContent>
       </Dialog>

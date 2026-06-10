@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/icon-tooltip";
 import { formatIndianTime } from "@/lib/date-time";
 
 export function DashboardRefresh() {
@@ -32,15 +33,16 @@ export function DashboardRefresh() {
       {lastUpdated && (
         <span>Updated {formatIndianTime(lastUpdated)}</span>
       )}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleManualRefresh}
-        className="h-7 w-7 p-0"
-        title="Refresh data"
-      >
-        <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
-      </Button>
+      <IconTooltip label="Refresh data">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleManualRefresh}
+          className="h-7 w-7 p-0"
+        >
+          <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
+        </Button>
+      </IconTooltip>
     </div>
   );
 }

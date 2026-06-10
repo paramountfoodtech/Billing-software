@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { ArrowDown, ArrowUp, ArrowUpDown, Download, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -211,24 +212,28 @@ export function ProductReportsTable({ rows, daysInMonth, monthLabel }: ProductRe
   return (
     <div className="space-y-4">
       <div className="flex justify-end gap-2">
-        <Button
-          onClick={handleExportCSV}
-          size="sm"
-          variant="outline"
-          disabled={processedRows.length === 0}
-        >
-          <Download className="h-4 w-4" />
-          <span className="ml-2 hidden sm:inline">CSV</span>
-        </Button>
-        <Button
-          onClick={handleExportPDF}
-          size="sm"
-          variant="outline"
-          disabled={processedRows.length === 0}
-        >
-          <FileText className="h-4 w-4" />
-          <span className="ml-2 hidden sm:inline">PDF</span>
-        </Button>
+        <IconTooltip label="Export to CSV">
+          <Button
+            onClick={handleExportCSV}
+            size="sm"
+            variant="outline"
+            disabled={processedRows.length === 0}
+          >
+            <Download className="h-4 w-4" />
+            <span className="ml-2 hidden sm:inline">CSV</span>
+          </Button>
+        </IconTooltip>
+        <IconTooltip label="Export to PDF">
+          <Button
+            onClick={handleExportPDF}
+            size="sm"
+            variant="outline"
+            disabled={processedRows.length === 0}
+          >
+            <FileText className="h-4 w-4" />
+            <span className="ml-2 hidden sm:inline">PDF</span>
+          </Button>
+        </IconTooltip>
       </div>
 
       <div className="rounded-lg border bg-white overflow-x-auto">

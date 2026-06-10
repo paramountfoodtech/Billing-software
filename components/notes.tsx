@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
-import { useRouter } from "next/navigation"
 import { MessageSquare, Send } from "lucide-react"
 import { formatIndianDate } from "@/lib/date-time"
 
@@ -21,21 +20,48 @@ interface Note {
   } | null
 }
 
+type NoteReferenceType =
+  | "invoice"
+  | "payment"
+  | "purchase_invoice"
+  | "purchase_payment"
+
 interface NotesProps {
   notes: Note[]
   referenceId: string
-  referenceType: "invoice" | "payment"
+  referenceType: NoteReferenceType
   userRole?: string
 }
 
-export function Notes({ notes: initialNotes, referenceId, referenceType, userRole }: NotesProps) {
+const NOTE_CONFIG: Record<
+  NoteReferenceType,
+  { table: string; foreignKey: string }
+> = {
+  invoice: { table: "invoice_notes", foreignKey: "invoice_id" },
+  payment: { table: "payment_notes", foreignKey: "payment_id" },
+  purchase_invoice: {
+    table: "purchase_invoice_notes",
+    foreignKey: "purchase_invoice_id",
+  },
+  purchase_payment: {
+    table: "purchase_payment_notes",
+    foreignKey: "purchase_payment_id",
+  },
+}
+
+export function Notes({
+  notes: initialNotes,
+  referenceId,
+  referenceType,
+  userRole,
+}: NotesProps) {
   const [notes, setNotes] = useState<Note[]>(initialNotes)
   const [newNote, setNewNote] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { toast } = useToast()
-  const router = useRouter()
   const supabase = createClient()
 
+  const { table: tableName, foreignKey } = NOTE_CONFIG[referenceType]
   const canAddNotes = userRole === "super_admin" || userRole === "admin"
 
   const hydrateNotesWithProfiles = async (
@@ -77,9 +103,7 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
     setNotes(notesWithProfiles)
   }
 
-  // Set up real-time subscription (server already passed initial notes)
   useEffect(() => {
-    const tableName = referenceType === "invoice" ? "invoice_notes" : "payment_notes"
     const channel = supabase
       .channel(`${tableName}-${referenceId}`)
       .on(
@@ -88,12 +112,9 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
           event: "*",
           schema: "public",
           table: tableName,
-          filter: `${referenceType === "invoice" ? "invoice_id" : "payment_id"}=eq.${referenceId}`,
+          filter: `${foreignKey}=eq.${referenceId}`,
         },
-        async (payload) => {
-          // Refetch notes when changes occur
-          const foreignKey = referenceType === "invoice" ? "invoice_id" : "payment_id"
-
+        async () => {
           const { data: updatedNotes } = await supabase
             .from(tableName)
             .select("id, note, created_at, created_by")
@@ -110,11 +131,11 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [referenceId, referenceType, supabase])
+  }, [referenceId, tableName, foreignKey, supabase])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!newNote.trim()) {
       toast({
         variant: "destructive",
@@ -126,11 +147,8 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
 
     setIsSubmitting(true)
 
-    const tableName = referenceType === "invoice" ? "invoice_notes" : "payment_notes"
-    const foreignKey = referenceType === "invoice" ? "invoice_id" : "payment_id"
-
     const { data: userData } = await supabase.auth.getUser()
-    
+
     if (!userData.user) {
       toast({
         variant: "destructive",
@@ -141,13 +159,11 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
       return
     }
 
-    const { error } = await supabase
-      .from(tableName)
-      .insert({
-        [foreignKey]: referenceId,
-        created_by: userData.user.id,
-        note: newNote.trim(),
-      })
+    const { error } = await supabase.from(tableName).insert({
+      [foreignKey]: referenceId,
+      created_by: userData.user.id,
+      note: newNote.trim(),
+    })
 
     if (error) {
       toast({
@@ -162,41 +178,16 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
         description: "Your note has been added successfully.",
       })
       setNewNote("")
-      // Refetch notes immediately after successful submission
-      const fetchNotes = async () => {
-        const tableName = referenceType === "invoice" ? "invoice_notes" : "payment_notes"
-        const foreignKey = referenceType === "invoice" ? "invoice_id" : "payment_id"
 
-        const { data: fetchedNotes } = await supabase
-          .from(tableName)
-          .select("id, note, created_at, created_by")
-          .eq(foreignKey, referenceId)
-          .order("created_at", { ascending: false })
+      const { data: fetchedNotes } = await supabase
+        .from(tableName)
+        .select("id, note, created_at, created_by")
+        .eq(foreignKey, referenceId)
+        .order("created_at", { ascending: false })
 
-        if (fetchedNotes && fetchedNotes.length > 0) {
-          const createdByIds = fetchedNotes.map((note: any) => note.created_by)
-          const { data: profiles } = await supabase
-            .from("profiles")
-            .select("id, full_name, role")
-            .in("id", createdByIds)
-
-          const notesWithProfiles = fetchedNotes.map((note: any) => {
-            const profile = profiles?.find((p: any) => p.id === note.created_by)
-            return {
-              id: note.id,
-              note: note.note,
-              created_at: note.created_at,
-              profiles: profile ? {
-                full_name: profile.full_name,
-                role: profile.role
-              } : null
-            }
-          }).filter((note: any) => note.profiles !== null)
-
-          setNotes(notesWithProfiles)
-        }
+      if (fetchedNotes) {
+        await hydrateNotesWithProfiles(fetchedNotes)
       }
-      await fetchNotes()
     }
 
     setIsSubmitting(false)
@@ -211,7 +202,6 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Add Note Form - Only for Admin/Manager */}
         {canAddNotes && (
           <form onSubmit={handleSubmit} className="space-y-3">
             <Textarea
@@ -223,7 +213,11 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
               className="resize-none"
             />
             <div className="flex justify-end">
-              <Button type="submit" disabled={isSubmitting || !newNote.trim()} size="sm">
+              <Button
+                type="submit"
+                disabled={isSubmitting || !newNote.trim()}
+                size="sm"
+              >
                 <Send className="h-4 w-4 mr-2" />
                 {isSubmitting ? "Adding..." : "Add Note"}
               </Button>
@@ -231,7 +225,6 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
           </form>
         )}
 
-        {/* Notes List */}
         <div className="space-y-3">
           {notes.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
@@ -239,10 +232,15 @@ export function Notes({ notes: initialNotes, referenceId, referenceType, userRol
             </div>
           ) : (
             notes.map((note) => (
-              <div key={note.id} className="border rounded-lg p-4 space-y-2 bg-muted/30">
+              <div
+                key={note.id}
+                className="border rounded-lg p-4 space-y-2 bg-muted/30"
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">{note.profiles?.full_name || "Unknown User"}</span>
+                    <span className="font-medium text-sm">
+                      {note.profiles?.full_name || "Unknown User"}
+                    </span>
                     <Badge variant="outline" className="text-xs">
                       {note.profiles?.role || "Unknown"}
                     </Badge>

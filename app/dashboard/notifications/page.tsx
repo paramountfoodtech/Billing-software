@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Trash2, ExternalLink } from "lucide-react"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { useRouter } from "next/navigation"
 import { formatIndianDate } from "@/lib/date-time"
 
@@ -159,20 +160,22 @@ export default function NotificationsPage() {
                   </div>
 
                   <div className="flex items-start gap-2">
-                    <Link
-                      href={getNotificationLink(notification)}
-                      className="text-blue-600 hover:text-blue-700 p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                      title="View"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </Link>
-                    <button
-                      onClick={() => deleteNotification(notification.id)}
-                      className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-100 rounded-lg transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <IconTooltip label="View">
+                      <Link
+                        href={getNotificationLink(notification)}
+                        className="text-blue-600 hover:text-blue-700 p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Link>
+                    </IconTooltip>
+                    <IconTooltip label="Delete">
+                      <button
+                        onClick={() => deleteNotification(notification.id)}
+                        className="text-slate-400 hover:text-red-600 p-2 hover:bg-red-100 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </IconTooltip>
                   </div>
                 </div>
               </Card>

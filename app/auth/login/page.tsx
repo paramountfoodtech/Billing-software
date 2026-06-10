@@ -15,6 +15,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -133,15 +134,19 @@ export default function LoginPage() {
                         disabled={isLoading}
                         className="h-11 pr-10"
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground"
-                        aria-label={showPassword ? "Hide password" : "Show password"}
-                        disabled={isLoading}
+                      <IconTooltip
+                        label={showPassword ? "Hide password" : "Show password"}
                       >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          disabled={isLoading}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </IconTooltip>
                     </div>
                   </div>
                   <Button type="submit" className="w-full h-11" disabled={isLoading}>

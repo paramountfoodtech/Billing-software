@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Notes } from "@/components/notes";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { formatIndianDate } from "@/lib/date-time";
+import { IconTooltip } from "@/components/icon-tooltip";
 
 const statusConfig = {
   pending: { label: "Pending", className: "bg-yellow-100 text-yellow-800" },
@@ -107,12 +108,14 @@ export default async function PaymentDetailPage({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/dashboard/payments">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Payments
-            </Link>
-          </Button>
+          <IconTooltip label="Back to Payments">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/dashboard/payments">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Payments
+              </Link>
+            </Button>
+          </IconTooltip>
         </div>
         <div className="flex items-center gap-2">
           <EntryHistoryButton
@@ -121,12 +124,14 @@ export default async function PaymentDetailPage({
             createdAt={payment.created_at}
             createdByName={payment.profiles?.full_name}
           />
-          <Button variant="outline" asChild>
-            <Link href={`/dashboard/invoices/${payment.invoices.id}`}>
-              <FileText className="h-4 w-4 mr-2" />
-              View Invoice
-            </Link>
-          </Button>
+          <IconTooltip label="View Invoice">
+            <Button variant="outline" asChild>
+              <Link href={`/dashboard/invoices/${payment.invoices.id}`}>
+                <FileText className="h-4 w-4 mr-2" />
+                View Invoice
+              </Link>
+            </Button>
+          </IconTooltip>
         </div>
       </div>
 

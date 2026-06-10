@@ -11,9 +11,14 @@ const MONTHS = [
 interface MonthYearPickerProps {
   currentYear: number
   currentMonth: number // 1-indexed
+  basePath?: string
 }
 
-export function MonthYearPicker({ currentYear, currentMonth }: MonthYearPickerProps) {
+export function MonthYearPicker({
+  currentYear,
+  currentMonth,
+  basePath = "/dashboard/reports",
+}: MonthYearPickerProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const today = new Date()
@@ -28,7 +33,7 @@ export function MonthYearPicker({ currentYear, currentMonth }: MonthYearPickerPr
     const params = new URLSearchParams(searchParams.toString())
     params.set("year", String(year))
     params.set("month", String(month))
-    router.push(`/dashboard/reports?${params.toString()}`)
+    router.push(`${basePath}?${params.toString()}`)
   }
 
   const handleMonthChange = (value: string) => {

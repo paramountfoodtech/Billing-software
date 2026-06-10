@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast"
 import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
 import { Input } from "@/components/ui/input"
 import { EntryHistoryButton } from "@/components/entry-history-button"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface Product {
   id: string
@@ -112,18 +113,22 @@ function SortableProductRow({
             createdAt={product.created_at}
             createdByName={product.profiles?.full_name}
           />
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={`/dashboard/products/${product.id}/edit`}>
-              <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
-            </Link>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onDelete(product.id)}
-          >
-            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-          </Button>
+          <IconTooltip label="Edit product">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/dashboard/products/${product.id}/edit`}>
+                <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
+              </Link>
+            </Button>
+          </IconTooltip>
+          <IconTooltip label="Delete product">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onDelete(product.id)}
+            >
+              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+            </Button>
+          </IconTooltip>
         </div>
       </TableCell>
     </TableRow>
@@ -325,9 +330,11 @@ export function ProductsTable({ products }: ProductsTableProps) {
   return (
     <>
       <div className="flex justify-end mb-4">
-        <Button onClick={handleExport} size="sm" variant="outline" title="Export to CSV">
-          <Download className="h-4 w-4" />
-        </Button>
+        <IconTooltip label="Export to CSV">
+          <Button onClick={handleExport} size="sm" variant="outline">
+            <Download className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
       </div>
       <div className="rounded-lg border bg-white overflow-x-auto">
         <DndContext

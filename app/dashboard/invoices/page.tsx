@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPages } from "@/lib/supabase/fetch-all";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import Link from "next/link";
@@ -37,16 +38,19 @@ export default async function InvoicesPage() {
     .select("id, name")
     .order("name", { ascending: true });
 
-  const { data: invoices } = await supabase
-    .from("invoices")
-    .select(
-      `
-      *,
-      clients(name, email),
-      profiles!invoices_created_by_fkey(full_name)
-    `,
-    )
-    .order("created_at", { ascending: false });
+  const invoices = await fetchAllPages((from, to) =>
+    supabase
+      .from("invoices")
+      .select(
+        `
+        *,
+        clients(name, email),
+        profiles!invoices_created_by_fkey(full_name)
+      `,
+      )
+      .order("created_at", { ascending: false })
+      .range(from, to),
+  );
 
   let discardedNumbers: Array<{
     id: string;

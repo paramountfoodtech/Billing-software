@@ -14,6 +14,7 @@ import { ArrowUpDown, ArrowUp, ArrowDown, Download, FileText, FileDown } from "l
 import { usePagination } from "@/hooks/use-pagination"
 import { TablePagination } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { useToast } from "@/hooks/use-toast"
 import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils"
 import {
@@ -536,24 +537,28 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
   return (
     <div className="space-y-4">
       <div className="flex justify-end gap-2">
-        <Button
-          onClick={handleExportCSV}
-          size="sm"
-          variant="outline"
-          disabled={processedRows.length === 0}
-        >
-          <Download className="h-4 w-4" />
-          <span className="ml-2 hidden sm:inline">CSV</span>
-        </Button>
-        <Button
-          onClick={handleExportPDF}
-          size="sm"
-          variant="outline"
-          disabled={processedRows.length === 0}
-        >
-          <FileText className="h-4 w-4" />
-          <span className="ml-2 hidden sm:inline">PDF</span>
-        </Button>
+        <IconTooltip label="Export to CSV">
+          <Button
+            onClick={handleExportCSV}
+            size="sm"
+            variant="outline"
+            disabled={processedRows.length === 0}
+          >
+            <Download className="h-4 w-4" />
+            <span className="ml-2 hidden sm:inline">CSV</span>
+          </Button>
+        </IconTooltip>
+        <IconTooltip label="Export to PDF">
+          <Button
+            onClick={handleExportPDF}
+            size="sm"
+            variant="outline"
+            disabled={processedRows.length === 0}
+          >
+            <FileText className="h-4 w-4" />
+            <span className="ml-2 hidden sm:inline">PDF</span>
+          </Button>
+        </IconTooltip>
       </div>
       <div className="rounded-lg border bg-white overflow-x-auto">
         <Table className="text-xs sm:text-sm min-w-[1180px]">

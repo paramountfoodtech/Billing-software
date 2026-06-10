@@ -43,6 +43,7 @@ import {
   getProfileDisplayName,
   logEntryHistory,
 } from "@/lib/entry-history";
+import { IconTooltip } from "@/components/icon-tooltip";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -1642,15 +1643,17 @@ export function InvoiceForm({
                   className={`space-y-3 rounded-lg border p-4 ${isExactDuplicate(index) ? "border-red-500 border-2" : ""}`}
                 >
                   <div className="flex items-start gap-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveItem(index)}
-                      className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <IconTooltip label="Remove line item">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveItem(index)}
+                        className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </IconTooltip>
                     <div className="flex-1 space-y-1">
                       <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                         <div className="flex flex-col gap-1">

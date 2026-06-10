@@ -22,6 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface User {
   id: string
@@ -272,23 +273,27 @@ export function UsersTable({ users, userRole }: { users: User[]; userRole?: stri
                 {userRole === "super_admin" && (
                   <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                     <div className="flex justify-end gap-1 sm:gap-2">
-                      <Link href={`/dashboard/users/${user.id}/edit`}>
-                        <Button variant="ghost" size="sm">
-                          <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+                      <IconTooltip label="Edit user">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/dashboard/users/${user.id}/edit`}>
+                            <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+                          </Link>
                         </Button>
-                      </Link>
+                      </IconTooltip>
                       {user.is_active && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setUserToDelete({ id: user.id, name: user.full_name })
-                            setDeleteDialogOpen(true)
-                          }}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                        </Button>
+                        <IconTooltip label="Deactivate user">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setUserToDelete({ id: user.id, name: user.full_name })
+                              setDeleteDialogOpen(true)
+                            }}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                          </Button>
+                        </IconTooltip>
                       )}
                     </div>
                   </TableCell>

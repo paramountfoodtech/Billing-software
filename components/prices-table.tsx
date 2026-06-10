@@ -46,6 +46,7 @@ import Link from "next/link"
 import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
 import { Input } from "@/components/ui/input"
 import { EntryHistoryButton } from "@/components/entry-history-button"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface PriceCategory {
   id: string
@@ -139,19 +140,23 @@ function SortableCategoryRow({
             entityId={category.id}
             createdAt={category.created_at}
           />
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={`/dashboard/prices/${category.id}/edit`}>
-              <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
-            </Link>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onDelete(category.id)}
-            disabled={isDeleting}
-          >
-            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-          </Button>
+          <IconTooltip label="Edit price category">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/dashboard/prices/${category.id}/edit`}>
+                <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
+              </Link>
+            </Button>
+          </IconTooltip>
+          <IconTooltip label="Delete price category">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onDelete(category.id)}
+              disabled={isDeleting}
+            >
+              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+            </Button>
+          </IconTooltip>
         </div>
       </TableCell>
     </TableRow>
@@ -499,9 +504,11 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
                 />
               </div>
             </div>
-            <Button onClick={handleExport} size="sm" variant="outline" title="Export to CSV" className="w-full sm:w-auto">
-              <Download className="h-4 w-4" />
-            </Button>
+            <IconTooltip label="Export to CSV">
+              <Button onClick={handleExport} size="sm" variant="outline" className="w-full sm:w-auto">
+                <Download className="h-4 w-4" />
+              </Button>
+            </IconTooltip>
           </div>
           <div className="rounded-lg border bg-white overflow-hidden overflow-x-auto">
             <Table>
@@ -549,17 +556,19 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
                             entityId={price.id}
                             createdAt={price.created_at}
                           />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setDeleteTarget({ id: price.id, type: 'price' })
-                              setDeleteDialogOpen(true)
-                            }}
-                            disabled={isDeleting}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                          </Button>
+                          <IconTooltip label="Delete price">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setDeleteTarget({ id: price.id, type: 'price' })
+                                setDeleteDialogOpen(true)
+                              }}
+                              disabled={isDeleting}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
+                          </IconTooltip>
                         </div>
                       </TableCell>
                     </TableRow>

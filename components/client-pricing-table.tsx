@@ -29,6 +29,7 @@ import { formatIndianDate, getIndianToday } from "@/lib/date-time";
 import { getPriceForCategoryOnDate } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
+import { IconTooltip } from "@/components/icon-tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -368,15 +369,16 @@ export function ClientPricingTable({
     <>
       <div className="flex items-end gap-3 justify-between mb-4">
         <div className="flex items-center gap-3">{toolbarLeft}</div>
-        <Button
-          onClick={handleExport}
-          size="sm"
-          variant="outline"
-          title="Export to CSV"
-          disabled={processedRules.length === 0}
-        >
-          <Download className="h-4 w-4" />
-        </Button>
+        <IconTooltip label="Export to CSV">
+          <Button
+            onClick={handleExport}
+            size="sm"
+            variant="outline"
+            disabled={processedRules.length === 0}
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+        </IconTooltip>
       </div>
       <div className="rounded-lg border bg-white overflow-x-auto">
         <Table className="text-xs sm:text-sm">
@@ -567,24 +569,28 @@ export function ClientPricingTable({
                           entityId={rule.id}
                           createdAt={rule.created_at}
                         />
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link
-                            href={`/dashboard/client-pricing/${rule.id}/edit`}
+                        <IconTooltip label="Edit pricing rule">
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link
+                              href={`/dashboard/client-pricing/${rule.id}/edit`}
+                            >
+                              <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
+                            </Link>
+                          </Button>
+                        </IconTooltip>
+                        <IconTooltip label="Delete pricing rule">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setRuleToDelete(rule.id);
+                              setDeleteDialogOpen(true);
+                            }}
+                            disabled={isDeleting}
                           >
-                            <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </Link>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setRuleToDelete(rule.id);
-                            setDeleteDialogOpen(true);
-                          }}
-                          disabled={isDeleting}
-                        >
-                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-                        </Button>
+                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+                          </Button>
+                        </IconTooltip>
                       </div>
                     </TableCell>
                   )}

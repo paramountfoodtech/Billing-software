@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { IconTooltip } from "@/components/icon-tooltip";
 
 interface MonthSelectorProps {
   currentYear: number;
@@ -43,26 +44,30 @@ export function MonthSelector({ currentYear, currentMonth }: MonthSelectorProps)
 
   return (
     <div className="flex items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={prevMonth}
-        className="h-8 w-8 p-0"
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </Button>
+      <IconTooltip label="Previous month">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={prevMonth}
+          className="h-8 w-8 p-0"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+      </IconTooltip>
       <span className="text-sm font-medium min-w-[130px] text-center">
         {monthName}
       </span>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={nextMonth}
-        disabled={isCurrentMonth}
-        className="h-8 w-8 p-0"
-      >
-        <ChevronRight className="h-4 w-4" />
-      </Button>
+      <IconTooltip label="Next month">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={nextMonth}
+          disabled={isCurrentMonth}
+          className="h-8 w-8 p-0"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </IconTooltip>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
 import { formatIndianDate, formatIndianTime } from "@/lib/date-time"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 interface Notification {
   id: string
@@ -123,17 +124,19 @@ export function NotificationBell({ userId }: NotificationBellProps) {
   return (
     <div className="relative">
       {/* Bell Icon Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors duration-200"
-      >
-        <Bell className="h-5 w-5" />
-        {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 h-5 w-5 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center">
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
-        )}
-      </button>
+      <IconTooltip label="Notifications">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="relative p-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors duration-200"
+        >
+          <Bell className="h-5 w-5" />
+          {unreadCount > 0 && (
+            <span className="absolute top-0 right-0 h-5 w-5 bg-red-500 text-white text-xs font-semibold rounded-full flex items-center justify-center">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </button>
+      </IconTooltip>
 
       {/* Notification Dropdown */}
       {isOpen && (
@@ -146,9 +149,14 @@ export function NotificationBell({ userId }: NotificationBellProps) {
             {/* Header */}
             <div className="bg-gradient-to-r from-slate-50 to-white px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <h3 className="font-semibold text-slate-900">Notifications</h3>
-              <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                <X className="h-4 w-4" />
-              </button>
+              <IconTooltip label="Close">
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </IconTooltip>
             </div>
 
             {/* Notifications List */}
@@ -187,21 +195,23 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                         </div>
                       </div>
                       <div className="flex items-start gap-2">
-                        <Link
-                          href={getNotificationLink(notification)}
-                          onClick={() => handleNotificationNavigation(notification)}
-                          className="text-blue-600 hover:text-blue-700 p-1"
-                          title="View"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </Link>
-                        <button
-                          onClick={() => deleteNotification(notification.id)}
-                          className="text-slate-400 hover:text-red-600 p-1 transition-colors"
-                          title="Delete"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                        <IconTooltip label="View">
+                          <Link
+                            href={getNotificationLink(notification)}
+                            onClick={() => handleNotificationNavigation(notification)}
+                            className="text-blue-600 hover:text-blue-700 p-1"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Link>
+                        </IconTooltip>
+                        <IconTooltip label="Delete">
+                          <button
+                            onClick={() => deleteNotification(notification.id)}
+                            className="text-slate-400 hover:text-red-600 p-1 transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </IconTooltip>
                       </div>
                     </div>
                   </div>

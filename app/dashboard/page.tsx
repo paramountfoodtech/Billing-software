@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPages } from "@/lib/supabase/fetch-all";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,6 +19,11 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
+  TrendingUp,
+  ShoppingCart,
+  Receipt,
+  Scale,
+  Wallet,
 } from "lucide-react";
 import { DashboardCharts } from "@/components/dashboard-charts";
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper";
@@ -28,6 +34,13 @@ import { LoadingOverlay } from "@/components/loading-overlay";
 
 // Prevent caching to ensure fresh data on every request
 export const revalidate = 0;
+
+function formatINR(amount: number) {
+  return amount.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
 
 function getCurrentFinancialYearRange() {
   const today = new Date();
@@ -63,44 +76,80 @@ export default async function DashboardPage() {
 
   const [
     clientsCountResult,
-    fyInvoicesResult,
-    fyPaymentsResult,
+    fyInvoices,
+    fyPayments,
+    fyPurchaseInvoices,
     allClientsResult,
-    allInvoicesResult,
+    allInvoices,
   ] = await Promise.all([
     supabase.from("clients").select("id", { count: "exact", head: true }),
-    supabase
-      .from("invoices")
-      .select("*, clients(name)")
-      .gte("issue_date", fyRange.start)
-      .lte("issue_date", fyRange.end)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("payments")
-      .select("*")
-      .gte("payment_date", fyRange.start)
-      .lte("payment_date", fyRange.end)
-      .order("payment_date", { ascending: false }),
+    fetchAllPages((from, to) =>
+      supabase
+        .from("invoices")
+        .select("*, clients(name)")
+        .gte("issue_date", fyRange.start)
+        .lte("issue_date", fyRange.end)
+        .order("created_at", { ascending: false })
+        .range(from, to),
+    ),
+    fetchAllPages((from, to) =>
+      supabase
+        .from("payments")
+        .select("*")
+        .gte("payment_date", fyRange.start)
+        .lte("payment_date", fyRange.end)
+        .order("payment_date", { ascending: false })
+        .range(from, to),
+    ),
+    fetchAllPages((from, to) =>
+      supabase
+        .from("purchase_invoices")
+        .select("total_amount, status, invoice_type")
+        .gte("issue_date", fyRange.start)
+        .lte("issue_date", fyRange.end)
+        .order("issue_date", { ascending: true })
+        .range(from, to),
+    ),
     supabase.from("clients").select("id, name").order("name", { ascending: true }),
-    supabase
-      .from("invoices")
-      .select("*, clients(name, email)")
-      .order("created_at", { ascending: false }),
+    fetchAllPages((from, to) =>
+      supabase
+        .from("invoices")
+        .select("*, clients(name, email)")
+        .order("created_at", { ascending: false })
+        .range(from, to),
+    ),
   ]);
 
   const totalClients = clientsCountResult.count || 0;
-  const fyInvoices = fyInvoicesResult.data || [];
-  const fyPayments = fyPaymentsResult.data || [];
 
   const today = new Date();
   const msInDay = 1000 * 60 * 60 * 24;
 
-  // Core KPIs
-  const totalRevenue = fyPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-  const totalInvoiced = fyInvoices.reduce(
+  const activeSalesInvoices = fyInvoices.filter(
+    (inv) => inv.status !== "cancelled",
+  );
+  const activePurchaseInvoices = fyPurchaseInvoices.filter(
+    (inv) => inv.status !== "cancelled",
+  );
+
+  const totalSale = activeSalesInvoices.reduce(
     (sum, inv) => sum + Number(inv.total_amount),
     0,
   );
+  const totalPurchase = activePurchaseInvoices
+    .filter((inv) => (inv.invoice_type || "challan") === "challan")
+    .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
+  const totalExpenses = activePurchaseInvoices
+    .filter((inv) =>
+      ["salary", "expense"].includes(inv.invoice_type || ""),
+    )
+    .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
+  const grossAmount = totalSale - totalPurchase;
+  const netAmount = grossAmount - totalExpenses;
+
+  // Core KPIs
+  const totalRevenue = fyPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const totalInvoiced = totalSale;
   const totalOutstanding = fyInvoices
     .filter((inv) => inv.status !== "paid" && inv.status !== "cancelled")
     .reduce(
@@ -212,8 +261,100 @@ export default async function DashboardPage() {
           <DashboardRefresh />
         </div>
 
-        {/* Row 1: Core KPIs */}
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+        {/* Financial summary: Sale, Purchase, Expenses, Gross, Net */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 mb-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium">
+                Total Sale
+              </CardTitle>
+              <TrendingUp className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl sm:text-2xl font-bold text-blue-700">
+                ₹{formatINR(totalSale)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {activeSalesInvoices.length} sales invoices this FY
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium">
+                Total Purchase
+              </CardTitle>
+              <ShoppingCart className="h-4 w-4 text-orange-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl sm:text-2xl font-bold text-orange-700">
+                ₹{formatINR(totalPurchase)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Challan purchases this FY
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium">
+                Total Expenses
+              </CardTitle>
+              <Receipt className="h-4 w-4 text-amber-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl sm:text-2xl font-bold text-amber-700">
+                ₹{formatINR(totalExpenses)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Salary &amp; expense entries this FY
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium">
+                Gross Amount
+              </CardTitle>
+              <Scale className="h-4 w-4 text-purple-600" />
+            </CardHeader>
+            <CardContent>
+              <div
+                className={`text-xl sm:text-2xl font-bold ${grossAmount >= 0 ? "text-purple-700" : "text-red-600"}`}
+              >
+                ₹{formatINR(grossAmount)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Sale − Purchase
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium">
+                Net Amount
+              </CardTitle>
+              <Wallet className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div
+                className={`text-xl sm:text-2xl font-bold ${netAmount >= 0 ? "text-green-700" : "text-red-600"}`}
+              >
+                ₹{formatINR(netAmount)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Gross − Expenses
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Row 2: Collections & clients */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-xs sm:text-sm font-medium">
@@ -223,27 +364,10 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-xl sm:text-2xl font-bold">
-                ₹{totalRevenue.toFixed(2)}
+                ₹{formatINR(totalRevenue)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 FY {fyRange.fy} payments received
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
-                Total Invoiced
-              </CardTitle>
-              <FileText className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">
-                ₹{totalInvoiced.toFixed(2)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {fyInvoices.length} invoices this FY
               </p>
             </CardContent>
           </Card>
@@ -281,7 +405,7 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
-        {/* Row 2: Invoice Status */}
+        {/* Row 3: Invoice Status */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -349,7 +473,7 @@ export default async function DashboardPage() {
           <TabsContent value="client">
             <DashboardClient
               clients={allClientsResult.data || []}
-              invoices={allInvoicesResult.data || []}
+              invoices={allInvoices}
             />
           </TabsContent>
 

@@ -6,6 +6,7 @@ import { Printer } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatIndianDate } from "@/lib/date-time";
+import { IconTooltip } from "@/components/icon-tooltip";
 
 interface InvoiceTemplate {
   company_name: string;
@@ -156,10 +157,12 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
         <Button asChild variant="outline">
           <a href="/dashboard/invoices">Back</a>
         </Button>
-        <Button onClick={handlePrint} disabled={isPrinting}>
-          <Printer className="h-4 w-4 mr-2" />
-          Print Invoice
-        </Button>
+        <IconTooltip label="Print Invoice">
+          <Button onClick={handlePrint} disabled={isPrinting}>
+            <Printer className="h-4 w-4 mr-2" />
+            Print Invoice
+          </Button>
+        </IconTooltip>
       </div>
 
       <Card className="print-area">

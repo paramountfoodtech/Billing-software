@@ -29,6 +29,7 @@ import {
 } from "@/lib/ledger-report"
 import { FileDown, FileText } from "lucide-react"
 import { formatIndianStatementDate } from "@/lib/date-time"
+import { IconTooltip } from "@/components/icon-tooltip"
 
 type ClientOption = { id: string; name: string }
 
@@ -581,20 +582,22 @@ export function MonthlyReportsPanel({
             <FileDown className="h-4 w-4" />
             <span className="ml-2 hidden sm:inline">CSV</span>
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={
-              !clientId || displayRows.length === 0 || loading || exporting
-            }
-            onClick={handleExportPdf}
-          >
-            <FileText className="h-4 w-4" />
-            <span className="ml-2 hidden sm:inline">
-              {exporting ? "PDF…" : "PDF"}
-            </span>
-          </Button>
+          <IconTooltip label={exporting ? "Exporting PDF…" : "Export PDF"}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={
+                !clientId || displayRows.length === 0 || loading || exporting
+              }
+              onClick={handleExportPdf}
+            >
+              <FileText className="h-4 w-4" />
+              <span className="ml-2 hidden sm:inline">
+                {exporting ? "PDF…" : "PDF"}
+              </span>
+            </Button>
+          </IconTooltip>
         </div>
       </div>
 

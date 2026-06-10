@@ -9,6 +9,10 @@ export type EntryEntityType =
   | "price_category"
   | "price_history"
   | "client_pricing"
+  | "purchaser"
+  | "challan"
+  | "purchase_invoice"
+  | "purchase_payment"
 
 export type EntryHistoryAction = "created" | "updated"
 

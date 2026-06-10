@@ -40,6 +40,7 @@ import { useToast } from "@/hooks/use-toast";
 import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
+import { IconTooltip } from "@/components/icon-tooltip";
 
 interface Payment {
   id: string;
@@ -438,26 +439,28 @@ export function PaymentsTable({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">{toolbarLeft}</div>
           <div className="flex gap-2">
-            <Button
-              onClick={handleExport}
-              size="sm"
-              variant="outline"
-              title="Export to CSV"
-              disabled={processedPayments.length === 0}
-            >
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline ml-2">CSV</span>
-            </Button>
-            <Button
-              onClick={handleExportPDF}
-              size="sm"
-              variant="outline"
-              title="Export to PDF"
-              disabled={processedPayments.length === 0}
-            >
-              <FileText className="h-4 w-4" />
-              <span className="hidden sm:inline ml-2">PDF</span>
-            </Button>
+            <IconTooltip label="Export to CSV">
+              <Button
+                onClick={handleExport}
+                size="sm"
+                variant="outline"
+                disabled={processedPayments.length === 0}
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline ml-2">CSV</span>
+              </Button>
+            </IconTooltip>
+            <IconTooltip label="Export to PDF">
+              <Button
+                onClick={handleExportPDF}
+                size="sm"
+                variant="outline"
+                disabled={processedPayments.length === 0}
+              >
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline ml-2">PDF</span>
+              </Button>
+            </IconTooltip>
           </div>
         </div>
       </div>
@@ -614,22 +617,26 @@ export function PaymentsTable({
                             createdAt={payment.created_at}
                             createdByName={payment.profiles?.full_name}
                           />
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/dashboard/payments/${payment.id}`}>
-                              <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
-                            </Link>
-                          </Button>
-                          {userRole === "super_admin" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setPaymentToDelete(payment.id);
-                                setDeleteDialogOpen(true);
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+                          <IconTooltip label="View payment">
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link href={`/dashboard/payments/${payment.id}`}>
+                                <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
+                              </Link>
                             </Button>
+                          </IconTooltip>
+                          {userRole === "super_admin" && (
+                            <IconTooltip label="Delete payment">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setPaymentToDelete(payment.id);
+                                  setDeleteDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+                              </Button>
+                            </IconTooltip>
                           )}
                         </div>
                       </TableCell>

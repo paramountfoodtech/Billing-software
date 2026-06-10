@@ -18,6 +18,7 @@ import {
   getProfileDisplayName,
   logEntryHistory,
 } from "@/lib/entry-history"
+import { IconTooltip } from "@/components/icon-tooltip"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -309,24 +310,28 @@ export function CategoriesManagement({ priceCategories }: CategoriesManagementPr
                     createdAt={category.created_at}
                     createdByName={category.profiles?.full_name}
                   />
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/dashboard/prices/${category.id}/edit`}>
-                      <Pencil className="h-3 w-3 mr-1" />
-                      Edit
-                    </Link>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setPendingDelete({ id: category.id, name: category.name })
-                      setDeleteDialogOpen(true)
-                    }}
-                    disabled={loading}
-                  >
-                    <Trash2 className="h-3 w-3 mr-1 text-red-600" />
-                    Delete
-                  </Button>
+                  <IconTooltip label="Edit">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/dashboard/prices/${category.id}/edit`}>
+                        <Pencil className="h-3 w-3 mr-1" />
+                        Edit
+                      </Link>
+                    </Button>
+                  </IconTooltip>
+                  <IconTooltip label="Delete">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setPendingDelete({ id: category.id, name: category.name })
+                        setDeleteDialogOpen(true)
+                      }}
+                      disabled={loading}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1 text-red-600" />
+                      Delete
+                    </Button>
+                  </IconTooltip>
                 </div>
               </div>
             </CardContent>
