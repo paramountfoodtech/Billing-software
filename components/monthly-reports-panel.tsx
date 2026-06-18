@@ -33,14 +33,30 @@ import { IconTooltip } from "@/components/icon-tooltip"
 
 type ClientOption = { id: string; name: string }
 
-export type MonthlyReportsPanelProps = {
+type SalesStatementPanelBaseProps = {
   clients: ClientOption[]
+  variant: "monthly" | "dateRange"
+}
+
+export type MonthlyReportsPanelProps = SalesStatementPanelBaseProps & {
+  variant?: "monthly"
   reportYear: number
   reportMonth: number
   monthStart: string
   monthEnd: string
   monthLabel: string
 }
+
+export type DateRangeReportsPanelProps = SalesStatementPanelBaseProps & {
+  variant: "dateRange"
+  initialFromDate: string
+  initialToDate: string
+  onDateRangeChange?: (from: string, to: string) => void
+}
+
+type SalesStatementPanelProps =
+  | MonthlyReportsPanelProps
+  | DateRangeReportsPanelProps
 
 function formatStatementDate(isoDate: string): string {
   return formatIndianStatementDate(isoDate)
@@ -60,14 +76,20 @@ function formatPeriodLabel(
   return `${formatStatementDate(rangeStart)} to ${formatStatementDate(rangeEnd)}`
 }
 
-export function MonthlyReportsPanel({
-  clients,
-  reportYear,
-  reportMonth,
-  monthStart,
-  monthEnd,
-  monthLabel,
-}: MonthlyReportsPanelProps) {
+function SalesStatementPanel(props: SalesStatementPanelProps) {
+  const {
+    clients,
+    variant,
+  } = props
+  const isMonthly = variant === "monthly"
+  const reportYear = isMonthly ? props.reportYear : 0
+  const reportMonth = isMonthly ? props.reportMonth : 0
+  const monthStart = isMonthly ? props.monthStart : ""
+  const monthEnd = isMonthly ? props.monthEnd : ""
+  const monthLabel = isMonthly ? props.monthLabel : ""
+  const onDateRangeChange = !isMonthly ? props.onDateRangeChange : undefined
+  const initialFromDate = !isMonthly ? props.initialFromDate : ""
+  const initialToDate = !isMonthly ? props.initialToDate : ""
   const { toast } = useToast()
   const [clientId, setClientId] = useState<string>("")
   const [loading, setLoading] = useState(false)
@@ -80,22 +102,30 @@ export function MonthlyReportsPanel({
     totalPayment: 0,
     closingOutstanding: 0,
   })
-  const [fromDate, setFromDate] = useState("")
-  const [toDate, setToDate] = useState("")
+  const [fromDate, setFromDate] = useState(
+    isMonthly ? "" : props.initialFromDate,
+  )
+  const [toDate, setToDate] = useState(isMonthly ? "" : props.initialToDate)
 
-  const { rangeStart, rangeEnd } = resolveDisplayRange(
-    monthStart,
-    monthEnd,
-    fromDate,
-    toDate,
-  )
-  const periodLabel = formatPeriodLabel(
-    monthLabel,
-    rangeStart,
-    rangeEnd,
-    fromDate,
-    toDate,
-  )
+  const { rangeStart, rangeEnd } = isMonthly
+    ? resolveDisplayRange(monthStart, monthEnd, fromDate, toDate)
+    : { rangeStart: fromDate, rangeEnd: toDate }
+
+  const periodLabel = isMonthly
+    ? formatPeriodLabel(monthLabel, rangeStart, rangeEnd, fromDate, toDate)
+    : fromDate && toDate
+      ? `${formatStatementDate(fromDate)} to ${formatStatementDate(toDate)}`
+      : "Select a date range"
+
+  const updateFromDate = (value: string) => {
+    setFromDate(value)
+    if (!isMonthly && value && toDate) onDateRangeChange?.(value, toDate)
+  }
+
+  const updateToDate = (value: string) => {
+    setToDate(value)
+    if (!isMonthly && fromDate && value) onDateRangeChange?.(fromDate, value)
+  }
 
   const clientOptions = useMemo(
     () => clients.map((c) => ({ value: c.id, label: c.name })),
@@ -106,12 +136,32 @@ export function MonthlyReportsPanel({
   clientsRef.current = clients
 
   useEffect(() => {
-    setFromDate("")
-    setToDate("")
-  }, [monthStart, monthEnd])
+    if (!isMonthly) {
+      setFromDate(initialFromDate)
+      setToDate(initialToDate)
+    }
+  }, [isMonthly, initialFromDate, initialToDate])
+
+  useEffect(() => {
+    if (isMonthly) {
+      setFromDate("")
+      setToDate("")
+    }
+  }, [isMonthly, monthStart, monthEnd])
 
   const loadReport = useCallback(async () => {
     if (!clientId) {
+      setDisplayRows([])
+      setSummary({
+        previousBalance: 0,
+        totalSale: 0,
+        totalPayment: 0,
+        closingOutstanding: 0,
+      })
+      return
+    }
+
+    if (!isMonthly && (!fromDate || !toDate)) {
       setDisplayRows([])
       setSummary({
         previousBalance: 0,
@@ -181,8 +231,9 @@ export function MonthlyReportsPanel({
         invoicesRaw || [],
         payments,
       )
-      const { rangeStart: effectiveStart, rangeEnd: effectiveEnd } =
-        resolveDisplayRange(monthStart, monthEnd, fromDate, toDate)
+      const { rangeStart: effectiveStart, rangeEnd: effectiveEnd } = isMonthly
+        ? resolveDisplayRange(monthStart, monthEnd, fromDate, toDate)
+        : { rangeStart: fromDate, rangeEnd: toDate }
 
       const { rows, summary } = buildDisplayLedgerRows(transactions, {
         rangeStart: effectiveStart,
@@ -204,7 +255,7 @@ export function MonthlyReportsPanel({
     } finally {
       setLoading(false)
     }
-  }, [clientId, monthStart, monthEnd, fromDate, toDate, toast])
+  }, [clientId, isMonthly, monthStart, monthEnd, fromDate, toDate, toast])
 
   useEffect(() => {
     loadReport()
@@ -281,14 +332,16 @@ export function MonthlyReportsPanel({
     })
 
     const safeName = clientName.replace(/\s+/g, "-").toLowerCase()
-    const rangeSuffix =
-      fromDate || toDate
+    const rangeSuffix = isMonthly
+      ? fromDate || toDate
         ? `${rangeStart}_to_${rangeEnd}`
         : `${reportYear}-${String(reportMonth).padStart(2, "0")}`
+      : `${rangeStart}_to_${rangeEnd}`
+    const filePrefix = isMonthly ? "monthly-report" : "date-range-report"
     exportToCSV(
       data,
       columns,
-      `monthly-report-${safeName}-${rangeSuffix}.csv`,
+      `${filePrefix}-${safeName}-${rangeSuffix}.csv`,
     )
     toast({ variant: "success", title: "Exported", description: "CSV downloaded." })
   }
@@ -353,7 +406,11 @@ export function MonthlyReportsPanel({
       let y = margin
       pdf.setFont("helvetica", "bold")
       pdf.setFontSize(14)
-      pdf.text("Monthly Sales Statement", margin, y)
+      pdf.text(
+        isMonthly ? "Monthly Sales Statement" : "Sales Statement",
+        margin,
+        y,
+      )
       y += 6
       pdf.setFontSize(10)
       const clientNameLines = pdf.splitTextToSize(clientName, tableWidth)
@@ -506,11 +563,13 @@ export function MonthlyReportsPanel({
       }
 
       const safeName = clientName.replace(/\s+/g, "-").toLowerCase()
-      const rangeSuffix =
-        fromDate || toDate
+      const rangeSuffix = isMonthly
+        ? fromDate || toDate
           ? `${rangeStart}_to_${rangeEnd}`
           : `${reportYear}-${String(reportMonth).padStart(2, "0")}`
-      pdf.save(`monthly-report-${safeName}-${rangeSuffix}.pdf`)
+        : `${rangeStart}_to_${rangeEnd}`
+      const filePrefix = isMonthly ? "monthly-report" : "date-range-report"
+      pdf.save(`${filePrefix}-${safeName}-${rangeSuffix}.pdf`)
       toast({
         variant: "success",
         title: "Exported",
@@ -551,9 +610,9 @@ export function MonthlyReportsPanel({
                 type="date"
                 className="flex h-9 w-full min-w-[140px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
                 value={fromDate}
-                min={monthStart}
-                max={toDate || monthEnd}
-                onChange={(e) => setFromDate(e.target.value)}
+                min={isMonthly ? monthStart : undefined}
+                max={isMonthly ? toDate || monthEnd : toDate || undefined}
+                onChange={(e) => updateFromDate(e.target.value)}
               />
             </div>
             <div className="space-y-2">
@@ -564,9 +623,9 @@ export function MonthlyReportsPanel({
                 type="date"
                 className="flex h-9 w-full min-w-[140px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
                 value={toDate}
-                min={fromDate || monthStart}
-                max={monthEnd}
-                onChange={(e) => setToDate(e.target.value)}
+                min={isMonthly ? fromDate || monthStart : fromDate || undefined}
+                max={isMonthly ? monthEnd : undefined}
+                onChange={(e) => updateToDate(e.target.value)}
               />
             </div>
           </div>
@@ -605,7 +664,10 @@ export function MonthlyReportsPanel({
         Period: <span className="font-medium text-foreground">{periodLabel}</span>.
         Same ledger as the statement of account (invoices add, payments reduce).
         Opening balance is before the period start; rows are sorted by date then
-        invoice number. Use From/To to narrow within the selected month.
+        invoice number.
+        {isMonthly
+          ? " Use From/To to narrow within the selected month."
+          : " Select From and To dates to filter the report."}
       </p>
 
       <div className="rounded-lg border bg-white overflow-x-auto">
@@ -654,7 +716,17 @@ export function MonthlyReportsPanel({
                   colSpan={6}
                   className="text-center text-muted-foreground py-12"
                 >
-                  Select a client to view the monthly report.
+                  Select a client to view the{" "}
+                  {isMonthly ? "monthly" : "date range"} report.
+                </TableCell>
+              </TableRow>
+            ) : !isMonthly && (!fromDate || !toDate) ? (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="text-center text-muted-foreground py-12"
+                >
+                  Select a From and To date to view the report.
                 </TableCell>
               </TableRow>
             ) : displayRows.length === 0 ? (
@@ -734,4 +806,14 @@ export function MonthlyReportsPanel({
       )}
     </div>
   )
+}
+
+export function MonthlyReportsPanel(props: Omit<MonthlyReportsPanelProps, "variant">) {
+  return <SalesStatementPanel variant="monthly" {...props} />
+}
+
+export function DateRangeReportsPanel(
+  props: Omit<DateRangeReportsPanelProps, "variant">,
+) {
+  return <SalesStatementPanel variant="dateRange" {...props} />
 }

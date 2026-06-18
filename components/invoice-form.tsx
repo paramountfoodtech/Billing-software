@@ -63,6 +63,12 @@ import {
   getClientPricingRuleForDate,
   type ClientPricingHistoryEntry,
 } from "@/lib/client-pricing-history";
+import {
+  applyChainedPricingRules,
+  getPricingRuleChainDescription,
+  getPricingRuleStepDescription,
+  parsePricingRuleSteps,
+} from "@/lib/pricing-rules";
 
 interface Client {
   id: string;
@@ -94,6 +100,18 @@ interface ClientProductPricing {
   conditional_threshold?: number | null;
   conditional_discount_below?: number | null;
   conditional_discount_above_equal?: number | null;
+  price_rule_type_2?: string | null;
+  price_rule_value_2?: number | string | null;
+  conditional_threshold_2?: number | null;
+  conditional_discount_below_2?: number | null;
+  conditional_discount_above_equal_2?: number | null;
+  pricing_rule_steps?: Array<{
+    price_rule_type: string;
+    price_rule_value?: number | string | null;
+    conditional_threshold?: number | string | null;
+    conditional_discount_below?: number | string | null;
+    conditional_discount_above_equal?: number | string | null;
+  }> | null;
 }
 
 interface InvoiceFormProps {
@@ -508,40 +526,7 @@ export function InvoiceForm({
         }
 
         if (basePrice > 0) {
-          // Apply rule on top of base price
-          const ruleValue = Number(pricingRule.price_rule_value || 0);
-          let priced = basePrice;
-
-          switch (pricingRule.price_rule_type) {
-            case "discount_percentage":
-              priced = basePrice * (1 - ruleValue / 100);
-              break;
-            case "discount_flat":
-              priced = Math.max(0, basePrice - ruleValue);
-              break;
-            case "conditional_discount": {
-              const threshold = Number(pricingRule.conditional_threshold || 0);
-              const discountBelow = Number(
-                pricingRule.conditional_discount_below || 0,
-              );
-              const discountAboveEqual = Number(
-                pricingRule.conditional_discount_above_equal || 0,
-              );
-
-              const conditionalDiscount =
-                basePrice >= threshold ? discountAboveEqual : discountBelow;
-              priced = Math.max(0, basePrice - conditionalDiscount);
-              break;
-            }
-            case "multiplier":
-              priced = basePrice * ruleValue;
-              break;
-            case "flat_addition":
-              priced = basePrice + ruleValue;
-              break;
-            default:
-              priced = basePrice;
-          }
+          let priced = applyChainedPricingRules(basePrice, pricingRule);
 
           // Eggs category pricing is entered per 100; for egg products, unit price is per egg
           const selectedCategory = priceCategories.find(
@@ -609,50 +594,13 @@ export function InvoiceForm({
       }
 
       if (basePrice > 0) {
-        const ruleValue = Number(pricingRule.price_rule_value || 0);
-        switch (pricingRule.price_rule_type) {
-          case "discount_percentage":
-            ruleLabel = "Discount %";
-            ruleValueDisplay = `${ruleValue}%`;
-            afterRule = basePrice * (1 - ruleValue / 100);
-            break;
-          case "discount_flat":
-            ruleLabel = "Discount ₹";
-            ruleValueDisplay = `₹${ruleValue.toFixed(2)}`;
-            afterRule = Math.max(0, basePrice - ruleValue);
-            break;
-          case "multiplier":
-            ruleLabel = "Multiplier";
-            ruleValueDisplay = `${ruleValue}x`;
-            afterRule = basePrice * ruleValue;
-            break;
-          case "flat_addition":
-            ruleLabel = "Add ₹";
-            ruleValueDisplay = `₹${ruleValue.toFixed(2)}`;
-            afterRule = basePrice + ruleValue;
-            break;
-          case "conditional_discount":
-            {
-              const threshold = Number(pricingRule.conditional_threshold || 0);
-              const discountBelow = Number(
-                pricingRule.conditional_discount_below || 0,
-              );
-              const discountAboveEqual = Number(
-                pricingRule.conditional_discount_above_equal || 0,
-              );
-              const selectedDiscount =
-                basePrice >= threshold ? discountAboveEqual : discountBelow;
-
-              ruleLabel = "Conditional Discount";
-              ruleValueDisplay = `Base ₹${basePrice.toFixed(2)} ${basePrice >= threshold ? "≥" : "<"} ₹${threshold.toFixed(2)} → -₹${selectedDiscount.toFixed(2)}`;
-              afterRule = Math.max(0, basePrice - selectedDiscount);
-              break;
-            }
-          default:
-            ruleLabel = "Category base";
-            ruleValueDisplay = null;
-            afterRule = basePrice;
-        }
+        const steps = parsePricingRuleSteps(pricingRule);
+        afterRule = applyChainedPricingRules(basePrice, pricingRule);
+        ruleLabel = steps.length > 1 ? "Chained rules" : "Rule 1";
+        ruleValueDisplay =
+          steps.length > 1
+            ? getPricingRuleChainDescription(basePrice, steps)
+            : getPricingRuleStepDescription(steps[0], basePrice);
 
         // For Eggs category, price is per 100; show unit price after dividing by 100 for egg products
         const selectedCategory = priceCategories.find(
@@ -663,7 +611,6 @@ export function InvoiceForm({
           : false;
         const isEggProduct = /egg/i.test(product.name);
         if (isEggCategory && isEggProduct) {
-          // Keep basePrice as category price (per 100) but unit price should reflect per-egg
           afterRule = afterRule / 100;
         }
       }

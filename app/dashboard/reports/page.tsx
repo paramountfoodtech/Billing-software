@@ -4,12 +4,20 @@ import { redirect } from "next/navigation"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
 import { ReportsPageClient } from "@/components/reports-page-client"
 
+import { getIndianToday } from "@/lib/date-time"
+
 export const revalidate = 0
 
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; year?: string; tab?: string }>
+  searchParams: Promise<{
+    month?: string
+    year?: string
+    tab?: string
+    from?: string
+    to?: string
+  }>
 }) {
   const supabase = await createClient()
 
@@ -31,13 +39,15 @@ export default async function ReportsPage({
 
   const params = await searchParams
   const today = new Date()
-  const todayDate = today.toISOString().split("T")[0]
+  const todayDate = getIndianToday()
   const reportYear = params.year ? parseInt(params.year) : today.getFullYear()
   const reportMonth = params.month ? parseInt(params.month) : today.getMonth() + 1
 
   const monthStart = `${reportYear}-${String(reportMonth).padStart(2, "0")}-01`
   const daysInMonth = new Date(reportYear, reportMonth, 0).getDate()
   const monthEnd = `${reportYear}-${String(reportMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`
+  const initialFromDate = params.from || monthStart
+  const initialToDate = params.to || (todayDate < monthEnd ? todayDate : monthEnd)
 
   const monthLabel = new Date(reportYear, reportMonth - 1, 1).toLocaleDateString("en-IN", {
     month: "long",
@@ -228,6 +238,8 @@ export default async function ReportsPage({
           rows={rows}
           productRows={productRows}
           clients={clients.map((c) => ({ id: c.id, name: c.name }))}
+          initialFromDate={initialFromDate}
+          initialToDate={initialToDate}
         />
       </Suspense>
     </DashboardPageWrapper>

@@ -27,6 +27,7 @@ import { TablePagination } from "@/components/table-pagination";
 import { useToast } from "@/hooks/use-toast";
 import { formatIndianDate, getIndianToday } from "@/lib/date-time";
 import { getPriceForCategoryOnDate } from "@/lib/utils";
+import { applyChainedPricingRules, parsePricingRuleSteps } from "@/lib/pricing-rules";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
@@ -52,6 +53,18 @@ interface PricingRule {
   conditional_threshold?: number | null;
   conditional_discount_below?: number | null;
   conditional_discount_above_equal?: number | null;
+  price_rule_type_2?: string | null;
+  price_rule_value_2?: number | string | null;
+  conditional_threshold_2?: number | null;
+  conditional_discount_below_2?: number | null;
+  conditional_discount_above_equal_2?: number | null;
+  pricing_rule_steps?: Array<{
+    price_rule_type: string;
+    price_rule_value?: number | string | null;
+    conditional_threshold?: number | null;
+    conditional_discount_below?: number | null;
+    conditional_discount_above_equal?: number | null;
+  }> | null;
   clients: {
     name: string;
   };
@@ -222,22 +235,7 @@ export function ClientPricingTable({
       basePrice = 0;
     }
 
-    const ruleValue = Number(rule.price_rule_value || 0);
-
-    switch (rule.price_rule_type) {
-      case "discount_percentage":
-        return basePrice * (1 - ruleValue / 100);
-      case "discount_flat":
-        return basePrice - ruleValue;
-      case "multiplier":
-        return basePrice * ruleValue;
-      case "flat_addition":
-        return basePrice + ruleValue;
-      case "conditional_discount":
-        return basePrice; // Conditional discount depends on line amount, return base price for preview
-      default:
-        return basePrice;
-    }
+    return applyChainedPricingRules(basePrice, rule);
   };
 
   // Apply filtering and sorting
@@ -525,13 +523,22 @@ export function ClientPricingTable({
                     )}
                   </TableCell>
                   <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
-                    <Badge variant="secondary" className="text-xs">
-                      {
-                        ruleTypeLabels[
-                          rule.price_rule_type as keyof typeof ruleTypeLabels
-                        ]
-                      }
-                    </Badge>
+                    <div className="space-y-1">
+                      {parsePricingRuleSteps(rule).map((step, index) => (
+                        <Badge
+                          key={index}
+                          variant={index === 0 ? "secondary" : "outline"}
+                          className="text-xs block w-fit"
+                        >
+                          {index > 0 && "+ "}
+                          {
+                            ruleTypeLabels[
+                              step.price_rule_type as keyof typeof ruleTypeLabels
+                            ]
+                          }
+                        </Badge>
+                      ))}
+                    </div>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs">
                     {rule.price_rule_type === "discount_percentage" &&

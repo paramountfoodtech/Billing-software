@@ -52,13 +52,13 @@ export default async function NewInvoicePage() {
     supabase
       .from("client_product_pricing")
       .select(
-        "product_id, price_rule_type, price_rule_value, price_category_id, fixed_base_value, client_id, conditional_threshold, conditional_discount_below, conditional_discount_above_equal",
+        "product_id, price_rule_type, price_rule_value, price_category_id, fixed_base_value, client_id, conditional_threshold, conditional_discount_below, conditional_discount_above_equal, price_rule_type_2, price_rule_value_2, conditional_threshold_2, conditional_discount_below_2, conditional_discount_above_equal_2, pricing_rule_steps",
       )
       .eq("organization_id", organizationId),
     supabase
       .from("client_product_pricing_history")
       .select(
-        "client_id, product_id, price_rule_type, price_rule_value, price_category_id, fixed_base_value, conditional_threshold, conditional_discount_below, conditional_discount_above_equal, effective_from, created_at",
+        "client_id, product_id, price_rule_type, price_rule_value, price_category_id, fixed_base_value, conditional_threshold, conditional_discount_below, conditional_discount_above_equal, price_rule_type_2, price_rule_value_2, conditional_threshold_2, conditional_discount_below_2, conditional_discount_above_equal_2, pricing_rule_steps, effective_from, created_at",
       )
       .eq("organization_id", organizationId),
     supabase

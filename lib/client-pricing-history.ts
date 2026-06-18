@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getIndianToday } from "@/lib/date-time";
 
+import type { PricingRuleStepData } from "@/lib/pricing-rules";
+
 export interface ClientPricingRuleSnapshot {
   client_id: string;
   product_id: string;
@@ -11,6 +13,12 @@ export interface ClientPricingRuleSnapshot {
   conditional_threshold?: number | null;
   conditional_discount_below?: number | null;
   conditional_discount_above_equal?: number | null;
+  price_rule_type_2?: string | null;
+  price_rule_value_2?: number | string | null;
+  conditional_threshold_2?: number | null;
+  conditional_discount_below_2?: number | null;
+  conditional_discount_above_equal_2?: number | null;
+  pricing_rule_steps?: PricingRuleStepData[] | null;
   notes?: string | null;
 }
 
@@ -101,6 +109,12 @@ export function buildClientPricingHistoryRow(
     conditional_threshold?: number | null;
     conditional_discount_below?: number | null;
     conditional_discount_above_equal?: number | null;
+    price_rule_type_2?: string | null;
+    price_rule_value_2?: number | string | null;
+    conditional_threshold_2?: number | null;
+    conditional_discount_below_2?: number | null;
+    conditional_discount_above_equal_2?: number | null;
+    pricing_rule_steps?: PricingRuleStepData[] | null;
     notes?: string | null;
   },
   createdBy: string,
@@ -131,6 +145,22 @@ export function buildClientPricingHistoryRow(
       rule.conditional_discount_above_equal != null
         ? Number(rule.conditional_discount_above_equal)
         : null,
+    price_rule_type_2: rule.price_rule_type_2 ?? null,
+    price_rule_value_2:
+      rule.price_rule_value_2 != null ? Number(rule.price_rule_value_2) : null,
+    conditional_threshold_2:
+      rule.conditional_threshold_2 != null
+        ? Number(rule.conditional_threshold_2)
+        : null,
+    conditional_discount_below_2:
+      rule.conditional_discount_below_2 != null
+        ? Number(rule.conditional_discount_below_2)
+        : null,
+    conditional_discount_above_equal_2:
+      rule.conditional_discount_above_equal_2 != null
+        ? Number(rule.conditional_discount_above_equal_2)
+        : null,
+    pricing_rule_steps: rule.pricing_rule_steps ?? null,
     notes: rule.notes ?? null,
     effective_from: effectiveFrom || today,
     created_by: createdBy,
