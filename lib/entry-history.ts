@@ -13,6 +13,10 @@ export type EntryEntityType =
   | "challan"
   | "purchase_invoice"
   | "purchase_payment"
+  | "expense_entry"
+  | "expense_category"
+  | "material_stock"
+  | "material_processing"
 
 export type EntryHistoryAction = "created" | "updated"
 

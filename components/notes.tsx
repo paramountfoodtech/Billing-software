@@ -25,6 +25,8 @@ type NoteReferenceType =
   | "payment"
   | "purchase_invoice"
   | "purchase_payment"
+  | "material_stock"
+  | "material_processing"
 
 interface NotesProps {
   notes: Note[]
@@ -46,6 +48,14 @@ const NOTE_CONFIG: Record<
   purchase_payment: {
     table: "purchase_payment_notes",
     foreignKey: "purchase_payment_id",
+  },
+  material_stock: {
+    table: "material_stock_notes",
+    foreignKey: "stock_entry_id",
+  },
+  material_processing: {
+    table: "material_processing_notes",
+    foreignKey: "processing_entry_id",
   },
 }
 

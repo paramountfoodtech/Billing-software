@@ -197,7 +197,7 @@ export function PurchaseReportsTable({
 
   const handleExportChallanCSV = () => {
     const columns: ExportColumn[] = [
-      { key: "challan_number", label: "Challan" },
+      { key: "challan_number", label: "Purchase challan" },
       { key: "purchaser_name", label: "Purchaser" },
       { key: "challan_date", label: "Date" },
       { key: "total_weight_kg", label: "Weight (KG)", formatter: (v) => v.toFixed(3) },
@@ -227,14 +227,14 @@ export function PurchaseReportsTable({
     await exportToPDF(
       enriched,
       [
-        { key: "challan_number", label: "Challan", widthFrac: 0.14 },
+        { key: "challan_number", label: "Purchase challan", widthFrac: 0.14 },
         { key: "purchaser_name", label: "Purchaser", widthFrac: 0.22 },
         { key: "challan_date", label: "Date", widthFrac: 0.12 },
         { key: "weight_fmt", label: "Weight", widthFrac: 0.12, align: "right" },
         { key: "status", label: "Status", widthFrac: 0.14 },
         { key: "invoice_number", label: "Invoice", widthFrac: 0.14 },
       ],
-      `Challan Tracking — ${monthLabel}`,
+      `Purchase challan tracking — ${monthLabel}`,
       `challan-tracking-${getTimestamp()}.pdf`,
     );
     toast({ variant: "success", title: "Exported", description: "Report exported to PDF." });
@@ -244,7 +244,7 @@ export function PurchaseReportsTable({
     return (
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="font-semibold">Challan vs Invoice Tracking — {monthLabel}</h3>
+          <h3 className="font-semibold">Purchase challan vs invoice tracking — {monthLabel}</h3>
           <div className="flex gap-2">
             <IconTooltip label="Export to CSV">
               <Button variant="outline" size="sm" onClick={handleExportChallanCSV}>
@@ -268,7 +268,7 @@ export function PurchaseReportsTable({
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => handleSort("challan_number")}
                 >
-                  Challan <SortIcon column="challan_number" />
+                  Purchase challan <SortIcon column="challan_number" />
                 </TableHead>
                 <TableHead
                   className="cursor-pointer hover:bg-muted/50"
@@ -299,7 +299,7 @@ export function PurchaseReportsTable({
               <TableRow>
                 <TableHead colSpan={6}>
                   <Input
-                    placeholder="Filter challan, purchaser, or invoice..."
+                    placeholder="Filter purchase challan, purchaser, or invoice..."
                     value={challanFilter}
                     onChange={(e) => setChallanFilter(e.target.value)}
                     className="h-7 text-xs max-w-sm"
@@ -311,7 +311,7 @@ export function PurchaseReportsTable({
               {pagination.paginatedItems.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    No challans for this period.
+                    No purchase challans for this period.
                   </TableCell>
                 </TableRow>
               ) : (

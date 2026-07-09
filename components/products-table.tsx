@@ -42,6 +42,7 @@ import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
 import { Input } from "@/components/ui/input"
 import { EntryHistoryButton } from "@/components/entry-history-button"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { canDelete, canEdit } from "@/lib/permissions"
 
 interface Product {
   id: string
@@ -57,14 +58,17 @@ interface Product {
 
 interface ProductsTableProps {
   products: Product[]
+  userRole?: string
 }
 
 function SortableProductRow({
   product,
   onDelete,
+  userRole,
 }: {
   product: Product
   onDelete: (id: string) => void
+  userRole?: string
 }) {
   const {
     attributes,
@@ -84,13 +88,15 @@ function SortableProductRow({
   return (
     <TableRow ref={setNodeRef} style={style} className="text-xs sm:text-sm">
       <TableCell className="w-[40px] sm:w-[50px] px-2 sm:px-4 py-2 sm:py-3">
-        <div
-          {...attributes}
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing hover:bg-muted rounded p-1 inline-flex"
-        >
-          <GripVertical className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-        </div>
+        {canEdit(userRole) && (
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing hover:bg-muted rounded p-1 inline-flex"
+          >
+            <GripVertical className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+          </div>
+        )}
       </TableCell>
       <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3 max-w-[100px] sm:max-w-none truncate">{product.name}</TableCell>
       <TableCell className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3 max-w-xs truncate">
@@ -113,29 +119,33 @@ function SortableProductRow({
             createdAt={product.created_at}
             createdByName={product.profiles?.full_name}
           />
-          <IconTooltip label="Edit product">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/dashboard/products/${product.id}/edit`}>
-                <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
-              </Link>
-            </Button>
-          </IconTooltip>
-          <IconTooltip label="Delete product">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onDelete(product.id)}
-            >
-              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-            </Button>
-          </IconTooltip>
+          {canEdit(userRole) && (
+            <IconTooltip label="Edit product">
+              <Button variant="ghost" size="sm" asChild>
+                <Link href={`/dashboard/products/${product.id}/edit`}>
+                  <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
+                </Link>
+              </Button>
+            </IconTooltip>
+          )}
+          {canDelete(userRole) && (
+            <IconTooltip label="Delete product">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDelete(product.id)}
+              >
+                <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+              </Button>
+            </IconTooltip>
+          )}
         </div>
       </TableCell>
     </TableRow>
   )
 }
 
-export function ProductsTable({ products }: ProductsTableProps) {
+export function ProductsTable({ products, userRole }: ProductsTableProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [isDeleting, setIsDeleting] = useState(false)
@@ -238,6 +248,8 @@ export function ProductsTable({ products }: ProductsTableProps) {
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (!canEdit(userRole)) return
+
     const { active, over } = event
 
     if (over && active.id !== over.id) {
@@ -389,6 +401,7 @@ export function ProductsTable({ products }: ProductsTableProps) {
                   <SortableProductRow
                     key={product.id}
                     product={product}
+                    userRole={userRole}
                     onDelete={(id) => {
                       setProductToDelete(id)
                       setDeleteDialogOpen(true)

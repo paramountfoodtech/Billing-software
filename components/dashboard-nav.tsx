@@ -28,10 +28,14 @@ import {
   ClipboardList,
   FileInput,
   Wallet,
+  CircleDollarSign,
+  Factory,
+  Boxes,
+  type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { IconTooltip } from "@/components/icon-tooltip";
-import { useState, type LucideIcon } from "react";
+import { useState } from "react";
 
 interface Profile {
   id: string;
@@ -52,7 +56,7 @@ type NavItem = {
 };
 
 type NavGroup = {
-  id: "general" | "sales" | "purchase";
+  id: "general" | "sales" | "purchase" | "expenses" | "operations";
   label: string;
   items: NavItem[];
 };
@@ -186,7 +190,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
           },
           {
             href: "/dashboard/challans",
-            label: "Challans",
+            label: "Purchase challans",
             icon: ClipboardList,
             roles: ["super_admin", "admin", "accountant"],
           },
@@ -207,6 +211,48 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             label: "Purchase Reports",
             icon: BarChart3,
             roles: ["super_admin", "admin"],
+          },
+        ],
+      },
+      {
+        id: "expenses",
+        label: "Expenses",
+        items: [
+          {
+            href: "/dashboard/expenses",
+            label: "Salary & Expenses",
+            icon: CircleDollarSign,
+            roles: ["super_admin", "admin", "accountant"],
+          },
+          {
+            href: "/dashboard/expenses/reports",
+            label: "Expense Reports",
+            icon: BarChart3,
+            roles: ["super_admin", "admin"],
+          },
+        ],
+      },
+      {
+        id: "operations",
+        label: "Operations",
+        items: [
+          {
+            href: "/dashboard/operations/stock",
+            label: "Stock",
+            icon: Boxes,
+            roles: ["super_admin", "admin", "accountant"],
+          },
+          {
+            href: "/dashboard/operations/processing",
+            label: "Processing",
+            icon: Factory,
+            roles: ["super_admin", "admin", "accountant"],
+          },
+          {
+            href: "/dashboard/operations/reports",
+            label: "Operations Reports",
+            icon: BarChart3,
+            roles: ["super_admin", "admin", "accountant"],
           },
         ],
       },
@@ -324,10 +370,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
         </div>
 
         <nav
-          className={cn(
-            "flex-1 p-4 space-y-4",
-            !isSidebarCollapsed && "overflow-y-auto",
-          )}
+          className="flex-1 p-4 space-y-4 overflow-y-auto overflow-x-hidden"
         >
           {navGroups.map((group, groupIndex) => (
             <div key={group.id} className="space-y-1">

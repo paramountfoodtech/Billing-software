@@ -21,6 +21,7 @@ interface PurchaseInvoice {
   id: string;
   invoice_number: string;
   purchaser_id?: string | null;
+  purchaser_invoice_number?: string | null;
   issue_date: string;
   total_weight_kg: string;
   price_per_kg: string;
@@ -29,7 +30,6 @@ interface PurchaseInvoice {
   amount_paid: string;
   status: string;
   notes: string | null;
-  invoice_type?: string;
   description?: string | null;
   purchasers?: {
     name: string;
@@ -65,17 +65,11 @@ export function PrintablePurchaseInvoice({
     Number(invoice.total_weight_kg) * Number(invoice.price_per_kg) ||
     Number(invoice.total_amount) + discountAmount;
   const hasChallan = Boolean(invoice.challans?.challan_number);
-  const invoiceType = invoice.invoice_type || (hasChallan ? "challan" : "expense");
-  const typeLabels: Record<string, string> = {
-    challan: "Challan Purchase",
-    salary: "Salary",
-    expense: "Expense",
-  };
   const lineDescription =
     invoice.description?.trim() ||
     (hasChallan
-      ? `Purchase weight (Challan ${invoice.challans!.challan_number})`
-      : typeLabels[invoiceType] || "Purchase");
+      ? `Purchase weight (Purchase challan ${invoice.challans!.challan_number})`
+      : "Purchase challan invoice");
   const boxes = invoice.challans?.challan_boxes || [];
   const totalBirds = boxes.reduce(
     (sum, box) => sum + Number(box.num_birds || 0),
@@ -175,6 +169,11 @@ export function PrintablePurchaseInvoice({
                 <p className="font-semibold">
                   Invoice #: {invoice.invoice_number}
                 </p>
+                {invoice.purchaser_invoice_number && (
+                  <p className="font-semibold">
+                    Purchaser Invoice #: {invoice.purchaser_invoice_number}
+                  </p>
+                )}
                 <p>
                   Date:{" "}
                   {formatIndianDate(invoice.issue_date, {
@@ -183,16 +182,13 @@ export function PrintablePurchaseInvoice({
                     day: "numeric",
                   })}
                 </p>
-                <p className="text-gray-600">
-                  Type: {typeLabels[invoiceType] || invoiceType}
-                </p>
                 {hasChallan && (
                   <>
                     <p className="text-gray-600">
-                      Challan: {invoice.challans!.challan_number}
+                      Purchase challan: {invoice.challans!.challan_number}
                     </p>
                     <p className="text-gray-600">
-                      Challan Date:{" "}
+                      Purchase challan date:{" "}
                       {formatIndianDate(invoice.challans!.challan_date, {
                         year: "numeric",
                         month: "long",

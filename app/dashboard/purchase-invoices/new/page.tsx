@@ -1,17 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import {
-  PurchaseInvoiceForm,
-  type PurchaseInvoiceEntryType,
-} from "@/components/purchase-invoice-form";
+import { PurchaseInvoiceForm } from "@/components/purchase-invoice-form";
 import { suggestNextNumber } from "@/lib/purchase-document-numbers";
 
 export default async function NewPurchaseInvoicePage({
   searchParams,
 }: {
-  searchParams: Promise<{ challan_id?: string; type?: string }>;
+  searchParams: Promise<{ challan_id?: string }>;
 }) {
-  const { challan_id: challanId, type } = await searchParams;
+  const { challan_id: challanId } = await searchParams;
   const supabase = await createClient();
 
   const {
@@ -62,11 +59,6 @@ export default async function NewPurchaseInvoicePage({
     (invoicesResult.data || []).map((i) => i.invoice_number),
   );
 
-  const validTypes = ["challan", "salary", "expense"] as const;
-  const initialType = validTypes.includes(type as PurchaseInvoiceEntryType)
-    ? (type as PurchaseInvoiceEntryType)
-    : "challan";
-
   if (challanId) {
     const { data: challan } = await supabase
       .from("challans")
@@ -86,7 +78,7 @@ export default async function NewPurchaseInvoicePage({
           Create Purchase Invoice
         </h1>
         <p className="text-muted-foreground mt-1">
-          Record a challan purchase, salary, or expense with full details
+          Create an invoice from a finalized purchase challan
         </p>
       </div>
 
@@ -95,7 +87,6 @@ export default async function NewPurchaseInvoicePage({
         challans={challansResult.data || []}
         suggestedInvoiceNumber={suggestedInvoiceNumber}
         initialChallanId={challanId}
-        initialType={initialType}
       />
     </div>
   );

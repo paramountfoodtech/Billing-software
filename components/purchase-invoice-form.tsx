@@ -19,10 +19,6 @@ import {
 } from "@/lib/entry-history";
 import { getIndianToday } from "@/lib/date-time";
 
-export type PurchaseInvoiceEntryType = "challan" | "salary" | "expense";
-
-export const NA_PURCHASER_ID = "__na__";
-
 interface Purchaser {
   id: string;
   name: string;
@@ -43,39 +39,24 @@ interface PurchaseInvoiceFormProps {
   challans: ChallanOption[];
   suggestedInvoiceNumber: string;
   initialChallanId?: string;
-  initialType?: PurchaseInvoiceEntryType;
 }
-
-const entryTypeLabels: Record<PurchaseInvoiceEntryType, string> = {
-  challan: "From Challan",
-  salary: "Salary",
-  expense: "Expense",
-};
 
 export function PurchaseInvoiceForm({
   purchasers,
   challans,
   suggestedInvoiceNumber,
   initialChallanId,
-  initialType = "challan",
 }: PurchaseInvoiceFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
   const initialChallan = challans.find((c) => c.id === initialChallanId) ?? null;
-  const resolvedInitialType: PurchaseInvoiceEntryType = initialChallan
-    ? "challan"
-    : initialType;
 
-  const [entryType, setEntryType] =
-    useState<PurchaseInvoiceEntryType>(resolvedInitialType);
   const [invoiceNumber] = useState(suggestedInvoiceNumber);
+  const [purchaserInvoiceNumber, setPurchaserInvoiceNumber] = useState("");
   const [issueDate, setIssueDate] = useState(getIndianToday());
-  const [purchaserId, setPurchaserId] = useState(
-    initialChallan?.purchaser_id ||
-      (resolvedInitialType !== "challan" ? NA_PURCHASER_ID : ""),
-  );
+  const [purchaserId, setPurchaserId] = useState(initialChallan?.purchaser_id || "");
   const [challanId, setChallanId] = useState(initialChallan?.id || "");
   const [description, setDescription] = useState("");
   const [totalWeightInput, setTotalWeightInput] = useState(
@@ -85,9 +66,7 @@ export function PurchaseInvoiceForm({
   const [totalPrice, setTotalPrice] = useState("");
   const [discount, setDiscount] = useState("");
   const [notes, setNotes] = useState("");
-  const [pricingMode, setPricingMode] = useState<"per_kg" | "total">(
-    resolvedInitialType === "challan" ? "per_kg" : "total",
-  );
+  const [pricingMode, setPricingMode] = useState<"per_kg" | "total">("per_kg");
 
   const availableChallans = useMemo(() => {
     return challans.filter((c) => {
@@ -102,49 +81,23 @@ export function PurchaseInvoiceForm({
     label: `${c.challan_number} — ${Number(c.total_weight_kg).toFixed(3)} KG`,
   }));
 
-  const purchaserOptions = useMemo(() => {
-    const options = purchasers.map((p) => ({
-      value: p.id,
-      label: p.purchaser_code ? `${p.name} (${p.purchaser_code})` : p.name,
-    }));
-    if (entryType !== "challan") {
-      return [{ value: NA_PURCHASER_ID, label: "N/A" }, ...options];
-    }
-    return options;
-  }, [purchasers, entryType]);
-
-  const entryTypeOptions = (
-    Object.keys(entryTypeLabels) as PurchaseInvoiceEntryType[]
-  ).map((type) => ({
-    value: type,
-    label: entryTypeLabels[type],
+  const purchaserOptions = purchasers.map((p) => ({
+    value: p.id,
+    label: p.purchaser_code ? `${p.name} (${p.purchaser_code})` : p.name,
   }));
 
   useEffect(() => {
-    if (entryType !== "challan") {
-      setChallanId("");
-      setPricingMode("total");
-      if (entryType === "salary" && !description) {
-        setDescription("Salary payment");
-      }
-      if (entryType === "expense" && !description) {
-        setDescription("");
-      }
-      return;
-    }
-
     if (!challanId) return;
     const selected = challans.find((c) => c.id === challanId);
     if (!selected) return;
     setPurchaserId(selected.purchaser_id);
     setTotalWeightInput(String(selected.total_weight_kg));
-  }, [challanId, challans, entryType, description]);
+  }, [challanId, challans]);
 
   const totalWeight = Number(totalWeightInput) || 0;
-  const isWeightBased = entryType === "challan";
 
   const grossTotal =
-    pricingMode === "per_kg" && isWeightBased
+    pricingMode === "per_kg"
       ? totalWeight * (Number(pricePerKg) || 0)
       : Number(totalPrice) || 0;
 
@@ -152,68 +105,40 @@ export function PurchaseInvoiceForm({
   const finalTotal = Math.max(0, grossTotal - discountAmount);
 
   const computedPricePerKg =
-    isWeightBased && pricingMode === "total" && totalWeight > 0
+    pricingMode === "total" && totalWeight > 0
       ? grossTotal / totalWeight
-      : isWeightBased
-        ? Number(pricePerKg) || 0
-        : 0;
+      : Number(pricePerKg) || 0;
 
   const lineDescription =
     description.trim() ||
-    (entryType === "challan" && challanId
-      ? `Purchase weight (Challan ${
+    (challanId
+      ? `Purchase weight (Purchase challan ${
           challans.find((c) => c.id === challanId)?.challan_number || ""
         })`
-      : entryType === "salary"
-        ? "Salary payment"
-        : "Expense");
-
-  const handleEntryTypeChange = (type: PurchaseInvoiceEntryType) => {
-    setEntryType(type);
-    if (type !== "challan") {
-      setChallanId("");
-      setTotalWeightInput("");
-      setPricePerKg("");
-      setPurchaserId(NA_PURCHASER_ID);
-    } else {
-      setPurchaserId("");
-    }
-  };
+      : "Purchase challan invoice");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (
-      entryType === "challan" &&
-      (!purchaserId || purchaserId === NA_PURCHASER_ID)
-    ) {
+    if (!purchaserId) {
       toast({
         variant: "destructive",
         title: "Missing purchaser",
-        description: "Please select a purchaser for challan invoices.",
+        description: "Please select a purchaser.",
       });
       return;
     }
 
-    if (entryType === "challan" && !challanId) {
+    if (!challanId) {
       toast({
         variant: "destructive",
-        title: "Missing challan",
-        description: "Please select a challan or switch to Salary/Expense entry.",
+        title: "Missing purchase challan",
+        description: "Please select a purchase challan.",
       });
       return;
     }
 
-    if (entryType !== "challan" && !description.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Missing description",
-        description: "Please enter a description for this entry.",
-      });
-      return;
-    }
-
-    if (isWeightBased && totalWeight <= 0) {
+    if (totalWeight <= 0) {
       toast({
         variant: "destructive",
         title: "Invalid weight",
@@ -268,21 +193,19 @@ export function PurchaseInvoiceForm({
         throw new Error("User must belong to an organization");
       }
 
-      const selectedChallan = challanId
-        ? challans.find((c) => c.id === challanId)
-        : null;
+      const selectedChallan = challans.find((c) => c.id === challanId);
 
       const { data: invoice, error: invoiceError } = await supabase
         .from("purchase_invoices")
         .insert({
           invoice_number: invoiceNumber.trim(),
-          invoice_type: entryType,
+          purchaser_invoice_number: purchaserInvoiceNumber.trim() || null,
+          invoice_type: "challan",
           description: lineDescription,
-          challan_id: entryType === "challan" ? challanId : null,
-          purchaser_id:
-            purchaserId && purchaserId !== NA_PURCHASER_ID ? purchaserId : null,
+          challan_id: challanId,
+          purchaser_id: purchaserId,
           issue_date: issueDate,
-          total_weight_kg: isWeightBased ? totalWeight : 0,
+          total_weight_kg: totalWeight,
           price_per_kg: computedPricePerKg,
           discount_amount: discountAmount,
           total_amount: finalTotal,
@@ -297,25 +220,19 @@ export function PurchaseInvoiceForm({
 
       if (invoiceError) throw invoiceError;
 
-      if (entryType === "challan" && challanId) {
-        const { error: challanError } = await supabase
-          .from("challans")
-          .update({
-            status: "invoiced",
-            purchase_invoice_id: invoice?.id,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", challanId);
+      const { error: challanError } = await supabase
+        .from("challans")
+        .update({
+          status: "invoiced",
+          purchase_invoice_id: invoice?.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", challanId);
 
-        if (challanError) throw challanError;
-      }
+      if (challanError) throw challanError;
 
       if (invoice?.id) {
         const userName = await getProfileDisplayName(supabase, user.id);
-        const summary =
-          entryType === "challan" && selectedChallan
-            ? `From challan ${selectedChallan.challan_number}`
-            : `${entryTypeLabels[entryType]}: ${lineDescription}`;
         await logEntryHistory(supabase, {
           organizationId: profile.organization_id,
           entityType: "purchase_invoice",
@@ -323,7 +240,9 @@ export function PurchaseInvoiceForm({
           action: "created",
           userId: user.id,
           userName,
-          summary,
+          summary: selectedChallan
+            ? `From purchase challan ${selectedChallan.challan_number}`
+            : "Purchase challan invoice",
         });
       }
 
@@ -356,32 +275,26 @@ export function PurchaseInvoiceForm({
       <CardContent className="pt-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <Label>Entry Type</Label>
-              <SearchableSelect
-                options={entryTypeOptions}
-                value={entryType}
-                onValueChange={(value) =>
-                  handleEntryTypeChange(value as PurchaseInvoiceEntryType)
-                }
-                placeholder="Select entry type"
-                disabled={Boolean(initialChallanId)}
-              />
-              {initialChallanId && (
-                <p className="text-xs text-muted-foreground">
-                  Entry type is fixed when creating from a challan.
-                </p>
-              )}
-            </div>
-
             <div className="space-y-2">
-              <Label htmlFor="invoice_number">Invoice Number</Label>
+              <Label htmlFor="invoice_number">Internal Invoice Number</Label>
               <Input
                 id="invoice_number"
                 value={invoiceNumber}
                 disabled
                 readOnly
                 className="bg-muted"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="purchaser_invoice_number">
+                Purchaser Invoice Number
+              </Label>
+              <Input
+                id="purchaser_invoice_number"
+                value={purchaserInvoiceNumber}
+                onChange={(e) => setPurchaserInvoiceNumber(e.target.value)}
+                placeholder="Invoice number from purchaser"
               />
             </div>
 
@@ -398,123 +311,86 @@ export function PurchaseInvoiceForm({
 
             <div className="space-y-2 sm:col-span-2">
               <Label>
-                Purchaser
-                {entryType === "challan" && (
-                  <span className="text-red-500"> *</span>
-                )}
+                Purchaser <span className="text-red-500">*</span>
               </Label>
               <SearchableSelect
                 options={purchaserOptions}
                 value={purchaserId}
                 onValueChange={setPurchaserId}
-                placeholder={
-                  entryType === "challan"
-                    ? "Select purchaser"
-                    : "N/A or select purchaser"
-                }
+                placeholder="Select purchaser"
                 disabled={Boolean(initialChallanId)}
               />
-              {entryType !== "challan" && (
-                <p className="text-xs text-muted-foreground">
-                  Use N/A when the entry is not tied to a specific purchaser.
-                </p>
-              )}
             </div>
 
-            {entryType === "challan" && (
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Challan</Label>
-                <SearchableSelect
-                  options={challanOptions}
-                  value={challanId}
-                  onValueChange={setChallanId}
-                  placeholder={
-                    purchaserId
-                      ? "Select final challan"
-                      : "Select purchaser first"
-                  }
-                  disabled={Boolean(initialChallanId) || !purchaserId}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Only final challans not yet invoiced are listed. Weight and
-                  purchaser auto-fill when selected.
-                </p>
-              </div>
-            )}
+            <div className="space-y-2 sm:col-span-2">
+              <Label>
+                Purchase challan <span className="text-red-500">*</span>
+              </Label>
+              <SearchableSelect
+                options={challanOptions}
+                value={challanId}
+                onValueChange={setChallanId}
+                placeholder={
+                  purchaserId
+                    ? "Select final purchase challan"
+                    : "Select purchaser first"
+                }
+                disabled={Boolean(initialChallanId) || !purchaserId}
+              />
+              <p className="text-xs text-muted-foreground">
+                Only final purchase challans not yet invoiced are listed. Weight
+                and purchaser auto-fill when selected.
+              </p>
+            </div>
 
-            {entryType !== "challan" && (
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder={
-                    entryType === "salary"
-                      ? "e.g. March 2026 salaries"
-                      : "e.g. Office rent, utilities"
-                  }
-                  required
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="total_weight">Total Weight (KG)</Label>
+              <Input
+                id="total_weight"
+                type="number"
+                step="0.001"
+                min="0"
+                value={totalWeightInput}
+                onChange={(e) => setTotalWeightInput(e.target.value)}
+                placeholder="0.000"
+                readOnly={Boolean(challanId)}
+                className={challanId ? "bg-muted" : undefined}
+              />
+            </div>
 
-            {isWeightBased && (
-              <div className="space-y-2">
-                <Label htmlFor="total_weight">Total Weight (KG)</Label>
-                <Input
-                  id="total_weight"
-                  type="number"
-                  step="0.001"
-                  min="0"
-                  value={totalWeightInput}
-                  onChange={(e) => setTotalWeightInput(e.target.value)}
-                  placeholder="0.000"
-                  readOnly={Boolean(challanId)}
-                  className={challanId ? "bg-muted" : undefined}
-                />
-              </div>
-            )}
-
-            {entryType === "challan" && (
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="challan_description">
-                  Description (optional)
-                </Label>
-                <Input
-                  id="challan_description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Override line description on invoice"
-                />
-              </div>
-            )}
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="challan_description">Description (optional)</Label>
+              <Input
+                id="challan_description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Override line description on invoice"
+              />
+            </div>
           </div>
 
           <div className="space-y-3 border-t pt-4">
             <Label>Pricing</Label>
-            {isWeightBased && (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={pricingMode === "per_kg" ? "default" : "outline"}
-                  onClick={() => setPricingMode("per_kg")}
-                >
-                  Price per KG
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={pricingMode === "total" ? "default" : "outline"}
-                  onClick={() => setPricingMode("total")}
-                >
-                  Total Price
-                </Button>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={pricingMode === "per_kg" ? "default" : "outline"}
+                onClick={() => setPricingMode("per_kg")}
+              >
+                Price per KG
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={pricingMode === "total" ? "default" : "outline"}
+                onClick={() => setPricingMode("total")}
+              >
+                Total Price
+              </Button>
+            </div>
 
-            {isWeightBased && pricingMode === "per_kg" ? (
+            {pricingMode === "per_kg" ? (
               <div className="space-y-2">
                 <Label htmlFor="price_per_kg">Price per KG (₹)</Label>
                 <Input
@@ -602,14 +478,12 @@ export function PurchaseInvoiceForm({
                 })}
               </span>
             </div>
-            {isWeightBased &&
-              pricingMode === "total" &&
-              totalWeight > 0 && (
-                <div className="flex justify-between text-xs text-blue-700">
-                  <span>Effective rate</span>
-                  <span>₹{computedPricePerKg.toFixed(2)}/KG</span>
-                </div>
-              )}
+            {pricingMode === "total" && totalWeight > 0 && (
+              <div className="flex justify-between text-xs text-blue-700">
+                <span>Effective rate</span>
+                <span>₹{computedPricePerKg.toFixed(2)}/KG</span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-3 justify-end">

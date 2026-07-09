@@ -42,7 +42,7 @@ export default async function ChallanDetailPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("organization_id")
+    .select("organization_id, role")
     .eq("id", user.id)
     .single()
 
@@ -71,7 +71,11 @@ export default async function ChallanDetailPage({
           createdByName={challan.profiles?.full_name}
         />
       </div>
-      <PrintableChallan challan={challanForPrint} template={template} />
+      <PrintableChallan
+        challan={challanForPrint}
+        template={template}
+        userRole={profile?.role}
+      />
     </div>
   )
 }

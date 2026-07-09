@@ -58,11 +58,13 @@ export default async function PurchaseReportsPage({
     supabase
       .from("purchase_invoices")
       .select("id, purchaser_id, issue_date, total_amount, total_weight_kg")
+      .or("invoice_type.eq.challan,invoice_type.is.null")
       .gte("issue_date", monthStart)
       .lte("issue_date", monthEnd),
     supabase
       .from("purchase_invoices")
       .select("purchaser_id, total_amount, amount_paid, issue_date")
+      .or("invoice_type.eq.challan,invoice_type.is.null")
       .neq("status", "cancelled")
       .neq("status", "paid")
       .lte("issue_date", monthEnd),

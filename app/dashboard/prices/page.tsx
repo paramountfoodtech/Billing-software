@@ -69,7 +69,8 @@ export default async function PricesPage() {
         <Suspense fallback={<LoadingOverlay />}>
           <PricesPageClient 
             priceCategories={priceCategories || []} 
-            priceHistory={priceHistory || []} 
+            priceHistory={priceHistory || []}
+            userRole={profile.role}
           />
         </Suspense>
       </div>

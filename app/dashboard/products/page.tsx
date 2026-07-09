@@ -8,7 +8,7 @@ import { Suspense } from "react"
 import { LoadingOverlay } from "@/components/loading-overlay"
 import { redirect } from "next/navigation"
 
-async function ProductsContent() {
+async function ProductsContent({ userRole }: { userRole?: string }) {
   const supabase = await createClient()
 
   const {
@@ -36,10 +36,25 @@ async function ProductsContent() {
     .eq("organization_id", profile.organization_id)
     .order("position", { ascending: true })
 
-  return <ProductsTable products={products || []} />
+  return <ProductsTable products={products || []} userRole={userRole} />
 }
 
 export default async function ProductsPage() {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect("/auth/login")
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  const userRole = profile?.role
+
   return (
     <DashboardPageWrapper title="Products & Services">
       <div className="w-full p-4 sm:p-6 lg:p-8 space-y-4">
@@ -53,7 +68,7 @@ export default async function ProductsPage() {
         </div>
 
         <Suspense fallback={<LoadingOverlay />}>
-          <ProductsContent />
+          <ProductsContent userRole={userRole} />
         </Suspense>
       </div>
     </DashboardPageWrapper>

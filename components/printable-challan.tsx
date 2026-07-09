@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatIndianDate } from "@/lib/date-time";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { canEdit, canEditChallan } from "@/lib/permissions";
 
 interface InvoiceTemplate {
   company_name: string;
@@ -43,6 +44,7 @@ interface Challan {
 interface PrintableChallanProps {
   challan: Challan;
   template?: InvoiceTemplate;
+  userRole?: string;
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
@@ -51,7 +53,11 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   invoiced: { label: "Invoiced", className: "bg-green-100 text-green-800" },
 };
 
-export function PrintableChallan({ challan, template }: PrintableChallanProps) {
+export function PrintableChallan({
+  challan,
+  template,
+  userRole,
+}: PrintableChallanProps) {
   const [isPrinting, setIsPrinting] = useState(false);
   const boxes = challan.challan_boxes || [];
   const totalBirds =
@@ -120,7 +126,7 @@ export function PrintableChallan({ challan, template }: PrintableChallanProps) {
           <Link href="/dashboard/challans">Back</Link>
         </Button>
         <div className="flex items-center gap-2">
-          {challan.status === "draft" && (
+          {canEdit(userRole) && canEditChallan(challan) && (
             <IconTooltip label="Edit">
               <Button asChild variant="outline">
                 <Link href={`/dashboard/challans/${challan.id}/edit`}>
@@ -130,10 +136,10 @@ export function PrintableChallan({ challan, template }: PrintableChallanProps) {
               </Button>
             </IconTooltip>
           )}
-          <IconTooltip label="Print Challan">
+          <IconTooltip label="Print purchase challan">
             <Button onClick={handlePrint} disabled={isPrinting}>
               <Printer className="h-4 w-4 mr-2" />
-              Print Challan
+              Print purchase challan
             </Button>
           </IconTooltip>
         </div>
@@ -158,10 +164,10 @@ export function PrintableChallan({ challan, template }: PrintableChallanProps) {
               </div>
             </div>
             <div className="text-right">
-              <h2 className="text-2xl font-bold mb-1.5">CHALLAN</h2>
+              <h2 className="text-2xl font-bold mb-1.5">PURCHASE CHALLAN</h2>
               <div className="text-xs">
                 <p className="font-semibold">
-                  Challan #: {challan.challan_number}
+                  Purchase challan #: {challan.challan_number}
                 </p>
                 <p>
                   Date:{" "}

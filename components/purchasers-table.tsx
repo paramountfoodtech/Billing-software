@@ -41,6 +41,7 @@ import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { canDelete, canEdit } from "@/lib/permissions";
 
 interface Purchaser {
   id: string;
@@ -58,9 +59,10 @@ interface Purchaser {
 
 interface PurchasersTableProps {
   purchasers: Purchaser[];
+  userRole?: string;
 }
 
-export function PurchasersTable({ purchasers }: PurchasersTableProps) {
+export function PurchasersTable({ purchasers, userRole }: PurchasersTableProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -180,7 +182,7 @@ export function PurchasersTable({ purchasers }: PurchasersTableProps) {
         description:
           error instanceof Error
             ? error.message.includes("violates foreign key")
-              ? "This purchaser has challans or invoices linked. Remove those first."
+              ? "This purchaser has purchase challans or invoices linked. Remove those first."
               : error.message
             : "An error occurred while deleting.",
       });
@@ -381,25 +383,29 @@ export function PurchasersTable({ purchasers }: PurchasersTableProps) {
                         createdAt={purchaser.created_at}
                         createdByName={purchaser.profiles?.full_name}
                       />
-                      <IconTooltip label="Edit purchaser">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/dashboard/purchasers/${purchaser.id}/edit`}>
-                            <Pencil className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                      </IconTooltip>
-                      <IconTooltip label="Delete purchaser">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setPurchaserToDelete(purchaser.id);
-                            setDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </IconTooltip>
+                      {canEdit(userRole) && (
+                        <IconTooltip label="Edit purchaser">
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href={`/dashboard/purchasers/${purchaser.id}/edit`}>
+                              <Pencil className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                        </IconTooltip>
+                      )}
+                      {canDelete(userRole) && (
+                        <IconTooltip label="Delete purchaser">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setPurchaserToDelete(purchaser.id);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </IconTooltip>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -423,7 +429,7 @@ export function PurchasersTable({ purchasers }: PurchasersTableProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete purchaser?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. Purchasers with linked challans or
+              This action cannot be undone. Purchasers with linked purchase challans or
               invoices cannot be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>

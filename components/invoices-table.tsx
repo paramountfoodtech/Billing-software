@@ -33,6 +33,7 @@ import { formatIndianDate } from "@/lib/date-time";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { canDelete, canEdit } from "@/lib/permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1161,7 +1162,7 @@ export function InvoicesTable({
                               </Link>
                             </Button>
                           </IconTooltip>
-                          {userRole === "super_admin" &&
+                          {canEdit(userRole) &&
                             (invoice.status === "draft" ||
                               invoice.status === "recorded") && (
                             <IconTooltip label="Edit invoice">
@@ -1174,7 +1175,7 @@ export function InvoicesTable({
                               </Button>
                             </IconTooltip>
                           )}
-                          {userRole !== "accountant" && (
+                          {canDelete(userRole) && (
                             <IconTooltip label="Delete invoice">
                               <Button
                                 variant="ghost"

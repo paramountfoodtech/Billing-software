@@ -7,7 +7,7 @@ import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
 import { Suspense } from "react"
 import { LoadingOverlay } from "@/components/loading-overlay"
 
-async function ClientsContent() {
+async function ClientsContent({ userRole }: { userRole?: string }) {
   const supabase = await createClient()
 
   const { data: clients } = await supabase
@@ -15,7 +15,7 @@ async function ClientsContent() {
     .select("*, profiles!clients_created_by_fkey(full_name)")
     .order("created_at", { ascending: false })
 
-  return <ClientsTable clients={clients || []} />
+  return <ClientsTable clients={clients || []} userRole={userRole} />
 }
 
 export default async function ClientsPage() {
@@ -46,7 +46,7 @@ export default async function ClientsPage() {
         </div>
 
         <Suspense fallback={<LoadingOverlay />}>
-          <ClientsContent />
+          <ClientsContent userRole={userRole} />
         </Suspense>
       </div>
     </DashboardPageWrapper>

@@ -41,6 +41,7 @@ import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { canDelete, canEdit } from "@/lib/permissions";
 
 interface Client {
   id: string;
@@ -63,9 +64,10 @@ interface Client {
 
 interface ClientsTableProps {
   clients: Client[];
+  userRole?: string;
 }
 
-export function ClientsTable({ clients }: ClientsTableProps) {
+export function ClientsTable({ clients, userRole }: ClientsTableProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -409,25 +411,29 @@ export function ClientsTable({ clients }: ClientsTableProps) {
                       createdAt={client.created_at}
                       createdByName={client.profiles?.full_name}
                     />
-                    <IconTooltip label="Edit client">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/dashboard/clients/${client.id}/edit`}>
-                          <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
-                        </Link>
-                      </Button>
-                    </IconTooltip>
-                    <IconTooltip label="Delete client">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setClientToDelete(client.id);
-                          setDeleteDialogOpen(true);
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-                      </Button>
-                    </IconTooltip>
+                    {canEdit(userRole) && (
+                      <IconTooltip label="Edit client">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/dashboard/clients/${client.id}/edit`}>
+                            <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
+                          </Link>
+                        </Button>
+                      </IconTooltip>
+                    )}
+                    {canDelete(userRole) && (
+                      <IconTooltip label="Delete client">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setClientToDelete(client.id);
+                            setDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+                        </Button>
+                      </IconTooltip>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

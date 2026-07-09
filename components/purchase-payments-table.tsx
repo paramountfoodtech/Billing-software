@@ -41,6 +41,7 @@ import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/expo
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { canDelete } from "@/lib/permissions";
 
 interface PurchasePayment {
   id: string;
@@ -518,7 +519,7 @@ export function PurchasePaymentsTable({
                             </Link>
                           </Button>
                         </IconTooltip>
-                        {userRole === "super_admin" && (
+                        {canDelete(userRole) && (
                           <IconTooltip label="Delete payment">
                             <Button
                               variant="ghost"

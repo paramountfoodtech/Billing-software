@@ -120,7 +120,7 @@ export function PurchaseReportsPageClient({
 
           <TabsTrigger value="purchaser">Purchaser Report</TabsTrigger>
 
-          <TabsTrigger value="challan">Challan Tracking</TabsTrigger>
+          <TabsTrigger value="challan">Purchase challan tracking</TabsTrigger>
 
         </TabsList>
 
@@ -152,7 +152,7 @@ export function PurchaseReportsPageClient({
 
         <TabsContent value="challan" className="outline-none">
 
-          <h2 className="mb-3 text-lg font-semibold">Challan Tracking</h2>
+          <h2 className="mb-3 text-lg font-semibold">Purchase challan tracking</h2>
 
           <PurchaseReportsTable
 

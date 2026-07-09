@@ -25,6 +25,7 @@ async function PurchaseInvoicesContent({
         profiles!purchase_invoices_created_by_fkey(full_name)
       `,
       )
+      .or("invoice_type.eq.challan,invoice_type.is.null")
       .order("created_at", { ascending: false }),
   ])
 

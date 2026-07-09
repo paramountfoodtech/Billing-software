@@ -69,6 +69,13 @@ import {
   getPricingRuleStepDescription,
   parsePricingRuleSteps,
 } from "@/lib/pricing-rules";
+import {
+  getInvoiceNumberFormatError,
+  getNextInvoiceNumber,
+  isInvoiceNumberDuplicate as checkInvoiceNumberDuplicate,
+  isValidInvoiceNumber,
+  sanitizeInvoiceNumberInput,
+} from "@/lib/invoice-number";
 
 interface Client {
   id: string;
@@ -168,25 +175,6 @@ interface InvoiceItem {
   skinless_weight?: number | null;
 }
 
-const sanitizeInvoiceNumberInput = (value: string) =>
-  value.replace(/[^A-Za-z0-9-]/g, "");
-
-const getNextInvoiceNumber = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-
-  const match = trimmed.match(/^(.*?)(\d+)$/);
-  if (!match) return sanitizeInvoiceNumberInput(trimmed);
-
-  const prefix = match[1];
-  const numericPart = match[2];
-  const nextValue = (Number(numericPart) + 1)
-    .toString()
-    .padStart(numericPart.length, "0");
-
-  return sanitizeInvoiceNumberInput(`${prefix}${nextValue}`);
-};
-
 export function InvoiceForm({
   clients,
   products,
@@ -201,8 +189,12 @@ export function InvoiceForm({
 }: InvoiceFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const supabase = createClient();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [isInvoiceNumberDuplicate, setIsInvoiceNumberDuplicate] = useState(false);
+  const [isCheckingInvoiceNumber, setIsCheckingInvoiceNumber] = useState(false);
   const [refreshPricesDialogOpen, setRefreshPricesDialogOpen] = useState(false);
   const [issueDateChangeDialogOpen, setIssueDateChangeDialogOpen] =
     useState(false);
@@ -310,6 +302,90 @@ export function InvoiceForm({
     () => buildClientPricingRuleIndex(clientPricingHistory),
     [clientPricingHistory],
   );
+
+  const invoiceNumberFormatError = useMemo(
+    () => getInvoiceNumberFormatError(formData.invoice_number),
+    [formData.invoice_number],
+  );
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadOrganizationId = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user || !isActive) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!isActive) return;
+      setOrganizationId(profile?.organization_id || null);
+    };
+
+    void loadOrganizationId();
+
+    return () => {
+      isActive = false;
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    let isActive = true;
+    const normalizedInvoiceNumber = formData.invoice_number.trim();
+    const canCheckDuplicate =
+      normalizedInvoiceNumber &&
+      !invoiceNumberFormatError &&
+      organizationId &&
+      !(continueInvoiceSequence && !isEditMode) &&
+      !(isEditMode && !canEditInvoiceNumber);
+
+    if (!canCheckDuplicate) {
+      setIsInvoiceNumberDuplicate(false);
+      setIsCheckingInvoiceNumber(false);
+      return;
+    }
+
+    setIsCheckingInvoiceNumber(true);
+
+    const timer = setTimeout(async () => {
+      const { isDuplicate, error: duplicateError } =
+        await checkInvoiceNumberDuplicate(
+          supabase,
+          organizationId,
+          normalizedInvoiceNumber,
+          isEditMode ? initialInvoice?.id : undefined,
+        );
+
+      if (!isActive) return;
+
+      if (duplicateError) {
+        setIsInvoiceNumberDuplicate(false);
+      } else {
+        setIsInvoiceNumberDuplicate(isDuplicate);
+      }
+      setIsCheckingInvoiceNumber(false);
+    }, 350);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timer);
+    };
+  }, [
+    formData.invoice_number,
+    organizationId,
+    supabase,
+    invoiceNumberFormatError,
+    continueInvoiceSequence,
+    isEditMode,
+    canEditInvoiceNumber,
+    initialInvoice?.id,
+  ]);
 
   const priceCategoryLookup = useMemo(
     () => buildPriceCategoryDateLookup(priceHistory),
@@ -1033,7 +1109,22 @@ export function InvoiceForm({
     setIsLoading(true);
     setError(null);
 
-    const supabase = createClient();
+    if (isInvoiceNumberDuplicate) {
+      setError(
+        "This invoice number already exists. Please enter a unique invoice number.",
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    const invoiceNumberFormatIssue = getInvoiceNumberFormatError(
+      formData.invoice_number,
+    );
+    if (invoiceNumberFormatIssue) {
+      setError(invoiceNumberFormatIssue);
+      setIsLoading(false);
+      return;
+    }
 
     // Get current user
     const {
@@ -1087,9 +1178,10 @@ export function InvoiceForm({
           return;
         }
 
-        if (invoiceNumber !== formData.invoice_number.trim()) {
+        if (!isValidInvoiceNumber(invoiceNumber)) {
           setError(
-            "Invoice number can only contain letters, numbers, and hyphen (-).",
+            getInvoiceNumberFormatError(invoiceNumber) ||
+              "Please enter a valid invoice number.",
           );
           setIsLoading(false);
           return;
@@ -1149,9 +1241,10 @@ export function InvoiceForm({
           return;
         }
 
-        if (invoiceNumber !== formData.invoice_number.trim()) {
+        if (canEditInvoiceNumber && !isValidInvoiceNumber(invoiceNumber)) {
           setError(
-            "Invoice number can only contain letters, numbers, and hyphen (-).",
+            getInvoiceNumberFormatError(invoiceNumber) ||
+              "Please enter a valid invoice number.",
           );
           setIsLoading(false);
           return;
@@ -1392,12 +1485,26 @@ export function InvoiceForm({
                   );
                   setFormData({ ...formData, invoice_number: sanitizedValue });
                 }}
-                placeholder="e.g., INV-001, INV-002"
+                placeholder="e.g., 0001, A1, B1234"
                 disabled={
                   (isEditMode && !canEditInvoiceNumber) || continueInvoiceSequence
                 }
-                pattern="[A-Za-z0-9-]+"
               />
+              {isCheckingInvoiceNumber && formData.invoice_number.trim() && (
+                <p className="text-xs text-muted-foreground">
+                  Checking invoice number...
+                </p>
+              )}
+              {!isCheckingInvoiceNumber && invoiceNumberFormatError && (
+                <p className="text-xs text-red-600">{invoiceNumberFormatError}</p>
+              )}
+              {!isCheckingInvoiceNumber &&
+                !invoiceNumberFormatError &&
+                isInvoiceNumberDuplicate && (
+                  <p className="text-xs text-red-600">
+                    This invoice number already exists. Please enter a unique one.
+                  </p>
+                )}
               {!isEditMode && (
                 <div className="flex items-center justify-between gap-3 rounded-md border p-2">
                   <div className="space-y-0.5">
@@ -1427,7 +1534,7 @@ export function InvoiceForm({
                     : "Only admin can edit invoice number"
                   : continueInvoiceSequence
                     ? "Invoice number is locked while auto sequence is enabled"
-                    : "Only letters, numbers, and hyphen (-) are allowed"}
+                    : "Use a 4-digit number or one capital letter + number (1-10000), max 6 characters"}
               </p>
             </div>
           </div>
@@ -1943,6 +2050,8 @@ export function InvoiceForm({
             isLoading ||
             !formData.client_id ||
             !formData.invoice_number ||
+            !!invoiceNumberFormatError ||
+            isInvoiceNumberDuplicate ||
             (clientPerBirdEnabled && globalBirdCount <= 0)
           }
         >

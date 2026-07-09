@@ -42,10 +42,12 @@ import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/expo
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { canDelete } from "@/lib/permissions";
 
 interface PurchaseInvoice {
   id: string;
   invoice_number: string;
+  purchaser_invoice_number?: string | null;
   purchaser_id: string | null;
   issue_date: string;
   total_weight_kg: string;
@@ -53,7 +55,6 @@ interface PurchaseInvoice {
   total_amount: string;
   amount_paid: string;
   status: string;
-  invoice_type?: string;
   description?: string | null;
   created_at: string;
   purchasers: { name: string; purchaser_code: string } | null;
@@ -61,13 +62,10 @@ interface PurchaseInvoice {
   profiles?: { full_name: string };
 }
 
-function getChallanOrTypeLabel(invoice: PurchaseInvoice) {
-  if (invoice.challans.challan_number !== "—") {
-    return invoice.challans.challan_number;
-  }
-  if (invoice.invoice_type === "salary") return "Salary";
-  if (invoice.invoice_type === "expense") return "Expense";
-  return "—";
+function getChallanLabel(invoice: PurchaseInvoice) {
+  return invoice.challans.challan_number !== "—"
+    ? invoice.challans.challan_number
+    : "—";
 }
 
 interface PurchaseInvoicesTableProps {
@@ -217,6 +215,13 @@ export function PurchaseInvoicesTable({
     if (!invoiceToDelete) return;
     setIsDeleting(true);
     const supabase = createClient();
+
+    const { data: invoice } = await supabase
+      .from("purchase_invoices")
+      .select("challan_id")
+      .eq("id", invoiceToDelete)
+      .maybeSingle();
+
     const { error } = await supabase
       .from("purchase_invoices")
       .delete()
@@ -229,11 +234,38 @@ export function PurchaseInvoicesTable({
         description: "Failed to delete purchase invoice.",
       });
     } else {
-      toast({
-        variant: "success",
-        title: "Invoice deleted",
-        description: "The purchase invoice has been deleted successfully.",
-      });
+      if (invoice?.challan_id) {
+        const { error: challanError } = await supabase
+          .from("challans")
+          .update({
+            status: "final",
+            purchase_invoice_id: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", invoice.challan_id);
+
+        if (challanError) {
+          toast({
+            variant: "destructive",
+            title: "Invoice deleted, purchase challan unlock failed",
+            description:
+              "The purchase invoice was deleted, but the linked purchase challan could not be unlocked for deletion.",
+          });
+        } else {
+          toast({
+            variant: "success",
+            title: "Invoice deleted",
+            description:
+              "The purchase invoice was deleted and its linked purchase challan can now be deleted.",
+          });
+        }
+      } else {
+        toast({
+          variant: "success",
+          title: "Invoice deleted",
+          description: "The purchase invoice has been deleted successfully.",
+        });
+      }
       router.refresh();
     }
     setIsDeleting(false);
@@ -245,7 +277,7 @@ export function PurchaseInvoicesTable({
     const enriched = processedInvoices.map((inv) => ({
       ...inv,
       purchaser_name: inv.purchasers?.name ?? "N/A",
-      challan_number: getChallanOrTypeLabel(inv),
+      challan_number: getChallanLabel(inv),
       due_amount: (
         Number(inv.total_amount) - Number(inv.amount_paid)
       ).toFixed(2),
@@ -256,7 +288,8 @@ export function PurchaseInvoicesTable({
 
     const columns: ExportColumn[] = [
       { key: "invoice_number", label: "Invoice Number" },
-      { key: "challan_number", label: "Challan" },
+      { key: "purchaser_invoice_number", label: "Purchaser Invoice #" },
+      { key: "challan_number", label: "Purchase challan" },
       { key: "purchaser_name", label: "Purchaser" },
       {
         key: "issue_date",
@@ -298,7 +331,7 @@ export function PurchaseInvoicesTable({
   const handleExportPDF = async () => {
     const enriched = processedInvoices.map((inv) => ({
       invoice_number: inv.invoice_number,
-      challan_number: getChallanOrTypeLabel(inv),
+      challan_number: getChallanLabel(inv),
       purchaser_name: inv.purchasers?.name ?? "N/A",
       issue_date_fmt: formatIndianDate(inv.issue_date, {
         year: "numeric",
@@ -316,7 +349,7 @@ export function PurchaseInvoicesTable({
 
     const pdfColumns: ExportColumn[] = [
       { key: "invoice_number", label: "Invoice #", widthFrac: 0.1 },
-      { key: "challan_number", label: "Challan", widthFrac: 0.1 },
+      { key: "challan_number", label: "Purchase challan", widthFrac: 0.1 },
       { key: "purchaser_name", label: "Purchaser", widthFrac: 0.18 },
       { key: "issue_date_fmt", label: "Date", widthFrac: 0.1 },
       { key: "weight_fmt", label: "Weight", widthFrac: 0.1 },
@@ -384,7 +417,7 @@ export function PurchaseInvoicesTable({
                 Invoice #<SortIcon column="invoice_number" />
               </TableHead>
               <TableHead className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3">
-                Challan
+                Purchase challan
               </TableHead>
               <TableHead
                 className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
@@ -503,7 +536,7 @@ export function PurchaseInvoicesTable({
                       {invoice.invoice_number}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3">
-                      {getChallanOrTypeLabel(invoice)}
+                      {getChallanLabel(invoice)}
                     </TableCell>
                     <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
                       {invoice.purchasers?.name ?? "N/A"}
@@ -557,7 +590,7 @@ export function PurchaseInvoicesTable({
                             </Link>
                           </Button>
                         </IconTooltip>
-                        {userRole !== "accountant" && (
+                        {canDelete(userRole) && (
                           <IconTooltip label="Delete purchase invoice">
                             <Button
                               variant="ghost"
@@ -596,7 +629,8 @@ export function PurchaseInvoicesTable({
             <AlertDialogTitle>Delete purchase invoice?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. Invoices with linked payments cannot
-              be deleted.
+              be deleted. If this invoice was created from a purchase challan, the
+              purchase challan will be unlocked so Super Admin can delete it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

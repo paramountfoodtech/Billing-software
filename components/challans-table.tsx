@@ -43,6 +43,12 @@ import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  canDelete,
+  canDeleteChallan,
+  canEdit,
+  canEditChallan,
+} from "@/lib/permissions";
 
 interface Challan {
   id: string;
@@ -60,6 +66,7 @@ interface Challan {
 
 interface ChallansTableProps {
   challans: Challan[];
+  userRole?: string;
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
@@ -68,9 +75,11 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   invoiced: { label: "Invoiced", className: "bg-green-100 text-green-800" },
 };
 
-export function ChallansTable({ challans }: ChallansTableProps) {
+export function ChallansTable({ challans, userRole }: ChallansTableProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const allowEdit = canEdit(userRole);
+  const allowDelete = canDelete(userRole);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [challanToDelete, setChallanToDelete] = useState<string | null>(null);
@@ -185,14 +194,14 @@ export function ChallansTable({ challans }: ChallansTableProps) {
 
       toast({
         variant: "success",
-        title: "Challan deleted",
-        description: "The challan has been removed successfully.",
+        title: "Purchase challan deleted",
+        description: "The purchase challan has been removed successfully.",
       });
       router.refresh();
     } catch (error: unknown) {
       toast({
         variant: "destructive",
-        title: "Cannot delete challan",
+        title: "Cannot delete purchase challan",
         description:
           error instanceof Error ? error.message : "An error occurred.",
       });
@@ -205,7 +214,7 @@ export function ChallansTable({ challans }: ChallansTableProps) {
 
   const handleExport = () => {
     const columns: ExportColumn[] = [
-      { key: "challan_number", label: "Challan Number" },
+      { key: "challan_number", label: "Purchase Challan Number" },
       { key: "purchaser_name", label: "Purchaser" },
       {
         key: "challan_date",
@@ -241,7 +250,7 @@ export function ChallansTable({ challans }: ChallansTableProps) {
     toast({
       variant: "success",
       title: "Exported",
-      description: `${processedChallans.length} challan(s) exported to CSV successfully.`,
+      description: `${processedChallans.length} purchase challan(s) exported to CSV successfully.`,
     });
   };
 
@@ -249,7 +258,7 @@ export function ChallansTable({ challans }: ChallansTableProps) {
     return (
       <div className="text-center py-12 border rounded-lg bg-white">
         <p className="text-muted-foreground">
-          No challans found. Create your first challan to get started.
+          No purchase challans found. Create your first purchase challan to get started.
         </p>
       </div>
     );
@@ -272,7 +281,7 @@ export function ChallansTable({ challans }: ChallansTableProps) {
                 className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
                 onClick={() => handleSort("challan_number")}
               >
-                Challan #
+                Purchase challan #
                 <SortIcon column="challan_number" />
               </TableHead>
               <TableHead className="px-2 sm:px-4 py-2 sm:py-3">Purchaser</TableHead>
@@ -346,7 +355,7 @@ export function ChallansTable({ challans }: ChallansTableProps) {
                   colSpan={7}
                   className="text-center text-muted-foreground py-12"
                 >
-                  No challans found for the selected filters.
+                  No purchase challans found for the selected filters.
                 </TableCell>
               </TableRow>
             ) : (
@@ -384,8 +393,9 @@ export function ChallansTable({ challans }: ChallansTableProps) {
                     </TableCell>
                     <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                       <div className="flex items-center justify-end gap-1">
-                        {challan.status !== "invoiced" && (
-                          <IconTooltip label="View challan">
+                        {(challan.status !== "invoiced" ||
+                          !challan.purchase_invoice_id) && (
+                          <IconTooltip label="View purchase challan">
                             <Button variant="ghost" size="sm" asChild>
                               <Link href={`/dashboard/challans/${challan.id}`}>
                                 <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -422,30 +432,30 @@ export function ChallansTable({ challans }: ChallansTableProps) {
                           createdAt={challan.created_at}
                           createdByName={challan.profiles?.full_name}
                         />
-                        {challan.status === "draft" && (
-                          <>
-                            <IconTooltip label="Edit challan">
-                              <Button variant="ghost" size="sm" asChild>
-                                <Link
-                                  href={`/dashboard/challans/${challan.id}/edit`}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Link>
-                              </Button>
-                            </IconTooltip>
-                            <IconTooltip label="Delete challan">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setChallanToDelete(challan.id);
-                                  setDeleteDialogOpen(true);
-                                }}
+                        {allowEdit && canEditChallan(challan) && (
+                          <IconTooltip label="Edit purchase challan">
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link
+                                href={`/dashboard/challans/${challan.id}/edit`}
                               >
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                              </Button>
-                            </IconTooltip>
-                          </>
+                                <Pencil className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                          </IconTooltip>
+                        )}
+                        {allowDelete && canDeleteChallan(challan) && (
+                          <IconTooltip label="Delete purchase challan">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setChallanToDelete(challan.id);
+                                setDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </IconTooltip>
                         )}
                       </div>
                     </TableCell>
@@ -469,9 +479,11 @@ export function ChallansTable({ challans }: ChallansTableProps) {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete challan?</AlertDialogTitle>
+            <AlertDialogTitle>Delete purchase challan?</AlertDialogTitle>
             <AlertDialogDescription>
-              Only draft challans can be deleted. This action cannot be undone.
+              This action cannot be undone. Draft, final, and unlocked purchase
+              challans can be deleted by Super Admin.
+              can be deleted by Super Admin.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

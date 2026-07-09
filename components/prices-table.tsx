@@ -47,6 +47,7 @@ import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
 import { Input } from "@/components/ui/input"
 import { EntryHistoryButton } from "@/components/entry-history-button"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { canDelete, canEdit } from "@/lib/permissions"
 
 interface PriceCategory {
   id: string
@@ -69,6 +70,7 @@ interface PriceHistory {
 interface PricesTableProps {
   priceCategories: PriceCategory[]
   priceHistory: PriceHistory[]
+  userRole?: string
 }
 
 function SortableCategoryRow({
@@ -76,11 +78,13 @@ function SortableCategoryRow({
   latestPrice,
   onDelete,
   isDeleting,
+  userRole,
 }: {
   category: PriceCategory
   latestPrice: PriceHistory | null
   onDelete: (id: string) => void
   isDeleting: boolean
+  userRole?: string
 }) {
   const {
     attributes,
@@ -104,13 +108,15 @@ function SortableCategoryRow({
       className={`text-xs sm:text-sm ${!category.is_active ? "opacity-60" : ""}`}
     >
       <TableCell className="w-[40px] sm:w-[50px] px-2 sm:px-4 py-2 sm:py-3">
-        <div
-          {...attributes}
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing hover:bg-muted rounded p-1 inline-flex"
-        >
-          <GripVertical className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-        </div>
+        {canEdit(userRole) && (
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing hover:bg-muted rounded p-1 inline-flex"
+          >
+            <GripVertical className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+          </div>
+        )}
       </TableCell>
       <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3 max-w-[100px] sm:max-w-none truncate">{category.name}</TableCell>
       <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
@@ -140,30 +146,38 @@ function SortableCategoryRow({
             entityId={category.id}
             createdAt={category.created_at}
           />
-          <IconTooltip label="Edit price category">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/dashboard/prices/${category.id}/edit`}>
-                <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
-              </Link>
-            </Button>
-          </IconTooltip>
-          <IconTooltip label="Delete price category">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onDelete(category.id)}
-              disabled={isDeleting}
-            >
-              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-            </Button>
-          </IconTooltip>
+          {canEdit(userRole) && (
+            <IconTooltip label="Edit price category">
+              <Button variant="ghost" size="sm" asChild>
+                <Link href={`/dashboard/prices/${category.id}/edit`}>
+                  <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
+                </Link>
+              </Button>
+            </IconTooltip>
+          )}
+          {canDelete(userRole) && (
+            <IconTooltip label="Delete price category">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDelete(category.id)}
+                disabled={isDeleting}
+              >
+                <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+              </Button>
+            </IconTooltip>
+          )}
         </div>
       </TableCell>
     </TableRow>
   )
 }
 
-export function PricesTable({ priceCategories, priceHistory }: PricesTableProps) {
+export function PricesTable({
+  priceCategories,
+  priceHistory,
+  userRole,
+}: PricesTableProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [isDeleting, setIsDeleting] = useState(false)
@@ -268,6 +282,8 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (!canEdit(userRole)) return
+
     const { active, over } = event
 
     if (over && active.id !== over.id) {
@@ -349,43 +365,91 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
   }
 
   const handleExport = () => {
-    // Apply the same filters that are applied to the displayed data
     const filteredHistory = priceHistory.filter((p) => {
       const cat = priceCategories.find((c) => c.id === p.price_category_id)
-      const matchesName = !filter.trim() || (cat?.name || "").toLowerCase().includes(filter.toLowerCase())
-      const withinRange = (!fromDate || p.effective_date >= fromDate) && (!toDate || p.effective_date <= toDate)
+      const matchesName =
+        !filter.trim() ||
+        (cat?.name || "").toLowerCase().includes(filter.toLowerCase())
+      const withinRange =
+        (!fromDate || p.effective_date >= fromDate) &&
+        (!toDate || p.effective_date <= toDate)
       return matchesName && withinRange
     })
 
-    // Enrich filtered data with category names
-    const enrichedData = filteredHistory.map(price => {
-      const category = priceCategories.find(cat => cat.id === price.price_category_id)
-      return {
-        ...price,
-        name: category?.name || 'Unknown',
-      }
+    const exportCategories = priceCategories
+      .filter(
+        (cat) =>
+          !filter.trim() ||
+          cat.name.toLowerCase().includes(filter.toLowerCase()),
+      )
+      .sort(
+        (a, b) =>
+          (a.position ?? 0) - (b.position ?? 0) ||
+          a.name.localeCompare(b.name),
+      )
+
+    if (filteredHistory.length === 0 || exportCategories.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Nothing to export",
+        description: "No price history matches the current filters.",
+      })
+      return
+    }
+
+    const categoryColumnKeys = exportCategories.map((cat) => ({
+      id: cat.id,
+      key: `cat_${cat.id}`,
+      label: cat.name,
+    }))
+
+    const pricesByDate = new Map<string, Record<string, string>>()
+
+    const sortedHistory = [...filteredHistory].sort((a, b) => {
+      const dateCompare = a.effective_date.localeCompare(b.effective_date)
+      if (dateCompare !== 0) return dateCompare
+      return a.created_at.localeCompare(b.created_at)
     })
 
+    for (const price of sortedHistory) {
+      const category = exportCategories.find(
+        (cat) => cat.id === price.price_category_id,
+      )
+      if (!category) continue
+
+      const formattedDate = formatIndianDate(price.effective_date, {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      })
+
+      if (!pricesByDate.has(price.effective_date)) {
+        pricesByDate.set(price.effective_date, {
+          effective_date: formattedDate,
+        })
+      }
+
+      const row = pricesByDate.get(price.effective_date)!
+      row[`cat_${category.id}`] = Number(price.price).toFixed(2)
+    }
+
+    const exportRows = [...pricesByDate.entries()]
+      .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+      .map(([, row]) => row)
+
     const columns: ExportColumn[] = [
-      { key: "name", label: "Category Name" },
-      { key: "price", label: "Price", formatter: (price) => Number(price).toFixed(2) },
-      {
-        key: "effective_date",
-        label: "Effective Date",
-        formatter: (date) =>
-          formatIndianDate(date, {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          }),
-      },
+      { key: "effective_date", label: "Date" },
+      ...categoryColumnKeys.map((cat) => ({
+        key: cat.key,
+        label: cat.label,
+      })),
     ]
 
-    exportToCSV(enrichedData, columns, `price-history-${getTimestamp()}.csv`)
+    exportToCSV(exportRows, columns, `price-history-${getTimestamp()}.csv`)
     toast({
       variant: "success",
       title: "Exported",
-      description: `${enrichedData.length} price records exported to CSV successfully.`,
+      description: `${exportRows.length} date row(s) exported to CSV successfully.`,
     })
   }
 
@@ -439,6 +503,7 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
                     key={category.id}
                     category={category}
                     latestPrice={getLatestPrice(category.id)}
+                    userRole={userRole}
                     onDelete={(id) => {
                       setDeleteTarget({ id, type: 'category' })
                       setDeleteDialogOpen(true)
@@ -556,19 +621,21 @@ export function PricesTable({ priceCategories, priceHistory }: PricesTableProps)
                             entityId={price.id}
                             createdAt={price.created_at}
                           />
-                          <IconTooltip label="Delete price">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setDeleteTarget({ id: price.id, type: 'price' })
-                                setDeleteDialogOpen(true)
-                              }}
-                              disabled={isDeleting}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
-                          </IconTooltip>
+                          {canDelete(userRole) && (
+                            <IconTooltip label="Delete price">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setDeleteTarget({ id: price.id, type: 'price' })
+                                  setDeleteDialogOpen(true)
+                                }}
+                                disabled={isDeleting}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </IconTooltip>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

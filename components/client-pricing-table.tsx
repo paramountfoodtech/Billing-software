@@ -31,6 +31,7 @@ import { applyChainedPricingRules, parsePricingRuleSteps } from "@/lib/pricing-r
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { canDelete, canEdit } from "@/lib/permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -361,7 +362,7 @@ export function ClientPricingTable({
     setIsDeleting(false);
   };
 
-  const colSpan = userRole !== "admin" ? 8 : 7;
+  const colSpan = canEdit(userRole) ? 8 : 7;
 
   return (
     <>
@@ -427,7 +428,7 @@ export function ClientPricingTable({
                 Final Price
                 <SortIcon column="final_price" />
               </TableHead>
-              {userRole !== "admin" && (
+              {canEdit(userRole) && (
                 <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">
                   Actions
                 </TableHead>
@@ -466,7 +467,7 @@ export function ClientPricingTable({
               <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
               <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
-              {userRole !== "admin" && (
+              {canEdit(userRole) && (
                 <TableHead className="px-2 sm:px-4 py-2 sm:py-3"></TableHead>
               )}
             </TableRow>
@@ -568,7 +569,7 @@ export function ClientPricingTable({
                   <TableCell className="font-bold text-green-600 px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm">
                     ₹{finalPrice.toFixed(2)}
                   </TableCell>
-                  {userRole !== "admin" && (
+                  {canEdit(userRole) && (
                     <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                       <div className="flex justify-end gap-1 sm:gap-2">
                         <EntryHistoryButton

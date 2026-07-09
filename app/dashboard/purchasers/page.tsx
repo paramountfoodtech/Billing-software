@@ -6,8 +6,9 @@ import { PurchasersTable } from "@/components/purchasers-table"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
 import { Suspense } from "react"
 import { LoadingOverlay } from "@/components/loading-overlay"
+import { redirect } from "next/navigation"
 
-async function PurchasersContent() {
+async function PurchasersContent({ userRole }: { userRole?: string }) {
   const supabase = await createClient()
 
   const [{ data: purchasers }, { data: invoices }] = await Promise.all([
@@ -34,10 +35,25 @@ async function PurchasersContent() {
     outstanding: outstandingByPurchaser[p.id] || 0,
   }))
 
-  return <PurchasersTable purchasers={enriched} />
+  return <PurchasersTable purchasers={enriched} userRole={userRole} />
 }
 
 export default async function PurchasersPage() {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect("/auth/login")
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  const userRole = profile?.role
+
   return (
     <DashboardPageWrapper title="Purchasers">
       <div className="w-full p-4 sm:p-6 lg:p-8 space-y-4">
@@ -51,7 +67,7 @@ export default async function PurchasersPage() {
         </div>
 
         <Suspense fallback={<LoadingOverlay />}>
-          <PurchasersContent />
+          <PurchasersContent userRole={userRole} />
         </Suspense>
       </div>
     </DashboardPageWrapper>

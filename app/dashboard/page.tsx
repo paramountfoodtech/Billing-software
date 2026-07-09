@@ -31,6 +31,7 @@ import { DashboardClient } from "./dashboard-client";
 import { DashboardRefresh } from "@/components/dashboard-refresh";
 import { Suspense } from "react";
 import { LoadingOverlay } from "@/components/loading-overlay";
+import { MaterialDashboardWidgets } from "@/components/material-dashboard-widgets";
 
 // Prevent caching to ensure fresh data on every request
 export const revalidate = 0;
@@ -79,6 +80,7 @@ export default async function DashboardPage() {
     fyInvoices,
     fyPayments,
     fyPurchaseInvoices,
+    fyExpenseEntries,
     allClientsResult,
     allInvoices,
   ] = await Promise.all([
@@ -105,8 +107,19 @@ export default async function DashboardPage() {
       supabase
         .from("purchase_invoices")
         .select("total_amount, status, invoice_type")
+        .or("invoice_type.eq.challan,invoice_type.is.null")
         .gte("issue_date", fyRange.start)
         .lte("issue_date", fyRange.end)
+        .order("issue_date", { ascending: true })
+        .range(from, to),
+    ),
+    fetchAllPages((from, to) =>
+      supabase
+        .from("expense_entries")
+        .select("total_amount, status, salary_month")
+        .gte("issue_date", fyRange.start)
+        .lte("issue_date", fyRange.end)
+        .neq("status", "cancelled")
         .order("issue_date", { ascending: true })
         .range(from, to),
     ),
@@ -136,14 +149,14 @@ export default async function DashboardPage() {
     (sum, inv) => sum + Number(inv.total_amount),
     0,
   );
-  const totalPurchase = activePurchaseInvoices
-    .filter((inv) => (inv.invoice_type || "challan") === "challan")
-    .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
-  const totalExpenses = activePurchaseInvoices
-    .filter((inv) =>
-      ["salary", "expense"].includes(inv.invoice_type || ""),
-    )
-    .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
+  const totalPurchase = activePurchaseInvoices.reduce(
+    (sum, inv) => sum + Number(inv.total_amount),
+    0,
+  );
+  const totalExpenses = fyExpenseEntries.reduce(
+    (sum, entry) => sum + Number(entry.total_amount),
+    0,
+  );
   const grossAmount = totalSale - totalPurchase;
   const netAmount = grossAmount - totalExpenses;
 
@@ -292,7 +305,7 @@ export default async function DashboardPage() {
                 ₹{formatINR(totalPurchase)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Challan purchases this FY
+                Purchase challan purchases this FY
               </p>
             </CardContent>
           </Card>
@@ -752,6 +765,10 @@ export default async function DashboardPage() {
             </div>
           </TabsContent>
         </Tabs>
+
+        <Suspense fallback={<LoadingOverlay />}>
+          <MaterialDashboardWidgets />
+        </Suspense>
       </div>
     </DashboardPageWrapper>
   );

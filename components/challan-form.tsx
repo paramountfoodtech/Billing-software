@@ -81,12 +81,20 @@ export function ChallanForm({
 
   const initialBoxCount = challan?.num_boxes || 1;
   const [numBoxesInput, setNumBoxesInput] = useState(String(initialBoxCount));
+  const [setBoxesInput, setSetBoxesInput] = useState("");
+  const [setBirdsInput, setSetBirdsInput] = useState("");
   const numBoxes = useMemo(() => {
     const parsed = parseInt(numBoxesInput, 10);
     if (Number.isNaN(parsed) || parsed < 1) return 1;
     return Math.min(100, parsed);
   }, [numBoxesInput]);
   const boxGridColumns = useBoxGridColumns();
+  const [birdsLocked, setBirdsLocked] = useState(
+    () =>
+      Boolean(
+        challan?.challan_boxes?.some((b) => (b.num_birds ?? 0) > 0),
+      ),
+  );
   const [boxes, setBoxes] = useState<ChallanBox[]>(() => {
     if (challan?.challan_boxes?.length) {
       return challan.challan_boxes.map((b) => ({
@@ -110,6 +118,13 @@ export function ChallanForm({
   });
 
   const isEditable = !challan || challan.status === "draft";
+  const allBoxesHaveWeights = useMemo(
+    () =>
+      boxes.length > 0 &&
+      boxes.every((b) => Number(b.weight_kg) > 0),
+    [boxes],
+  );
+  const canFinalize = allBoxesHaveWeights;
 
   useEffect(() => {
     setBoxes((prev) => {
@@ -159,6 +174,8 @@ export function ChallanForm({
   const handleNumBoxesChange = (value: string) => {
     if (value === "" || /^\d+$/.test(value)) {
       setNumBoxesInput(value);
+      // Manual box count keeps birds editable.
+      setBirdsLocked(false);
     }
   };
 
@@ -170,12 +187,67 @@ export function ChallanForm({
     setNumBoxesInput(String(clamped));
   };
 
+  const handleSetFieldChange = (
+    field: "setBoxesInput" | "setBirdsInput",
+    value: string,
+  ) => {
+    if (value === "" || /^\d+$/.test(value)) {
+      if (field === "setBoxesInput") {
+        setSetBoxesInput(value);
+      } else {
+        setSetBirdsInput(value);
+      }
+    }
+  };
+
+  const applyBoxSet = () => {
+    const boxCount = parseInt(setBoxesInput, 10);
+    const birdsPerBox = parseInt(setBirdsInput, 10);
+
+    if (Number.isNaN(boxCount) || boxCount < 1 || boxCount > 100) {
+      toast({
+        variant: "destructive",
+        title: "Invalid box count",
+        description: "Enter between 1 and 100 boxes for the set.",
+      });
+      return;
+    }
+
+    if (Number.isNaN(birdsPerBox) || birdsPerBox < 0) {
+      toast({
+        variant: "destructive",
+        title: "Invalid bird count",
+        description: "Enter birds per box as 0 or greater.",
+      });
+      return;
+    }
+
+    setBoxes((prev) =>
+      Array.from({ length: boxCount }, (_, index) => {
+        const boxNumber = index + 1;
+        const existing = prev.find((b) => b.box_number === boxNumber);
+        return {
+          box_number: boxNumber,
+          weight_kg: existing?.weight_kg || "",
+          num_birds: String(birdsPerBox),
+        };
+      }),
+    );
+    setNumBoxesInput(String(boxCount));
+    setBirdsLocked(true);
+    toast({
+      variant: "success",
+      title: "Box set created",
+      description: `${boxCount} box(es) with ${birdsPerBox} bird(s) each. Enter weights below.`,
+    });
+  };
+
   const saveChallan = async (status: "draft" | "final") => {
     if (!formData.purchaser_id) {
       toast({
         variant: "destructive",
         title: "Select purchaser",
-        description: "Please select a purchaser for this challan.",
+        description: "Please select a purchaser for this purchase challan.",
       });
       return;
     }
@@ -183,17 +255,17 @@ export function ChallanForm({
     if (!formData.challan_number.trim()) {
       toast({
         variant: "destructive",
-        title: "Missing challan number",
-        description: "Please enter a challan reference number.",
+        title: "Missing purchase challan number",
+        description: "Please enter a purchase challan reference number.",
       });
       return;
     }
 
-    if (status === "final" && totalWeight <= 0) {
+    if (status === "final" && !allBoxesHaveWeights) {
       toast({
         variant: "destructive",
         title: "Invalid weights",
-        description: "Please enter weight for at least one box before finalizing.",
+        description: "Please enter weight for every box before finalizing.",
       });
       return;
     }
@@ -221,7 +293,7 @@ export function ChallanForm({
         challan_number: formData.challan_number.trim(),
         purchaser_id: formData.purchaser_id,
         challan_date: formData.challan_date,
-        num_boxes: numBoxes,
+        num_boxes: boxes.length,
         total_weight_kg: totalWeight,
         total_birds: totalBirds,
         status,
@@ -248,7 +320,7 @@ export function ChallanForm({
           action: "updated",
           userId: user.id,
           userName,
-          summary: status === "final" ? "Finalized challan" : "Saved as draft",
+          summary: status === "final" ? "Finalized purchase challan" : "Saved as draft",
         });
       } else {
         const { data: created, error } = await supabase
@@ -299,11 +371,11 @@ export function ChallanForm({
 
       toast({
         variant: "success",
-        title: status === "final" ? "Challan finalized" : "Challan saved",
+        title: status === "final" ? "Purchase challan finalized" : "Purchase challan saved",
         description:
           status === "final"
-            ? "Challan is ready for invoice generation."
-            : "Challan saved as draft.",
+            ? "Purchase challan is ready for invoice generation."
+            : "Purchase challan saved as draft.",
       });
 
       router.push("/dashboard/challans");
@@ -313,7 +385,7 @@ export function ChallanForm({
         variant: "destructive",
         title: "Error",
         description:
-          error instanceof Error ? error.message : "Failed to save challan.",
+          error instanceof Error ? error.message : "Failed to save purchase challan.",
       });
     } finally {
       setIsLoading(false);
@@ -322,6 +394,7 @@ export function ChallanForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canFinalize) return;
     saveChallan("final");
   };
 
@@ -332,7 +405,7 @@ export function ChallanForm({
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="challan_number">
-                Challan Number <span className="text-red-500">*</span>
+                Purchase challan Number <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="challan_number"
@@ -379,7 +452,7 @@ export function ChallanForm({
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <Label>Box Details (Weight &amp; Birds)</Label>
               <div className="flex items-center gap-2">
                 <Label htmlFor="num_boxes" className="text-sm text-muted-foreground">
@@ -396,6 +469,64 @@ export function ChallanForm({
                   className="w-20 h-8"
                   disabled={!isEditable}
                 />
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border bg-slate-50/80 p-4">
+              <div>
+                <Label>Create box set (optional)</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Prefill birds for all boxes. You can also just set the number of
+                  boxes above and enter birds manually.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                <div className="space-y-1">
+                  <Label htmlFor="set_boxes" className="text-sm">
+                    Number of boxes
+                  </Label>
+                  <Input
+                    id="set_boxes"
+                    type="number"
+                    min={1}
+                    max={100}
+                    inputMode="numeric"
+                    value={setBoxesInput}
+                    onChange={(e) =>
+                      handleSetFieldChange("setBoxesInput", e.target.value)
+                    }
+                    placeholder="e.g. 10"
+                    disabled={!isEditable}
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="set_birds" className="text-sm">
+                    Birds per box
+                  </Label>
+                  <Input
+                    id="set_birds"
+                    type="number"
+                    min={0}
+                    inputMode="numeric"
+                    value={setBirdsInput}
+                    onChange={(e) =>
+                      handleSetFieldChange("setBirdsInput", e.target.value)
+                    }
+                    placeholder="e.g. 12"
+                    disabled={!isEditable}
+                    className="h-9"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={applyBoxSet}
+                  disabled={!isEditable}
+                  className="h-9"
+                >
+                  Create set
+                </Button>
               </div>
             </div>
 
@@ -434,6 +565,7 @@ export function ChallanForm({
                         placeholder="0.000"
                         disabled={!isEditable}
                         className="h-8"
+                        tabIndex={0}
                       />
                     </div>
                     <div className="space-y-1">
@@ -453,8 +585,10 @@ export function ChallanForm({
                           )
                         }
                         placeholder="0"
-                        disabled={!isEditable}
-                        className="h-8"
+                        disabled={!isEditable || birdsLocked}
+                        readOnly={birdsLocked}
+                        tabIndex={birdsLocked ? -1 : 0}
+                        className={`h-8 ${birdsLocked ? "bg-muted" : ""}`}
                       />
                     </div>
                   </div>
@@ -491,7 +625,7 @@ export function ChallanForm({
 
           {isEditable && (
             <div className="flex flex-wrap gap-3">
-              <Button type="submit" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading || !canFinalize}>
                 {isLoading && <Spinner className="mr-2 h-4 w-4" />}
                 Save & Finalize
               </Button>
@@ -503,6 +637,11 @@ export function ChallanForm({
               >
                 Save as Draft
               </Button>
+              {!canFinalize && (
+                <p className="w-full text-xs text-muted-foreground">
+                  Enter weight for every box to enable Save &amp; Finalize.
+                </p>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -519,7 +658,7 @@ export function ChallanForm({
               variant="outline"
               onClick={() => router.push("/dashboard/challans")}
             >
-              Back to Challans
+              Back to purchase challans
             </Button>
           )}
         </form>

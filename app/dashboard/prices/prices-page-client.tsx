@@ -21,12 +21,21 @@ interface PriceHistory {
 interface PricesPageClientProps {
   priceCategories: PriceCategory[]
   priceHistory: PriceHistory[]
+  userRole?: string
 }
 
-export function PricesPageClient({ priceCategories, priceHistory }: PricesPageClientProps) {
+export function PricesPageClient({
+  priceCategories,
+  priceHistory,
+  userRole,
+}: PricesPageClientProps) {
   return (
     <div className="space-y-6">
-      <PricesTable priceCategories={priceCategories} priceHistory={priceHistory} />
+      <PricesTable
+        priceCategories={priceCategories}
+        priceHistory={priceHistory}
+        userRole={userRole}
+      />
     </div>
   )
 }
