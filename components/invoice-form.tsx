@@ -71,9 +71,10 @@ import {
 } from "@/lib/pricing-rules";
 import {
   getInvoiceNumberFormatError,
-  getNextInvoiceNumber,
+  invoiceNumberMatchesClientPattern,
   isInvoiceNumberDuplicate as checkInvoiceNumberDuplicate,
   isValidInvoiceNumber,
+  resolveNextInvoiceNumberForClient,
   sanitizeInvoiceNumberInput,
 } from "@/lib/invoice-number";
 
@@ -85,6 +86,8 @@ interface Client {
   due_days_type?: string | null;
   enable_per_bird?: boolean | null;
   value_per_bird?: number | null;
+  invoice_number_pattern_type?: string | null;
+  invoice_number_pattern?: string | null;
 }
 
 interface Product {
@@ -142,6 +145,7 @@ interface InvoiceFormProps {
     invoice_number: string;
     reference_number?: string | null;
     notes: string | null;
+    status?: string | null;
     subtotal?: number | null;
     tax_amount?: number | null;
     discount_amount?: number | null;
@@ -159,6 +163,8 @@ interface InvoiceFormProps {
     skinless_weight?: number | null;
   }>;
   canEditInvoiceNumber?: boolean;
+  /** Only Super Admin may enable/disable auto sequence. Others always have it on. */
+  canToggleInvoiceSequence?: boolean;
 }
 
 interface InvoiceItem {
@@ -186,11 +192,13 @@ export function InvoiceForm({
   initialInvoice,
   initialItems,
   canEditInvoiceNumber = false,
+  canToggleInvoiceSequence = false,
 }: InvoiceFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
   const [isLoading, setIsLoading] = useState(false);
+  const [savingAs, setSavingAs] = useState<"draft" | "recorded" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [isInvoiceNumberDuplicate, setIsInvoiceNumberDuplicate] = useState(false);
@@ -264,30 +272,41 @@ export function InvoiceForm({
   const [selectedDueDaysType, setSelectedDueDaysType] = useState<string | null>(
     null,
   );
-  const autoSequenceInvoiceNumber = lastInvoiceNumber
-    ? getNextInvoiceNumber(lastInvoiceNumber)
-    : "";
+  const initialAutoSequenceInvoiceNumber = resolveNextInvoiceNumberForClient({
+    patternType: "general",
+    lastOrgInvoiceNumber: lastInvoiceNumber,
+  });
   const prefilledInvoiceNumber = sanitizeInvoiceNumberInput(
     searchParams.get("invoiceNumber") || "",
   );
   const shouldUsePrefilledInvoiceNumber =
     !initialInvoice?.id && !!prefilledInvoiceNumber;
 
+  const [autoSequenceInvoiceNumber, setAutoSequenceInvoiceNumber] = useState(
+    initialAutoSequenceInvoiceNumber,
+  );
   const [formData, setFormData] = useState({
     client_id: initialInvoice?.client_id || "",
     invoice_number:
       initialInvoice?.invoice_number ||
       prefilledInvoiceNumber ||
-      autoSequenceInvoiceNumber,
+      initialAutoSequenceInvoiceNumber,
     issue_date: initialInvoice?.issue_date || today,
     due_date: initialInvoice?.due_date || defaultDue,
     due_days_type:
       initialInvoice?.due_days_type || selectedDueDaysType || "fixed_days",
     notes: initialInvoice?.notes || "",
   });
-  const [continueInvoiceSequence, setContinueInvoiceSequence] = useState(
-    !initialInvoice?.id && !!lastInvoiceNumber && !shouldUsePrefilledInvoiceNumber,
-  );
+  const [continueInvoiceSequence, setContinueInvoiceSequence] = useState(() => {
+    if (initialInvoice?.id || shouldUsePrefilledInvoiceNumber) {
+      return false;
+    }
+    // Non–Super Admin: auto sequence is always enabled
+    if (!canToggleInvoiceSequence) {
+      return true;
+    }
+    return !!initialAutoSequenceInvoiceNumber;
+  });
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
   const [clientSearchValue, setClientSearchValue] = useState("");
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
@@ -762,18 +781,99 @@ export function InvoiceForm({
     );
   };
 
-  const handleClientChange = (clientId: string) => {
+  const resolveSequenceForClient = async (client: Client | undefined) => {
+    if (!client) {
+      const next = resolveNextInvoiceNumberForClient({
+        patternType: "general",
+        lastOrgInvoiceNumber: lastInvoiceNumber,
+      });
+      setAutoSequenceInvoiceNumber(next);
+      return next;
+    }
+
+    if (
+      client.invoice_number_pattern_type === "client_specific" &&
+      client.invoice_number_pattern
+    ) {
+      let orgId = organizationId;
+      if (!orgId) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("organization_id")
+            .eq("id", user.id)
+            .single();
+          orgId = profile?.organization_id || null;
+          if (orgId) setOrganizationId(orgId);
+        }
+      }
+
+      let lastClientInvoiceNumber: string | null = null;
+
+      if (orgId) {
+        const { data: clientInvoices } = await supabase
+          .from("invoices")
+          .select("invoice_number")
+          .eq("organization_id", orgId)
+          .eq("client_id", client.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+
+        const matching = (clientInvoices || []).find((inv) =>
+          invoiceNumberMatchesClientPattern(
+            inv.invoice_number,
+            client.invoice_number_pattern || "",
+          ),
+        );
+        lastClientInvoiceNumber = matching?.invoice_number || null;
+      }
+
+      const next = resolveNextInvoiceNumberForClient({
+        patternType: "client_specific",
+        pattern: client.invoice_number_pattern,
+        lastClientInvoiceNumber,
+      });
+      setAutoSequenceInvoiceNumber(next);
+      return next;
+    }
+
+    const next = resolveNextInvoiceNumberForClient({
+      patternType: "general",
+      lastOrgInvoiceNumber: lastInvoiceNumber,
+    });
+    setAutoSequenceInvoiceNumber(next);
+    return next;
+  };
+
+  const handleClientChange = async (clientId: string) => {
     const client = clients.find((c) => c.id === clientId);
     const days = client?.due_days ?? 30;
     const daysType = client?.due_days_type ?? "fixed_days";
     const newDue = computeDueDateByType(formData.issue_date, daysType, days);
     setSelectedDueDays(days);
     setSelectedDueDaysType(daysType);
-    setFormData({ ...formData, client_id: clientId, due_date: newDue });
 
     // track per-bird settings from client
     setClientPerBirdEnabled(!!client?.enable_per_bird);
     setClientPerBirdValue(Number(client?.value_per_bird || 0));
+
+    const shouldApplyClientSequence =
+      !isEditMode && !shouldUsePrefilledInvoiceNumber;
+    const nextInvoiceNumber = shouldApplyClientSequence
+      ? await resolveSequenceForClient(client)
+      : formData.invoice_number;
+
+    setFormData({
+      ...formData,
+      client_id: clientId,
+      due_date: newDue,
+      ...(shouldApplyClientSequence
+        ? { invoice_number: nextInvoiceNumber }
+        : {}),
+    });
 
     setItems((prev) =>
       prev.map((item) => {
@@ -1104,9 +1204,11 @@ export function InvoiceForm({
     focusQuantityInput(nextItemIndex);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const isEditingDraft = isEditMode && initialInvoice?.status === "draft";
+
+  const saveInvoice = async (status: "draft" | "recorded") => {
     setIsLoading(true);
+    setSavingAs(status);
     setError(null);
 
     if (isInvoiceNumberDuplicate) {
@@ -1114,6 +1216,7 @@ export function InvoiceForm({
         "This invoice number already exists. Please enter a unique invoice number.",
       );
       setIsLoading(false);
+      setSavingAs(null);
       return;
     }
 
@@ -1123,6 +1226,14 @@ export function InvoiceForm({
     if (invoiceNumberFormatIssue) {
       setError(invoiceNumberFormatIssue);
       setIsLoading(false);
+      setSavingAs(null);
+      return;
+    }
+
+    if (!formData.client_id) {
+      setError("Please select a client.");
+      setIsLoading(false);
+      setSavingAs(null);
       return;
     }
 
@@ -1133,23 +1244,45 @@ export function InvoiceForm({
     if (!user) {
       setError("You must be logged in");
       setIsLoading(false);
+      setSavingAs(null);
       return;
     }
 
     try {
-      // Validate per-bird requirement: if per-bird is enabled, bird count must be provided
-      if (clientPerBirdEnabled && globalBirdCount <= 0) {
-        setError(
-          "Total birds is required when per-bird pricing is enabled. Please enter a bird count greater than 0."
-        );
-        setIsLoading(false);
-        return;
+      // Full validation only when completing/recording (not Blank/Cancelled draft)
+      if (status === "recorded") {
+        if (clientPerBirdEnabled && globalBirdCount <= 0) {
+          setError(
+            "Total birds is required when per-bird pricing is enabled. Please enter a bird count greater than 0.",
+          );
+          setIsLoading(false);
+          setSavingAs(null);
+          return;
+        }
       }
 
       const issueDateUpperBound = getIndianToday();
       if (formData.issue_date > issueDateUpperBound) {
         setError("Issue date cannot be in the future.");
         setIsLoading(false);
+        setSavingAs(null);
+        return;
+      }
+
+      const itemsToInsertPreview = items.filter(
+        (item) =>
+          item.product_id &&
+          item.quantity !== null &&
+          item.quantity !== 0 &&
+          item.quantity > 0,
+      );
+
+      if (status === "recorded" && itemsToInsertPreview.length === 0) {
+        setError(
+          "Please add at least one product with a valid quantity (greater than 0)",
+        );
+        setIsLoading(false);
+        setSavingAs(null);
         return;
       }
 
@@ -1175,6 +1308,7 @@ export function InvoiceForm({
         if (!invoiceNumber) {
           setError("Invoice number is required.");
           setIsLoading(false);
+          setSavingAs(null);
           return;
         }
 
@@ -1184,6 +1318,7 @@ export function InvoiceForm({
               "Please enter a valid invoice number.",
           );
           setIsLoading(false);
+          setSavingAs(null);
           return;
         }
 
@@ -1202,6 +1337,7 @@ export function InvoiceForm({
             `Invoice number "${invoiceNumber}" already exists. Please use a different invoice number.`,
           );
           setIsLoading(false);
+          setSavingAs(null);
           return;
         }
 
@@ -1215,7 +1351,7 @@ export function InvoiceForm({
             issue_date: formData.issue_date,
             due_date: formData.due_date,
             due_days_type: selectedDueDaysType || "fixed_days",
-            status: "recorded",
+            status,
             subtotal: totals.subtotal,
             tax_amount: totals.tax_amount,
             discount_amount: totals.discount_amount,
@@ -1238,6 +1374,7 @@ export function InvoiceForm({
         if (!invoiceNumber) {
           setError("Invoice number is required.");
           setIsLoading(false);
+          setSavingAs(null);
           return;
         }
 
@@ -1247,6 +1384,7 @@ export function InvoiceForm({
               "Please enter a valid invoice number.",
           );
           setIsLoading(false);
+          setSavingAs(null);
           return;
         }
 
@@ -1263,9 +1401,13 @@ export function InvoiceForm({
               `Invoice number "${invoiceNumber}" already exists. Please use a different invoice number.`,
             );
             setIsLoading(false);
+            setSavingAs(null);
             return;
           }
         }
+
+        const shouldUpdateStatus =
+          !initialInvoice?.status || initialInvoice.status === "draft";
 
         const { error: updateError } = await supabase
           .from("invoices")
@@ -1277,6 +1419,7 @@ export function InvoiceForm({
             issue_date: formData.issue_date,
             due_date: formData.due_date,
             due_days_type: selectedDueDaysType || "fixed_days",
+            ...(shouldUpdateStatus ? { status } : {}),
             subtotal: totals.subtotal,
             tax_amount: totals.tax_amount,
             discount_amount: totals.discount_amount,
@@ -1294,40 +1437,20 @@ export function InvoiceForm({
           .eq("invoice_id", invoiceId);
       }
 
-      // Insert invoice items
-      const itemsToInsert = items
-        .filter(
-          (item) =>
-            item.product_id &&
-            item.quantity !== null &&
-            item.quantity !== 0 &&
-            item.quantity > 0,
-        )
-        .map((item) => {
-          // per-item bird data is no longer used; global adjustment will be calculated separately
-          return {
-            invoice_id: invoiceId,
-            product_id: item.product_id,
-            description: item.description,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            tax_rate: item.tax_rate,
-            discount: item.discount,
-            line_total: item.line_total,
-            bird_count: null,
-            per_bird_adjustment: null,
-            skinless_weight: item.skinless_weight ?? null,
-          };
-        });
-
-      // Validate that at least one item with valid quantity exists
-      if (itemsToInsert.length === 0) {
-        setError(
-          "Please add at least one product with a valid quantity (greater than 0)",
-        );
-        setIsLoading(false);
-        return;
-      }
+      // Insert invoice items (optional for Blank/Cancelled draft)
+      const itemsToInsert = itemsToInsertPreview.map((item) => ({
+        invoice_id: invoiceId,
+        product_id: item.product_id,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        tax_rate: item.tax_rate,
+        discount: item.discount,
+        line_total: item.line_total,
+        bird_count: null,
+        per_bird_adjustment: null,
+        skinless_weight: item.skinless_weight ?? null,
+      }));
 
       if (itemsToInsert.length > 0) {
         const { error: itemsError } = await supabase
@@ -1344,6 +1467,14 @@ export function InvoiceForm({
         action: initialInvoice?.id ? "updated" : "created",
         userId: user.id,
         userName,
+        summary:
+          status === "draft"
+            ? initialInvoice?.id
+              ? "Saved as Blank/Cancelled"
+              : "Created as Blank/Cancelled"
+            : initialInvoice?.id
+              ? "Completed invoice"
+              : "Created invoice",
       });
 
       router.push(`/dashboard/invoices/${invoiceId}`);
@@ -1352,7 +1483,13 @@ export function InvoiceForm({
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
       setIsLoading(false);
+      setSavingAs(null);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await saveInvoice("recorded");
   };
 
   const selectedClient = clients.find((c) => c.id === formData.client_id);
@@ -1505,37 +1642,59 @@ export function InvoiceForm({
                     This invoice number already exists. Please enter a unique one.
                   </p>
                 )}
-              {!isEditMode && (
+              {!isEditMode && canToggleInvoiceSequence && (
                 <div className="flex items-center justify-between gap-3 rounded-md border p-2">
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium">Continue sequence</p>
                     <p className="text-xs text-muted-foreground">
-                      Auto-fill next invoice number from previous series.
+                      Auto-fill next invoice number from the client&apos;s
+                      pattern or the organization series.
                     </p>
                   </div>
                   <Switch
                     checked={continueInvoiceSequence}
-                    onCheckedChange={(checked) => {
+                    onCheckedChange={async (checked) => {
                       setContinueInvoiceSequence(checked);
-                      if (checked && autoSequenceInvoiceNumber) {
-                        setFormData({
-                          ...formData,
-                          invoice_number: autoSequenceInvoiceNumber,
-                        });
+                      if (!checked) return;
+                      const client = clients.find(
+                        (c) => c.id === formData.client_id,
+                      );
+                      const next =
+                        (await resolveSequenceForClient(client)) ||
+                        autoSequenceInvoiceNumber;
+                      if (next) {
+                        setFormData((prev) => ({
+                          ...prev,
+                          invoice_number: next,
+                        }));
                       }
                     }}
                   />
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">
-                {isEditMode
-                  ? canEditInvoiceNumber
-                    ? "Admin can edit invoice number"
-                    : "Only admin can edit invoice number"
-                  : continueInvoiceSequence
-                    ? "Invoice number is locked while auto sequence is enabled"
-                    : "Use a 4-digit number or one capital letter + number (1-10000), max 6 characters"}
-              </p>
+              {!isEditMode &&
+                selectedClient?.invoice_number_pattern_type ===
+                  "client_specific" &&
+                selectedClient.invoice_number_pattern && (
+                  <p className="text-xs text-muted-foreground">
+                    Using client-specific pattern:{" "}
+                    {selectedClient.invoice_number_pattern}
+                  </p>
+                )}
+              {(isEditMode ||
+                continueInvoiceSequence ||
+                selectedClient?.invoice_number_pattern_type !==
+                  "client_specific") && (
+                <p className="text-xs text-muted-foreground">
+                  {isEditMode
+                    ? canEditInvoiceNumber
+                      ? "Admin can edit invoice number"
+                      : "Only admin can edit invoice number"
+                    : continueInvoiceSequence
+                      ? "Invoice number is locked while auto sequence is enabled"
+                      : "Use a 4-digit number or one capital letter + number (1-10000), max 6 characters"}
+                </p>
+              )}
             </div>
           </div>
 
@@ -2043,7 +2202,7 @@ export function InvoiceForm({
         </div>
       )}
 
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-3">
         <Button
           type="submit"
           disabled={
@@ -2055,15 +2214,42 @@ export function InvoiceForm({
             (clientPerBirdEnabled && globalBirdCount <= 0)
           }
         >
-          {isLoading
-            ? isEditMode
-              ? "Updating..."
-              : "Creating..."
-            : isEditMode
-              ? "Update Invoice"
-              : "Create Invoice"}
+          {savingAs === "recorded"
+            ? isEditingDraft
+              ? "Completing..."
+              : isEditMode
+                ? "Updating..."
+                : "Creating..."
+            : isEditingDraft
+              ? "Complete Invoice"
+              : isEditMode
+                ? "Update Invoice"
+                : "Create Invoice"}
         </Button>
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+        {(!isEditMode || isEditingDraft) && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={
+              isLoading ||
+              !formData.client_id ||
+              !formData.invoice_number ||
+              !!invoiceNumberFormatError ||
+              isInvoiceNumberDuplicate
+            }
+            onClick={() => void saveInvoice("draft")}
+          >
+            {savingAs === "draft"
+              ? "Saving..."
+              : "Blank/Cancelled"}
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => router.back()}
+          disabled={isLoading}
+        >
           Cancel
         </Button>
       </div>

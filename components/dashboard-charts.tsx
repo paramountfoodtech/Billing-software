@@ -77,7 +77,7 @@ export function DashboardCharts({ invoices, payments }: DashboardChartsProps) {
     { name: "Paid", value: statusCount.paid || 0, color: "#16a34a" },
     { name: "Recorded", value: statusCount.recorded || 0, color: "#3b82f6" },
     { name: "Overdue", value: statusCount.overdue || 0, color: "#dc2626" },
-    { name: "Draft", value: statusCount.draft || 0, color: "#6b7280" },
+    { name: "Blank/Cancelled", value: statusCount.draft || 0, color: "#6b7280" },
   ].filter((item) => item.value > 0);
 
   // Calculate daily invoices (last 30 days)

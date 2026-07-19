@@ -19,6 +19,10 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { sendClientInvitation } from "@/app/actions/send-client-invitation";
+import {
+  getInvoiceNumberPatternConfigError,
+  sanitizeInvoiceNumberInput,
+} from "@/lib/invoice-number";
 
 interface Client {
   id: string;
@@ -35,6 +39,8 @@ interface Client {
   due_days_type?: string | null;
   enable_per_bird?: boolean | null;
   value_per_bird?: number | null;
+  invoice_number_pattern_type?: string | null;
+  invoice_number_pattern?: string | null;
 }
 
 interface ClientFormProps {
@@ -62,6 +68,9 @@ export function ClientForm({ client }: ClientFormProps) {
     due_days_type: client?.due_days_type || "fixed_days",
     enable_per_bird: client?.enable_per_bird || false,
     value_per_bird: client?.value_per_bird?.toString() || "0",
+    invoice_number_pattern_type:
+      client?.invoice_number_pattern_type || "general",
+    invoice_number_pattern: client?.invoice_number_pattern || "",
   });
 
   const handlePincodeChange = async (pincode: string) => {
@@ -107,6 +116,10 @@ export function ClientForm({ client }: ClientFormProps) {
   const dueTypeOptions = [
     { value: "fixed_days", label: "Fixed Number of Days" },
     { value: "end_of_month", label: "End of the billed month" },
+  ];
+  const invoicePatternTypeOptions = [
+    { value: "general", label: "General" },
+    { value: "client_specific", label: "Client Specific" },
   ];
   const countryOptions = countries.map((country) => ({
     value: country,
@@ -188,15 +201,39 @@ export function ClientForm({ client }: ClientFormProps) {
         return;
       }
 
+      const isClientSpecificPattern =
+        formData.invoice_number_pattern_type === "client_specific";
+      const invoiceNumberPattern = isClientSpecificPattern
+        ? sanitizeInvoiceNumberInput(formData.invoice_number_pattern)
+        : null;
+
+      if (isClientSpecificPattern) {
+        const patternError =
+          getInvoiceNumberPatternConfigError(invoiceNumberPattern || "");
+        if (patternError) {
+          toast({
+            variant: "destructive",
+            title: "Invalid invoice number pattern",
+            description: patternError,
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      const clientPayload = {
+        ...formData,
+        due_days: dueDays,
+        value_per_bird: valuePerBird,
+        invoice_number_pattern_type: formData.invoice_number_pattern_type,
+        invoice_number_pattern: invoiceNumberPattern,
+      };
+
       if (client) {
         // Update existing client
         const { error } = await supabase
           .from("clients")
-          .update({
-            ...formData,
-            due_days: dueDays,
-            value_per_bird: valuePerBird,
-          })
+          .update(clientPayload)
           .eq("id", client.id);
 
         if (error) throw error;
@@ -221,9 +258,7 @@ export function ClientForm({ client }: ClientFormProps) {
         const { data: created, error } = await supabase
           .from("clients")
           .insert({
-            ...formData,
-            due_days: dueDays,
-            value_per_bird: valuePerBird,
+            ...clientPayload,
             created_by: user.id,
             organization_id: profile.organization_id,
           })
@@ -418,6 +453,61 @@ export function ClientForm({ client }: ClientFormProps) {
                 )}
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="invoice_number_pattern_type">
+                Invoice Number Pattern
+              </Label>
+              <SearchableSelect
+                id="invoice_number_pattern_type"
+                value={formData.invoice_number_pattern_type}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    invoice_number_pattern_type: value,
+                    invoice_number_pattern:
+                      value === "client_specific"
+                        ? formData.invoice_number_pattern
+                        : "",
+                  })
+                }
+                options={invoicePatternTypeOptions}
+                placeholder="Select pattern type"
+                searchPlaceholder="Type pattern type..."
+              />
+              <p className="text-xs text-muted-foreground">
+                {formData.invoice_number_pattern_type === "client_specific"
+                  ? "Invoices for this client will use the custom pattern below."
+                  : "Uses the organization-wide invoice numbering sequence."}
+              </p>
+            </div>
+
+            {formData.invoice_number_pattern_type === "client_specific" && (
+              <div className="space-y-2">
+                <Label htmlFor="invoice_number_pattern">
+                  Custom Pattern <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="invoice_number_pattern"
+                  required
+                  value={formData.invoice_number_pattern}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      invoice_number_pattern: sanitizeInvoiceNumberInput(
+                        e.target.value,
+                      ),
+                    })
+                  }
+                  placeholder="e.g., A or A1"
+                  maxLength={6}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter a letter prefix (e.g. A → A1, A2…) or a starting number
+                  (e.g. A100, 0001).
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="country">Country</Label>

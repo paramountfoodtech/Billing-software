@@ -22,7 +22,7 @@ export default async function EditProcessingEntryPage({
     .eq("id", user.id)
     .single()
 
-  if (profile?.role === "accountant") redirect("/dashboard")
+  if (profile?.role !== "super_admin") redirect("/dashboard")
 
   const { data: entry } = await supabase
     .from("material_processing_entries")

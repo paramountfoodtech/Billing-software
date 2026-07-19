@@ -33,7 +33,7 @@ import { formatIndianDate } from "@/lib/date-time";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
-import { canDelete, canEdit } from "@/lib/permissions";
+import { canDelete, canEditInvoice } from "@/lib/permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -74,7 +74,10 @@ interface InvoicesTableProps {
 }
 
 const statusConfig = {
-  draft: { label: "Draft", className: "bg-gray-100 text-gray-800" },
+  draft: {
+    label: "Blank/Cancelled",
+    className: "bg-gray-100 text-gray-800",
+  },
   recorded: { label: "Recorded", className: "bg-blue-100 text-blue-800" },
   partially_paid: {
     label: "Partially Paid",
@@ -1162,7 +1165,7 @@ export function InvoicesTable({
                               </Link>
                             </Button>
                           </IconTooltip>
-                          {canEdit(userRole) &&
+                          {canEditInvoice(userRole, invoice.status) &&
                             (invoice.status === "draft" ||
                               invoice.status === "recorded") && (
                             <IconTooltip label="Edit invoice">

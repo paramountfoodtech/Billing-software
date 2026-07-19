@@ -7,6 +7,7 @@ import Link from "next/link";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { formatIndianDate } from "@/lib/date-time";
 import { isSalaryCategory } from "@/lib/expense-calculations";
+import { canAccessExpenses } from "@/lib/permissions";
 
 export default async function ExpenseDetailPage({
   params,
@@ -20,6 +21,16 @@ export default async function ExpenseDetailPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!canAccessExpenses(profile?.role)) {
+    redirect("/dashboard");
+  }
 
   const { data: entry, error } = await supabase
     .from("expense_entries")

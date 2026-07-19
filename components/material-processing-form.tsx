@@ -45,8 +45,10 @@ export function MaterialProcessingForm({
 }: MaterialProcessingFormProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const canWrite = userRole === "super_admin" || userRole === "admin"
   const isEditing = Boolean(selectedEntry)
+  const canCreate = userRole === "super_admin" || userRole === "admin"
+  const canEdit = userRole === "super_admin"
+  const canWrite = isEditing ? canEdit : canCreate
   const today = getIndianToday()
   const [isLoading, setIsLoading] = useState(false)
   const [leftoverEdited, setLeftoverEdited] = useState(false)
@@ -242,7 +244,9 @@ export function MaterialProcessingForm({
       toast({
         variant: "destructive",
         title: "Read only access",
-        description: "Accountants can view operations but cannot make changes.",
+        description: isEditing
+          ? "Only Super Admin can edit processing entries."
+          : "You do not have permission to create processing entries.",
       })
       return
     }
@@ -295,8 +299,12 @@ export function MaterialProcessingForm({
         .single()
 
       if (!profile?.organization_id) throw new Error("User must belong to an organization")
-      if (!["super_admin", "admin"].includes(profile.role)) {
-        throw new Error("You do not have permission to save processing entries")
+      if (selectedEntry) {
+        if (profile.role !== "super_admin") {
+          throw new Error("Only Super Admin can edit processing entries")
+        }
+      } else if (!["super_admin", "admin"].includes(profile.role)) {
+        throw new Error("You do not have permission to create processing entries")
       }
       if (formData.processing_date > getIndianToday()) {
         throw new Error("Processing date cannot be in the future")

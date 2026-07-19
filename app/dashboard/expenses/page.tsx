@@ -6,6 +6,8 @@ import { LoadingOverlay } from "@/components/loading-overlay";
 import { Button } from "@/components/ui/button";
 import { Plus, Tags, BarChart3 } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { canAccessExpenses } from "@/lib/permissions";
 
 async function ExpensesContent({ userRole }: { userRole?: string }) {
   const supabase = await createClient();
@@ -30,15 +32,19 @@ export default async function ExpensesPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let userRole: string | undefined;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-    userRole = profile?.role;
+  if (!user) redirect("/auth/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!canAccessExpenses(profile?.role)) {
+    redirect("/dashboard");
   }
+
+  const userRole = profile?.role;
 
   return (
     <DashboardPageWrapper title="Salary & Expenses">
@@ -50,14 +56,12 @@ export default async function ExpensesPage() {
               Categories
             </Link>
           </Button>
-          {(userRole === "super_admin" || userRole === "admin") && (
-            <Button variant="outline" asChild className="w-full sm:w-auto">
-              <Link href="/dashboard/expenses/reports">
-                <BarChart3 className="h-4 w-4 mr-2" />
-                Reports
-              </Link>
-            </Button>
-          )}
+          <Button variant="outline" asChild className="w-full sm:w-auto">
+            <Link href="/dashboard/expenses/reports">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Reports
+            </Link>
+          </Button>
           <Button asChild className="w-full sm:w-auto">
             <Link href="/dashboard/expenses/new">
               <Plus className="h-4 w-4 mr-2" />

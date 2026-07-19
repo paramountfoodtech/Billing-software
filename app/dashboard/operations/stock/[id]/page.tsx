@@ -32,7 +32,7 @@ export default async function StockEntryDetailPage({
     .eq("id", user.id)
     .single()
   const userRole = profile?.role
-  const canWrite = userRole === "super_admin" || userRole === "admin"
+  const canEdit = userRole === "super_admin"
 
   // Fetch entry with creator
   const { data: entry, error } = await supabase
@@ -97,7 +97,7 @@ export default async function StockEntryDetailPage({
             createdAt={entry.created_at}
             createdByName={entry.profiles?.full_name}
           />
-          {canWrite && (
+          {canEdit && (
             <IconTooltip label="Edit stock entry">
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/dashboard/operations/stock/${id}/edit`}>

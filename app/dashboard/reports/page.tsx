@@ -3,8 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
 import { ReportsPageClient } from "@/components/reports-page-client"
-
 import { getIndianToday } from "@/lib/date-time"
+import { resolveReportPeriod } from "@/lib/report-period"
 
 export const revalidate = 0
 
@@ -17,6 +17,9 @@ export default async function ReportsPage({
     tab?: string
     from?: string
     to?: string
+    period?: string
+    months?: string
+    fy?: string
   }>
 }) {
   const supabase = await createClient()
@@ -38,53 +41,74 @@ export default async function ReportsPage({
   }
 
   const params = await searchParams
-  const today = new Date()
   const todayDate = getIndianToday()
-  const reportYear = params.year ? parseInt(params.year) : today.getFullYear()
-  const reportMonth = params.month ? parseInt(params.month) : today.getMonth() + 1
-
-  const monthStart = `${reportYear}-${String(reportMonth).padStart(2, "0")}-01`
-  const daysInMonth = new Date(reportYear, reportMonth, 0).getDate()
-  const monthEnd = `${reportYear}-${String(reportMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`
-  const initialFromDate = params.from || monthStart
-  const initialToDate = params.to || (todayDate < monthEnd ? todayDate : monthEnd)
-
-  const monthLabel = new Date(reportYear, reportMonth - 1, 1).toLocaleDateString("en-IN", {
-    month: "long",
-    year: "numeric",
+  const period = resolveReportPeriod({
+    period: params.period,
+    year: params.year,
+    month: params.month,
+    months: params.months,
+    from: params.from,
+    to: params.to,
+    fy: params.fy,
+    todayDate,
   })
 
-  // Fetch all required data in parallel
-  const [clientsResult, currentMonthInvoicesResult, allUnpaidInvoicesResult, currentMonthPaymentsResult] =
-    await Promise.all([
-      supabase.from("clients").select("id, name").order("name", { ascending: true }),
+  const {
+    periodStart,
+    periodEnd,
+    periodLabel,
+    daysInPeriod,
+    reportYear,
+    reportMonth,
+    multiMonths,
+    fy,
+    monthStart,
+    monthEnd,
+    monthLabel,
+    daysInMonth,
+    mode: periodMode,
+  } = period
 
-      supabase
-        .from("invoices")
-        .select(
-          "id, client_id, issue_date, total_amount, invoice_items(product_id, description, quantity, skinless_weight, line_total)",
-        )
-        .gte("issue_date", monthStart)
-        .lte("issue_date", monthEnd),
+  const initialFromDate = params.from || monthStart
+  const initialToDate =
+    params.to || (todayDate < monthEnd ? todayDate : monthEnd)
 
-      supabase
-        .from("invoices")
-        .select("client_id, total_amount, amount_paid, issue_date")
-        .neq("status", "cancelled")
-        .neq("status", "paid")
-        .lte("issue_date", monthEnd),
+  // Fetch all required data in parallel for the selected period
+  const [
+    clientsResult,
+    periodInvoicesResult,
+    allUnpaidInvoicesResult,
+    periodPaymentsResult,
+  ] = await Promise.all([
+    supabase.from("clients").select("id, name").order("name", { ascending: true }),
 
-      supabase
-        .from("payments")
-        .select("amount, invoices(client_id)")
-        .gte("payment_date", monthStart)
-        .lte("payment_date", monthEnd),
-    ])
+    supabase
+      .from("invoices")
+      .select(
+        "id, client_id, issue_date, total_amount, status, invoice_items(product_id, description, quantity, skinless_weight, line_total)",
+      )
+      .neq("status", "cancelled")
+      .gte("issue_date", periodStart)
+      .lte("issue_date", periodEnd),
+
+    supabase
+      .from("invoices")
+      .select("client_id, total_amount, amount_paid, issue_date")
+      .neq("status", "cancelled")
+      .neq("status", "paid")
+      .lte("issue_date", periodEnd),
+
+    supabase
+      .from("payments")
+      .select("amount, invoices(client_id)")
+      .gte("payment_date", periodStart)
+      .lte("payment_date", periodEnd),
+  ])
 
   const clients = clientsResult.data || []
-  const currentMonthInvoices = currentMonthInvoicesResult.data || []
+  const periodInvoices = periodInvoicesResult.data || []
   const allUnpaidInvoices = allUnpaidInvoicesResult.data || []
-  const currentMonthPayments = currentMonthPaymentsResult.data || []
+  const periodPayments = periodPaymentsResult.data || []
 
   type ClientRow = {
     id: string
@@ -113,16 +137,22 @@ export default async function ReportsPage({
     })
   }
 
-  for (const invoice of currentMonthInvoices) {
+  for (const invoice of periodInvoices) {
     const row = clientMap.get(invoice.client_id)
     if (!row) continue
     row.sale += Number(invoice.total_amount)
-    const items = (invoice.invoice_items as { quantity: string | number | null; skinless_weight: string | number | null }[] | null) ?? []
+    const items =
+      (invoice.invoice_items as
+        | {
+            quantity: string | number | null
+            skinless_weight: string | number | null
+          }[]
+        | null) ?? []
     const invoiceQty = items.reduce((sum, item) => {
-      // Use skinless_weight if present and > 0, otherwise use quantity
-      const weight = item.skinless_weight && Number(item.skinless_weight) > 0 
-        ? Number(item.skinless_weight) 
-        : Number(item.quantity || 0)
+      const weight =
+        item.skinless_weight && Number(item.skinless_weight) > 0
+          ? Number(item.skinless_weight)
+          : Number(item.quantity || 0)
       return sum + weight
     }, 0)
     row.saleKgs += invoiceQty
@@ -138,13 +168,14 @@ export default async function ReportsPage({
     const row = clientMap.get(invoice.client_id)
     if (!row) continue
     row.outstanding += balance
-    if (invoice.issue_date < monthStart) {
+    if (invoice.issue_date < periodStart) {
       row.oldBal += balance
     }
   }
 
-  for (const payment of currentMonthPayments) {
-    const clientId = (payment.invoices as unknown as { client_id: string } | null)?.client_id
+  for (const payment of periodPayments) {
+    const clientId = (payment.invoices as unknown as { client_id: string } | null)
+      ?.client_id
     if (!clientId) continue
     const row = clientMap.get(clientId)
     if (!row) continue
@@ -166,7 +197,7 @@ export default async function ReportsPage({
   }
 
   const productMap = new Map<string, ProductRow>()
-  for (const invoice of currentMonthInvoices) {
+  for (const invoice of periodInvoices) {
     const items =
       (invoice.invoice_items as
         | {
@@ -211,7 +242,7 @@ export default async function ReportsPage({
   const productRows = Array.from(productMap.values())
     .map((row) => ({
       ...row,
-      avgQtyPerDay: row.totalSaleKgs / daysInMonth,
+      avgQtyPerDay: row.totalSaleKgs / daysInPeriod,
     }))
     .filter(
       (r) =>
@@ -225,7 +256,9 @@ export default async function ReportsPage({
     <DashboardPageWrapper title="Reports">
       <Suspense
         fallback={
-          <div className="w-full p-8 text-sm text-muted-foreground">Loading reports…</div>
+          <div className="w-full p-8 text-sm text-muted-foreground">
+            Loading reports…
+          </div>
         }
       >
         <ReportsPageClient
@@ -235,6 +268,13 @@ export default async function ReportsPage({
           monthStart={monthStart}
           monthEnd={monthEnd}
           daysInMonth={daysInMonth}
+          periodMode={periodMode}
+          periodLabel={periodLabel}
+          periodStart={periodStart}
+          periodEnd={periodEnd}
+          daysInPeriod={daysInPeriod}
+          multiMonths={multiMonths}
+          fy={fy}
           rows={rows}
           productRows={productRows}
           clients={clients.map((c) => ({ id: c.id, name: c.name }))}

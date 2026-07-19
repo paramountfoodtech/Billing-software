@@ -168,7 +168,7 @@ export function UserForm({ organizations, initialData }: UserFormProps) {
             id="role"
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Super Admin: Full access | Admin: View-only for super admin areas, full access where accountants have access | Accountant: Limited to invoices, products, prices, payments, clients
+            Super Admin: Full access including edit/update | Admin: Create and view (no edit after create); Salary & Expenses and Operations Reports | Accountant: Invoices, products, prices, payments — create/view only (no edit)
           </p>
         </div>
 

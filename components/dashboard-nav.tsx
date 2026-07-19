@@ -222,7 +222,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             href: "/dashboard/expenses",
             label: "Salary & Expenses",
             icon: CircleDollarSign,
-            roles: ["super_admin", "admin", "accountant"],
+            roles: ["super_admin", "admin"],
           },
           {
             href: "/dashboard/expenses/reports",
@@ -252,7 +252,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             href: "/dashboard/operations/reports",
             label: "Operations Reports",
             icon: BarChart3,
-            roles: ["super_admin", "admin", "accountant"],
+            roles: ["super_admin", "admin"],
           },
         ],
       },
@@ -426,7 +426,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
               <Button
                 onClick={handleSignOut}
                 variant="outline"
-                className="bg-transparent transition-all lg:w-10 lg:h-10 lg:p-0 lg:justify-center w-full"
+                className="border-red-200 bg-transparent text-red-600 shadow-none transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-700 disabled:opacity-60 lg:h-10 lg:w-10 lg:justify-center lg:p-0 w-full"
                 size="sm"
                 disabled={isSigningOut}
               >
@@ -441,7 +441,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             <Button
               onClick={handleSignOut}
               variant="outline"
-              className="bg-transparent transition-all w-full justify-start"
+              className="w-full justify-start border-red-200 bg-transparent text-red-600 shadow-none transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-700 disabled:opacity-60"
               size="sm"
               disabled={isSigningOut}
             >

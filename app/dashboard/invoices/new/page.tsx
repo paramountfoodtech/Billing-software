@@ -15,7 +15,7 @@ export default async function NewInvoicePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("organization_id")
+    .select("organization_id, role")
     .eq("id", user.id)
     .single();
 
@@ -24,6 +24,7 @@ export default async function NewInvoicePage() {
   }
 
   const organizationId = profile.organization_id;
+  const isSuperAdmin = profile.role === "super_admin";
 
   const [
     clientsResult,
@@ -37,7 +38,7 @@ export default async function NewInvoicePage() {
     supabase
       .from("clients")
       .select(
-        "id, name, email, due_days, due_days_type, enable_per_bird, value_per_bird",
+        "id, name, email, due_days, due_days_type, enable_per_bird, value_per_bird, invoice_number_pattern_type, invoice_number_pattern",
       )
       .eq("organization_id", organizationId)
       .order("name"),
@@ -96,6 +97,7 @@ export default async function NewInvoicePage() {
         priceCategories={categoriesResult.data || []}
         priceHistory={historyResult.data || []}
         lastInvoiceNumber={latestInvoiceResult.data?.invoice_number || null}
+        canToggleInvoiceSequence={isSuperAdmin}
       />
     </div>
   );

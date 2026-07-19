@@ -50,7 +50,9 @@ export function MaterialStockForm({
   const [isLoading, setIsLoading] = useState(false)
 
   const isEditing = Boolean(selectedEntry)
-  const canWrite = userRole === "super_admin" || userRole === "admin"
+  const canCreate = userRole === "super_admin" || userRole === "admin"
+  const canEdit = userRole === "super_admin"
+  const canWrite = isEditing ? canEdit : canCreate
   const today = getIndianToday()
 
   const [formData, setFormData] = useState({
@@ -121,7 +123,9 @@ export function MaterialStockForm({
       toast({
         variant: "destructive",
         title: "Read only access",
-        description: "Accountants can view operations but cannot make changes.",
+        description: isEditing
+          ? "Only Super Admin can edit stock entries."
+          : "You do not have permission to create stock entries.",
       })
       return
     }
@@ -142,8 +146,12 @@ export function MaterialStockForm({
         .single()
 
       if (!profile?.organization_id) throw new Error("User must belong to an organization")
-      if (!["super_admin", "admin"].includes(profile.role)) {
-        throw new Error("You do not have permission to save stock entries")
+      if (selectedEntry) {
+        if (profile.role !== "super_admin") {
+          throw new Error("Only Super Admin can edit stock entries")
+        }
+      } else if (!["super_admin", "admin"].includes(profile.role)) {
+        throw new Error("You do not have permission to create stock entries")
       }
 
       const payload = {

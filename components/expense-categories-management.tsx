@@ -42,6 +42,7 @@ export interface ExpenseCategory {
 
 interface ExpenseCategoriesManagementProps {
   categories: ExpenseCategory[];
+  userRole?: string | null;
 }
 
 function slugify(name: string) {
@@ -54,9 +55,11 @@ function slugify(name: string) {
 
 export function ExpenseCategoriesManagement({
   categories,
+  userRole,
 }: ExpenseCategoriesManagementProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const canEditCategories = userRole === "super_admin";
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -167,6 +170,15 @@ export function ExpenseCategoriesManagement({
   };
 
   const handleToggleActive = async (id: string, isActive: boolean) => {
+    if (!canEditCategories) {
+      toast({
+        variant: "destructive",
+        title: "Read only access",
+        description: "Only Super Admin can update expense categories.",
+      });
+      return;
+    }
+
     setLoading(true);
     const supabase = createClient();
 
@@ -192,6 +204,14 @@ export function ExpenseCategoriesManagement({
 
   const handleRename = async (id: string, newName: string) => {
     if (!newName.trim()) return;
+    if (!canEditCategories) {
+      toast({
+        variant: "destructive",
+        title: "Read only access",
+        description: "Only Super Admin can rename expense categories.",
+      });
+      return;
+    }
 
     setLoading(true);
     const supabase = createClient();
@@ -228,6 +248,14 @@ export function ExpenseCategoriesManagement({
 
   const handleDelete = async () => {
     if (!pendingDelete) return;
+    if (!canEditCategories) {
+      toast({
+        variant: "destructive",
+        title: "Read only access",
+        description: "Only Super Admin can delete expense categories.",
+      });
+      return;
+    }
 
     const category = categories.find((c) => c.id === pendingDelete.id);
     if (category?.is_system) {
@@ -389,20 +417,22 @@ export function ExpenseCategoriesManagement({
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor={`active-${category.id}`} className="text-sm">
-                    Active
-                  </Label>
-                  <Switch
-                    id={`active-${category.id}`}
-                    checked={category.is_active !== false}
-                    onCheckedChange={(checked) =>
-                      handleToggleActive(category.id, checked)
-                    }
-                    disabled={loading || category.slug === "salary"}
-                  />
-                </div>
-                {!category.is_system && (
+                {canEditCategories && (
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={`active-${category.id}`} className="text-sm">
+                      Active
+                    </Label>
+                    <Switch
+                      id={`active-${category.id}`}
+                      checked={category.is_active !== false}
+                      onCheckedChange={(checked) =>
+                        handleToggleActive(category.id, checked)
+                      }
+                      disabled={loading || category.slug === "salary"}
+                    />
+                  </div>
+                )}
+                {canEditCategories && !category.is_system && (
                   <IconTooltip label="Rename">
                     <Button
                       variant="ghost"
@@ -419,7 +449,7 @@ export function ExpenseCategoriesManagement({
                   createdAt={category.created_at}
                   createdByName={category.profiles?.full_name}
                 />
-                {!category.is_system && (
+                {canEditCategories && !category.is_system && (
                   <IconTooltip label="Delete">
                     <Button
                       variant="ghost"

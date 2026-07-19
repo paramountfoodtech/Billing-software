@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper";
 import { ExpenseCategoriesManagement } from "@/components/expense-categories-management";
+import { canAccessExpenses } from "@/lib/permissions";
 
 export default async function ExpenseCategoriesPage() {
   const supabase = await createClient();
@@ -17,7 +18,9 @@ export default async function ExpenseCategoriesPage() {
     .eq("id", user.id)
     .single();
 
-  if (!profile?.organization_id) redirect("/dashboard");
+  if (!profile?.organization_id || !canAccessExpenses(profile.role)) {
+    redirect("/dashboard");
+  }
 
   const { data: categories } = await supabase
     .from("expense_categories")
@@ -33,7 +36,10 @@ export default async function ExpenseCategoriesPage() {
   return (
     <DashboardPageWrapper title="Expense Categories">
       <div className="w-full p-4 sm:p-6 lg:p-8">
-        <ExpenseCategoriesManagement categories={categories || []} />
+        <ExpenseCategoriesManagement
+          categories={categories || []}
+          userRole={profile.role}
+        />
       </div>
     </DashboardPageWrapper>
   );

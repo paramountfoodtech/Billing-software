@@ -32,9 +32,15 @@ interface ProductReportsTableProps {
   rows: ProductRow[]
   daysInMonth: number
   monthLabel: string
+  saleColumnLabel?: string
 }
 
-export function ProductReportsTable({ rows, daysInMonth, monthLabel }: ProductReportsTableProps) {
+export function ProductReportsTable({
+  rows,
+  daysInMonth,
+  monthLabel,
+  saleColumnLabel = "Current Month Sale",
+}: ProductReportsTableProps) {
   const { toast } = useToast()
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
@@ -144,7 +150,7 @@ export function ProductReportsTable({ rows, daysInMonth, monthLabel }: ProductRe
       { key: "name", label: "Product" },
       {
         key: "currentMonthSaleValue",
-        label: "Current Month Sale - Value",
+        label: `${saleColumnLabel} - Value`,
         formatter: (value) => Number(value || 0).toFixed(2),
       },
       {
@@ -189,7 +195,7 @@ export function ProductReportsTable({ rows, daysInMonth, monthLabel }: ProductRe
 
     const columns: ExportColumn[] = [
       { key: "name", label: "Product" },
-      { key: "currentMonthSaleValueFmt", label: "Current Month Sale - Value" },
+      { key: "currentMonthSaleValueFmt", label: `${saleColumnLabel} - Value` },
       { key: "todaySaleQtyFmt", label: "Today's Sale - Qty" },
       { key: "todaySaleValueFmt", label: "Today's Sale - Value" },
       { key: "totalSaleKgsFmt", label: "Total Sale in KGs" },
@@ -252,7 +258,8 @@ export function ProductReportsTable({ rows, daysInMonth, monthLabel }: ProductRe
                 className="cursor-pointer px-2 py-2 text-right hover:bg-muted/50 sm:px-4 sm:py-3"
                 onClick={() => handleSort("currentMonthSaleValue")}
               >
-                Current Month Sale - Value <SortIcon column="currentMonthSaleValue" />
+                {saleColumnLabel} - Value{" "}
+                <SortIcon column="currentMonthSaleValue" />
               </TableHead>
               <TableHead
                 className="cursor-pointer px-2 py-2 text-right hover:bg-muted/50 sm:px-4 sm:py-3"

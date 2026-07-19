@@ -33,7 +33,7 @@ export default async function ProcessingEntryDetailPage({
     .eq("id", user.id)
     .single()
   const userRole = profile?.role
-  const canWrite = userRole === "super_admin" || userRole === "admin"
+  const canEdit = userRole === "super_admin"
 
   // Fetch entry with creator
   const { data: entry, error } = await supabase
@@ -103,7 +103,7 @@ export default async function ProcessingEntryDetailPage({
             createdAt={entry.created_at}
             createdByName={entry.profiles?.full_name}
           />
-          {canWrite && (
+          {canEdit && (
             <IconTooltip label="Edit processing entry">
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/dashboard/operations/processing/${id}/edit`}>

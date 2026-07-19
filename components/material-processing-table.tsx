@@ -52,7 +52,7 @@ export function MaterialProcessingTable({
 }: MaterialProcessingTableProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const canWrite = userRole === "super_admin" || userRole === "admin"
+  const canEditEntries = userRole === "super_admin"
   const today = getIndianToday()
   const [entryToDelete, setEntryToDelete] = useState<MaterialProcessingEntry | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -193,6 +193,14 @@ export function MaterialProcessingTable({
 
   const handleDelete = async () => {
     if (!entryToDelete) return
+    if (!canEditEntries) {
+      toast({
+        variant: "destructive",
+        title: "Read only access",
+        description: "Only Super Admin can delete processing entries.",
+      })
+      return
+    }
     setIsDeleting(true)
     const supabase = createClient()
     try {
@@ -206,7 +214,7 @@ export function MaterialProcessingTable({
         .select("organization_id, role")
         .eq("id", user.id)
         .single()
-      if (!profile?.organization_id || !["super_admin", "admin"].includes(profile.role)) {
+      if (!profile?.organization_id || profile.role !== "super_admin") {
         throw new Error("You do not have permission to delete processing entries")
       }
 
@@ -389,7 +397,7 @@ export function MaterialProcessingTable({
                           </Link>
                         </Button>
                       </IconTooltip>
-                      {canWrite && (
+                      {canEditEntries && (
                         <>
                           <IconTooltip label="Edit processing entry">
                             <Button variant="ghost" size="sm" asChild>

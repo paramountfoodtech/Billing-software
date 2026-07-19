@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { ExpenseEntryForm } from "@/components/expense-entry-form";
 import { suggestNextNumber } from "@/lib/purchase-document-numbers";
+import { canAccessExpenses } from "@/lib/permissions";
 
 export default async function NewExpensePage() {
   const supabase = await createClient();
@@ -14,11 +15,13 @@ export default async function NewExpensePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("organization_id")
+    .select("organization_id, role")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.organization_id) redirect("/dashboard");
+  if (!profile?.organization_id || !canAccessExpenses(profile.role)) {
+    redirect("/dashboard");
+  }
 
   const organizationId = profile.organization_id;
 

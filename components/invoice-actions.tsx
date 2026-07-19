@@ -67,7 +67,7 @@ export function InvoiceActions({
         {currentStatus === "draft" && (
           <DropdownMenuItem onClick={() => updateStatus("recorded")}>
             <Send className="h-4 w-4 mr-2" />
-            Mark as Recorded
+            Complete Invoice
           </DropdownMenuItem>
         )}
         {(currentStatus === "recorded" ||

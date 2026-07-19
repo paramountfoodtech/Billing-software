@@ -5,6 +5,7 @@ import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
 import { LoadingOverlay } from "@/components/loading-overlay"
 import { MaterialReportsPageClient } from "@/components/material-reports-page-client"
 import type { MaterialProcessingEntry } from "@/components/material-processing-form"
+import { canAccessOperationsReports } from "@/lib/permissions"
 
 export const revalidate = 0
 
@@ -60,6 +61,16 @@ export default async function MaterialReportsPage({
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  if (!canAccessOperationsReports(profile?.role)) {
+    redirect("/dashboard")
+  }
 
   const params = await searchParams
   const today = new Date()

@@ -455,14 +455,14 @@ export default async function DashboardPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-xs sm:text-sm font-medium">
-                Draft Invoices
+                Blank/Cancelled
               </CardTitle>
               <Clock className="h-4 w-4 text-gray-600" />
             </CardHeader>
             <CardContent>
               <div className="text-xl sm:text-2xl font-bold">{draftInvoices}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Not yet sent to clients
+                Incomplete invoices to finish later
               </p>
             </CardContent>
           </Card>

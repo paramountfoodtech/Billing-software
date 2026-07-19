@@ -72,7 +72,7 @@ export function TablePagination({
   const pageNumbers = generatePageNumbers()
   const startItem = (currentPage - 1) * itemsPerPage + 1
   const endItem = Math.min(currentPage * itemsPerPage, totalItems)
-  const perPageOptions = ["5", "10", "25", "50"].map((value) => ({
+  const perPageOptions = ["5", "10", "25", "50", "100"].map((value) => ({
     value,
     label: value,
   }))

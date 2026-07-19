@@ -41,6 +41,7 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const canOverwritePrices = userRole === "super_admin"
   const [loading, setLoading] = useState(false)
   const [checkingInvoices, setCheckingInvoices] = useState(false)
   const [existingInvoicesCount, setExistingInvoicesCount] = useState(0)
@@ -175,12 +176,13 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
 
       if (!userProfile?.organization_id) throw new Error("Organization not found")
 
-      // Check if accountant is trying to overwrite existing prices
-      if (userProfile.role === "accountant" && existingPricesCount > 0) {
+      // Only Super Admin may update prices that already exist for a date
+      if (userProfile.role !== "super_admin" && existingPricesCount > 0) {
         toast({
           variant: "destructive",
           title: "Cannot Update Existing Prices",
-          description: "Prices have already been set for this date. Please contact your administrator to make changes to existing prices.",
+          description:
+            "Prices have already been set for this date. Please contact a Super Admin to make changes.",
           duration: 5000,
         })
         setLoading(false)
@@ -292,16 +294,16 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
           )}
 
 {!checkingInvoices && existingPricesCount > 0 && existingInvoicesCount === 0 && (
-            <div className={`space-y-1 p-4 rounded-lg ${userRole === "accountant" ? "bg-red-50 border border-red-300" : "bg-amber-50 border border-amber-300"}`}>
+            <div className={`space-y-1 p-4 rounded-lg ${!canOverwritePrices ? "bg-red-50 border border-red-300" : "bg-amber-50 border border-amber-300"}`}>
               <div className="flex items-start gap-2">
-                <AlertTriangle className={`h-5 w-5 mt-0.5 ${userRole === "accountant" ? "text-red-600" : "text-amber-600"}`} />
+                <AlertTriangle className={`h-5 w-5 mt-0.5 ${!canOverwritePrices ? "text-red-600" : "text-amber-600"}`} />
                 <div className="flex-1 text-sm">
-                  <p className={`font-semibold ${userRole === "accountant" ? "text-red-900" : "text-amber-900"}`}>
-                    {userRole === "accountant" ? "Cannot Overwrite Existing Prices" : "Prices already exist for this date."}
+                  <p className={`font-semibold ${!canOverwritePrices ? "text-red-900" : "text-amber-900"}`}>
+                    {!canOverwritePrices ? "Cannot Overwrite Existing Prices" : "Prices already exist for this date."}
                   </p>
-                  <p className={`mt-1 ${userRole === "accountant" ? "text-red-800" : "text-amber-800"}`}>
-                    {userRole === "accountant" 
-                      ? `Prices have already been set for ${formData.effective_date === today ? "today" : formData.effective_date}. Contact your administrator to make changes to the ${existingPricesCount} existing price entr${existingPricesCount === 1 ? "y" : "ies"}.`
+                  <p className={`mt-1 ${!canOverwritePrices ? "text-red-800" : "text-amber-800"}`}>
+                    {!canOverwritePrices
+                      ? `Prices have already been set for ${formData.effective_date === today ? "today" : formData.effective_date}. Contact a Super Admin to make changes to the ${existingPricesCount} existing price entr${existingPricesCount === 1 ? "y" : "ies"}.`
                       : `Saving will overwrite ${existingPricesCount} existing price entr${existingPricesCount === 1 ? "y" : "ies"} for ${formData.effective_date}.`
                     }
                   </p>
@@ -316,15 +318,15 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
                 <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
                 <div className="flex-1">
                   <p className="font-semibold text-red-900">
-                    {userRole === "accountant" ? "Cannot Update Prices" : "Warning"}: {existingInvoicesCount} invoice(s) exist for {formData.effective_date}
+                    {!canOverwritePrices ? "Cannot Update Prices" : "Warning"}: {existingInvoicesCount} invoice(s) exist for {formData.effective_date}
                   </p>
                   <p className="text-sm text-red-800 mt-1">
-                    {userRole === "accountant" 
-                      ? `Prices cannot be ${existingPricesCount > 0 ? "updated" : "set"} for this date because ${existingInvoicesCount} invoice(s) already exist. Contact your administrator to make changes.`
+                    {!canOverwritePrices
+                      ? `Prices cannot be ${existingPricesCount > 0 ? "updated" : "set"} for this date because ${existingInvoicesCount} invoice(s) already exist. Contact a Super Admin to make changes.`
                       : `Updating prices for this date will affect pricing calculations. Existing invoices will NOT be automatically recalculated.${existingPricesCount > 0 ? " You will also overwrite existing price entries." : ""}`
                     }
                   </p>
-                  {userRole !== "accountant" && (
+                  {canOverwritePrices && (
                     <p className="text-sm font-semibold text-red-900 mt-2">
                       Action required: After updating, review invoices, regenerate if needed, and re-share with clients.
                     </p>
@@ -332,7 +334,7 @@ export function DailyPriceForm({ priceCategories, priceHistory, userRole }: Dail
                 </div>
               </div>
               
-              {formData.effective_date !== today && userRole !== "accountant" && (
+              {formData.effective_date !== today && canOverwritePrices && (
                 <div className="flex items-center space-x-2 pt-2">
                   <Checkbox
                     id="updateExisting"

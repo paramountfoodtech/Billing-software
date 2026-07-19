@@ -50,7 +50,7 @@ function formatKg(value: string | number | null | undefined) {
 export function MaterialStockTable({ entries, processingEntries, userRole }: MaterialStockTableProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const canWrite = userRole === "super_admin" || userRole === "admin"
+  const canEditEntries = userRole === "super_admin"
   const today = getIndianToday()
   const processingDates = useMemo(
     () => new Set(processingEntries.map((entry) => entry.processing_date)),
@@ -188,11 +188,11 @@ export function MaterialStockTable({ entries, processingEntries, userRole }: Mat
 
   const handleDelete = async () => {
     if (!entryToDelete) return
-    if (!canWrite) {
+    if (!canEditEntries) {
       toast({
         variant: "destructive",
         title: "Read only access",
-        description: "Accountants can view operations but cannot delete entries.",
+        description: "Only Super Admin can delete stock entries.",
       })
       return
     }
@@ -220,7 +220,7 @@ export function MaterialStockTable({ entries, processingEntries, userRole }: Mat
         .select("organization_id, role")
         .eq("id", user.id)
         .single()
-      if (!profile?.organization_id || !["super_admin", "admin"].includes(profile.role)) {
+      if (!profile?.organization_id || profile.role !== "super_admin") {
         throw new Error("You do not have permission to delete stock entries")
       }
 
@@ -396,7 +396,7 @@ export function MaterialStockTable({ entries, processingEntries, userRole }: Mat
                         </Link>
                       </Button>
                     </IconTooltip>
-                    {canWrite && (
+                    {canEditEntries && (
                       <>
                         <IconTooltip label="Edit stock entry">
                           <Button variant="ghost" size="sm" asChild>

@@ -42,9 +42,15 @@ interface ReportsTableProps {
   rows: ClientRow[]
   daysInMonth: number
   monthLabel: string
+  saleColumnLabel?: string
 }
 
-export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProps) {
+export function ReportsTable({
+  rows,
+  daysInMonth,
+  monthLabel,
+  saleColumnLabel = "Current Month Sale",
+}: ReportsTableProps) {
   const { toast } = useToast()
   const [generatingStatementFor, setGeneratingStatementFor] = useState<string | null>(null)
   // Sorting state
@@ -52,7 +58,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
 
   // Pagination state
-  const [itemsPerPage, setItemsPerPage] = useState(25)
+  const [itemsPerPage, setItemsPerPage] = useState(100)
 
   // Filter state
   const [filters, setFilters] = useState({ hotel: "" })
@@ -184,7 +190,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
       },
       {
         key: "sale",
-        label: "Current Month Sale - Value",
+        label: `${saleColumnLabel} - Value`,
         formatter: (value) => Number(value || 0).toFixed(2),
       },
       {
@@ -243,7 +249,7 @@ export function ReportsTable({ rows, daysInMonth, monthLabel }: ReportsTableProp
     const columns: ExportColumn[] = [
       { key: "name", label: "Client", widthFrac: 0.18 },
       { key: "oldBalFmt", label: "Old Balance", widthFrac: 0.1, align: "right" },
-      { key: "saleFmt", label: "Current Month Sale - Value", widthFrac: 0.12, align: "right" },
+      { key: "saleFmt", label: `${saleColumnLabel} - Value`, widthFrac: 0.12, align: "right" },
       { key: "todaySaleQtyFmt", label: "Today's Sale - Qty", widthFrac: 0.09, align: "right" },
       { key: "todaySaleValueFmt", label: "Today's Sale - Value", widthFrac: 0.1, align: "right" },
       { key: "saleKgsFmt", label: "Total Sale in KGs", widthFrac: 0.09, align: "right" },

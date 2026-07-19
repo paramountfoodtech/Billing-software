@@ -2,9 +2,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const INVOICE_NUMBER_MAX_LENGTH = 6;
 
+export type InvoiceNumberPatternType = "general" | "client_specific";
+
 /** Either exactly 4 digits, or one uppercase letter + number from 1 to 10000. */
 export const INVOICE_NUMBER_PATTERN =
   /^(?:\d{4}|[A-Z](?:[1-9]\d{0,3}|10000))$/;
+
+/** Single letter prefix, or a full valid invoice number used as the series start. */
+export const INVOICE_NUMBER_PATTERN_CONFIG =
+  /^(?:[A-Z]|\d{4}|[A-Z](?:[1-9]\d{0,3}|10000))$/;
 
 export function sanitizeInvoiceNumberInput(value: string): string {
   return value
@@ -30,9 +36,61 @@ export function getInvoiceNumberFormatError(value: string): string | null {
   return null;
 }
 
+export function getInvoiceNumberPatternConfigError(value: string): string | null {
+  const normalized = sanitizeInvoiceNumberInput(value.trim());
+  if (!normalized) {
+    return "Enter a letter prefix (e.g. A) or a starting invoice number (e.g. A1, 0001).";
+  }
+
+  if (!INVOICE_NUMBER_PATTERN_CONFIG.test(normalized)) {
+    return "Use a single capital letter (e.g. A), a 4-digit number (e.g. 0001), or letter + number (e.g. A1).";
+  }
+
+  return null;
+}
+
 export function isValidInvoiceNumber(value: string): boolean {
   const normalized = value.trim();
   return normalized.length > 0 && getInvoiceNumberFormatError(normalized) === null;
+}
+
+export function getStartingInvoiceNumberFromPattern(pattern: string): string {
+  const normalized = sanitizeInvoiceNumberInput(pattern.trim());
+  if (!normalized || getInvoiceNumberPatternConfigError(normalized)) {
+    return "";
+  }
+
+  if (/^[A-Z]$/.test(normalized)) {
+    return `${normalized}1`;
+  }
+
+  return normalized;
+}
+
+export function invoiceNumberMatchesClientPattern(
+  invoiceNumber: string,
+  pattern: string,
+): boolean {
+  const number = sanitizeInvoiceNumberInput(invoiceNumber.trim());
+  const normalizedPattern = sanitizeInvoiceNumberInput(pattern.trim());
+  if (!number || !normalizedPattern || !isValidInvoiceNumber(number)) {
+    return false;
+  }
+
+  if (/^[A-Z]$/.test(normalizedPattern)) {
+    return number.startsWith(normalizedPattern) && /^[A-Z]\d+$/.test(number);
+  }
+
+  if (/^\d{4}$/.test(normalizedPattern)) {
+    return /^\d{4}$/.test(number);
+  }
+
+  const letterMatch = normalizedPattern.match(/^([A-Z])\d+$/);
+  if (letterMatch) {
+    return number.startsWith(letterMatch[1]) && /^[A-Z]\d+$/.test(number);
+  }
+
+  return false;
 }
 
 export function getNextInvoiceNumber(value: string): string {
@@ -63,6 +121,34 @@ export function getNextInvoiceNumber(value: string): string {
       return "";
     }
     return candidate;
+  }
+
+  return "";
+}
+
+/**
+ * Resolve the next invoice number for a client based on pattern mode.
+ * General → org-wide sequence. Client Specific → that client's pattern series.
+ */
+export function resolveNextInvoiceNumberForClient(options: {
+  patternType?: InvoiceNumberPatternType | string | null;
+  pattern?: string | null;
+  lastOrgInvoiceNumber?: string | null;
+  lastClientInvoiceNumber?: string | null;
+}): string {
+  const { patternType, pattern, lastOrgInvoiceNumber, lastClientInvoiceNumber } =
+    options;
+
+  if (patternType === "client_specific" && pattern?.trim()) {
+    if (lastClientInvoiceNumber) {
+      const next = getNextInvoiceNumber(lastClientInvoiceNumber);
+      if (next) return next;
+    }
+    return getStartingInvoiceNumberFromPattern(pattern);
+  }
+
+  if (lastOrgInvoiceNumber) {
+    return getNextInvoiceNumber(lastOrgInvoiceNumber);
   }
 
   return "";

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { InvoiceForm } from "@/components/invoice-form";
+import { canEditInvoice } from "@/lib/permissions";
 
 export default async function EditInvoicePage({
   params,
@@ -10,7 +11,6 @@ export default async function EditInvoicePage({
   const { id } = await params;
   const supabase = await createClient();
 
-  // Only super admins may edit existing invoices.
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -25,7 +25,7 @@ export default async function EditInvoicePage({
     .eq("id", user.id)
     .maybeSingle();
 
-  if (profile?.role !== "super_admin" || !profile.organization_id) {
+  if (!profile?.organization_id) {
     notFound();
   }
 
@@ -47,6 +47,10 @@ export default async function EditInvoicePage({
     notFound();
   }
 
+  if (!canEditInvoice(profile.role, invoice.status)) {
+    notFound();
+  }
+
   // Load clients, products, pricing rules, categories, history
   const [
     clientsResult,
@@ -59,7 +63,7 @@ export default async function EditInvoicePage({
     supabase
       .from("clients")
       .select(
-        "id, name, email, due_days, due_days_type, enable_per_bird, value_per_bird",
+        "id, name, email, due_days, due_days_type, enable_per_bird, value_per_bird, invoice_number_pattern_type, invoice_number_pattern",
       )
       .eq("organization_id", organizationId)
       .order("name"),
@@ -99,9 +103,13 @@ export default async function EditInvoicePage({
   return (
     <div className="p-6 lg:p-8">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">Edit Invoice</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {invoice.status === "draft" ? "Complete Invoice" : "Edit Invoice"}
+        </h1>
         <p className="text-muted-foreground mt-1">
-          Update invoice details and line items
+          {invoice.status === "draft"
+            ? "Update this Blank/Cancelled invoice and complete it when ready"
+            : "Update invoice details and line items"}
         </p>
       </div>
 
@@ -122,6 +130,7 @@ export default async function EditInvoicePage({
           due_date: invoice.due_date,
           due_days_type: invoice.due_days_type,
           notes: invoice.notes,
+          status: invoice.status,
           subtotal: Number(invoice.subtotal),
           tax_amount: Number(invoice.tax_amount),
           discount_amount: Number(invoice.discount_amount),
