@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+
+import { useMounted } from "@/hooks/use-mounted"
 import { Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -56,6 +58,7 @@ export function EntryHistoryButton({
   createdByName,
   className,
 }: EntryHistoryButtonProps) {
+  const mounted = useMounted()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState<EntryHistoryRow[] | null>(null)
@@ -80,20 +83,26 @@ export function EntryHistoryButton({
     rows ??
     buildDisplayRows([], createdAt, createdByName)
 
+  const triggerButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className={className}
+      title="Entry history"
+      aria-label="View entry history"
+    >
+      <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+    </Button>
+  )
+
+  if (!mounted) {
+    return triggerButton
+  }
+
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={className}
-          title="Entry history"
-          aria-label="View entry history"
-        >
-          <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0">
         <div className="border-b px-3 py-2">
           <p className="text-sm font-semibold">Entry history</p>

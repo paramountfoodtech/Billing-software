@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+
+import { useMounted } from "@/hooks/use-mounted";
 import { Check, ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,7 @@ export function SearchableSelect({
   id,
   triggerClassName,
 }: SearchableSelectProps) {
+  const mounted = useMounted();
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
 
@@ -64,6 +67,25 @@ export function SearchableSelect({
     );
   }, [options, searchValue]);
 
+  const triggerButton = (
+    <Button
+      type="button"
+      variant="outline"
+      role="combobox"
+      aria-expanded={mounted ? open : false}
+      id={id}
+      disabled={disabled}
+      className={cn("w-full justify-between font-normal", triggerClassName)}
+    >
+      {selectedOption?.label || placeholder}
+      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+    </Button>
+  );
+
+  if (!mounted) {
+    return triggerButton;
+  }
+
   return (
     <Popover
       open={open}
@@ -74,20 +96,7 @@ export function SearchableSelect({
         }
       }}
     >
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          id={id}
-          disabled={disabled}
-          className={cn("w-full justify-between font-normal", triggerClassName)}
-        >
-          {selectedOption?.label || placeholder}
-          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
         <Command>
           <CommandInput

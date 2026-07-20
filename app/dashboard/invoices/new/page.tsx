@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { InvoiceForm } from "@/components/invoice-form";
+import { findLastGeneralOrgInvoiceNumber } from "@/lib/invoice-number";
 
 export default async function NewInvoicePage() {
   const supabase = await createClient();
@@ -33,7 +34,7 @@ export default async function NewInvoicePage() {
     pricingHistoryResult,
     categoriesResult,
     historyResult,
-    latestInvoiceResult,
+    recentInvoicesResult,
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -73,12 +74,17 @@ export default async function NewInvoicePage() {
       .eq("organization_id", organizationId),
     supabase
       .from("invoices")
-      .select("invoice_number")
+      .select("invoice_number, client_id, created_at")
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .limit(500),
   ]);
+
+  const clients = clientsResult.data || [];
+  const lastGeneralOrgInvoiceNumber = findLastGeneralOrgInvoiceNumber(
+    recentInvoicesResult.data || [],
+    clients,
+  );
 
   return (
     <div className="p-6 lg:p-8">
@@ -90,13 +96,13 @@ export default async function NewInvoicePage() {
       </div>
 
       <InvoiceForm
-        clients={clientsResult.data || []}
+        clients={clients}
         products={productsResult.data || []}
         clientPricingRules={pricingRulesResult.data || []}
         clientPricingHistory={pricingHistoryResult.data || []}
         priceCategories={categoriesResult.data || []}
         priceHistory={historyResult.data || []}
-        lastInvoiceNumber={latestInvoiceResult.data?.invoice_number || null}
+        lastGeneralOrgInvoiceNumber={lastGeneralOrgInvoiceNumber}
         canToggleInvoiceSequence={isSuperAdmin}
       />
     </div>

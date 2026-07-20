@@ -93,6 +93,67 @@ export function invoiceNumberMatchesClientPattern(
   return false;
 }
 
+export type ClientInvoicePattern = {
+  id: string;
+  invoice_number_pattern_type?: string | null;
+  invoice_number_pattern?: string | null;
+};
+
+export type InvoiceNumberRecord = {
+  invoice_number: string;
+  client_id: string;
+  created_at?: string | null;
+};
+
+/** True when the invoice belongs to the org-wide general series (not client-specific). */
+export function isGeneralSeriesInvoice(
+  invoice: InvoiceNumberRecord,
+  clients: ClientInvoicePattern[],
+): boolean {
+  const client = clients.find((c) => c.id === invoice.client_id);
+  if (
+    client?.invoice_number_pattern_type === "client_specific" &&
+    client.invoice_number_pattern?.trim()
+  ) {
+    return false;
+  }
+
+  for (const c of clients) {
+    if (
+      c.invoice_number_pattern_type === "client_specific" &&
+      c.invoice_number_pattern?.trim() &&
+      invoiceNumberMatchesClientPattern(
+        invoice.invoice_number,
+        c.invoice_number_pattern,
+      )
+    ) {
+      return false;
+    }
+  }
+
+  return isValidInvoiceNumber(invoice.invoice_number);
+}
+
+/** Latest invoice number in the general org series (ignores client-specific patterns). */
+export function findLastGeneralOrgInvoiceNumber(
+  invoices: InvoiceNumberRecord[],
+  clients: ClientInvoicePattern[],
+): string | null {
+  const sorted = [...invoices].sort((a, b) => {
+    const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return tb - ta;
+  });
+
+  for (const invoice of sorted) {
+    if (isGeneralSeriesInvoice(invoice, clients)) {
+      return sanitizeInvoiceNumberInput(invoice.invoice_number);
+    }
+  }
+
+  return null;
+}
+
 export function getNextInvoiceNumber(value: string): string {
   const normalized = sanitizeInvoiceNumberInput(value.trim());
   if (!normalized || !INVOICE_NUMBER_PATTERN.test(normalized)) {
@@ -128,16 +189,21 @@ export function getNextInvoiceNumber(value: string): string {
 
 /**
  * Resolve the next invoice number for a client based on pattern mode.
- * General → org-wide sequence. Client Specific → that client's pattern series.
+ * General → org-wide general series only. Client Specific → that client's pattern series.
  */
 export function resolveNextInvoiceNumberForClient(options: {
   patternType?: InvoiceNumberPatternType | string | null;
   pattern?: string | null;
-  lastOrgInvoiceNumber?: string | null;
+  /** Last invoice in the general org series (not client-specific numbers). */
+  lastGeneralOrgInvoiceNumber?: string | null;
   lastClientInvoiceNumber?: string | null;
 }): string {
-  const { patternType, pattern, lastOrgInvoiceNumber, lastClientInvoiceNumber } =
-    options;
+  const {
+    patternType,
+    pattern,
+    lastGeneralOrgInvoiceNumber,
+    lastClientInvoiceNumber,
+  } = options;
 
   if (patternType === "client_specific" && pattern?.trim()) {
     if (lastClientInvoiceNumber) {
@@ -147,11 +213,11 @@ export function resolveNextInvoiceNumberForClient(options: {
     return getStartingInvoiceNumberFromPattern(pattern);
   }
 
-  if (lastOrgInvoiceNumber) {
-    return getNextInvoiceNumber(lastOrgInvoiceNumber);
+  if (lastGeneralOrgInvoiceNumber) {
+    return getNextInvoiceNumber(lastGeneralOrgInvoiceNumber);
   }
 
-  return "";
+  return "0001";
 }
 
 export async function isInvoiceNumberDuplicate(

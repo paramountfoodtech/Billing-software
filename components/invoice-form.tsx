@@ -70,6 +70,7 @@ import {
   parsePricingRuleSteps,
 } from "@/lib/pricing-rules";
 import {
+  findLastGeneralOrgInvoiceNumber,
   getInvoiceNumberFormatError,
   invoiceNumberMatchesClientPattern,
   isInvoiceNumberDuplicate as checkInvoiceNumberDuplicate,
@@ -135,7 +136,7 @@ interface InvoiceFormProps {
     effective_date: string;
   }>;
   clientPricingHistory?: ClientPricingHistoryEntry[];
-  lastInvoiceNumber?: string | null;
+  lastGeneralOrgInvoiceNumber?: string | null;
   initialInvoice?: {
     id: string;
     client_id: string;
@@ -188,7 +189,7 @@ export function InvoiceForm({
   priceCategories = [],
   priceHistory = [],
   clientPricingHistory = [],
-  lastInvoiceNumber,
+  lastGeneralOrgInvoiceNumber,
   initialInvoice,
   initialItems,
   canEditInvoiceNumber = false,
@@ -274,7 +275,7 @@ export function InvoiceForm({
   );
   const initialAutoSequenceInvoiceNumber = resolveNextInvoiceNumberForClient({
     patternType: "general",
-    lastOrgInvoiceNumber: lastInvoiceNumber,
+    lastGeneralOrgInvoiceNumber,
   });
   const prefilledInvoiceNumber = sanitizeInvoiceNumberInput(
     searchParams.get("invoiceNumber") || "",
@@ -312,6 +313,7 @@ export function InvoiceForm({
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [productSearchValue, setProductSearchValue] = useState("");
   const isEditMode = Boolean(initialInvoice?.id);
+  const autoSequenceActive = continueInvoiceSequence && !isEditMode;
   const pricingBaselineRef = useRef({
     clientId: initialInvoice?.client_id || "",
     issueDate: initialInvoice?.issue_date || today,
@@ -326,6 +328,29 @@ export function InvoiceForm({
     () => getInvoiceNumberFormatError(formData.invoice_number),
     [formData.invoice_number],
   );
+
+  const effectiveInvoiceNumber = useMemo(() => {
+    const fromForm = sanitizeInvoiceNumberInput(formData.invoice_number);
+    if (fromForm) return fromForm;
+    if (autoSequenceActive) {
+      return sanitizeInvoiceNumberInput(autoSequenceInvoiceNumber);
+    }
+    return "";
+  }, [formData.invoice_number, autoSequenceActive, autoSequenceInvoiceNumber]);
+
+  useEffect(() => {
+    if (!autoSequenceActive || isEditMode) return;
+    const fromForm = sanitizeInvoiceNumberInput(formData.invoice_number);
+    const fromAuto = sanitizeInvoiceNumberInput(autoSequenceInvoiceNumber);
+    if (!fromForm && fromAuto) {
+      setFormData((prev) => ({ ...prev, invoice_number: fromAuto }));
+    }
+  }, [
+    autoSequenceActive,
+    autoSequenceInvoiceNumber,
+    formData.invoice_number,
+    isEditMode,
+  ]);
 
   useEffect(() => {
     let isActive = true;
@@ -782,10 +807,41 @@ export function InvoiceForm({
   };
 
   const resolveSequenceForClient = async (client: Client | undefined) => {
+    let orgId = organizationId;
+    if (!orgId) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("organization_id")
+          .eq("id", user.id)
+          .single();
+        orgId = profile?.organization_id || null;
+        if (orgId) setOrganizationId(orgId);
+      }
+    }
+
+    const resolveLastGeneralNumber = async () => {
+      if (orgId) {
+        const { data: recentInvoices } = await supabase
+          .from("invoices")
+          .select("invoice_number, client_id, created_at")
+          .eq("organization_id", orgId)
+          .order("created_at", { ascending: false })
+          .limit(500);
+
+        return findLastGeneralOrgInvoiceNumber(recentInvoices || [], clients);
+      }
+      return lastGeneralOrgInvoiceNumber ?? null;
+    };
+
     if (!client) {
+      const lastGeneral = await resolveLastGeneralNumber();
       const next = resolveNextInvoiceNumberForClient({
         patternType: "general",
-        lastOrgInvoiceNumber: lastInvoiceNumber,
+        lastGeneralOrgInvoiceNumber: lastGeneral,
       });
       setAutoSequenceInvoiceNumber(next);
       return next;
@@ -795,22 +851,6 @@ export function InvoiceForm({
       client.invoice_number_pattern_type === "client_specific" &&
       client.invoice_number_pattern
     ) {
-      let orgId = organizationId;
-      if (!orgId) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("organization_id")
-            .eq("id", user.id)
-            .single();
-          orgId = profile?.organization_id || null;
-          if (orgId) setOrganizationId(orgId);
-        }
-      }
-
       let lastClientInvoiceNumber: string | null = null;
 
       if (orgId) {
@@ -840,9 +880,10 @@ export function InvoiceForm({
       return next;
     }
 
+    const lastGeneral = await resolveLastGeneralNumber();
     const next = resolveNextInvoiceNumberForClient({
       patternType: "general",
-      lastOrgInvoiceNumber: lastInvoiceNumber,
+      lastGeneralOrgInvoiceNumber: lastGeneral,
     });
     setAutoSequenceInvoiceNumber(next);
     return next;
@@ -861,7 +902,9 @@ export function InvoiceForm({
     setClientPerBirdValue(Number(client?.value_per_bird || 0));
 
     const shouldApplyClientSequence =
-      !isEditMode && !shouldUsePrefilledInvoiceNumber;
+      !isEditMode &&
+      !shouldUsePrefilledInvoiceNumber &&
+      continueInvoiceSequence;
     const nextInvoiceNumber = shouldApplyClientSequence
       ? await resolveSequenceForClient(client)
       : formData.invoice_number;
@@ -871,7 +914,7 @@ export function InvoiceForm({
       client_id: clientId,
       due_date: newDue,
       ...(shouldApplyClientSequence
-        ? { invoice_number: nextInvoiceNumber }
+        ? { invoice_number: nextInvoiceNumber || formData.invoice_number }
         : {}),
     });
 
@@ -1211,7 +1254,13 @@ export function InvoiceForm({
     setSavingAs(status);
     setError(null);
 
-    if (isInvoiceNumberDuplicate) {
+    const invoiceNumberToSave =
+      sanitizeInvoiceNumberInput(formData.invoice_number) ||
+      (autoSequenceActive
+        ? sanitizeInvoiceNumberInput(autoSequenceInvoiceNumber)
+        : "");
+
+    if (!autoSequenceActive && isInvoiceNumberDuplicate) {
       setError(
         "This invoice number already exists. Please enter a unique invoice number.",
       );
@@ -1220,18 +1269,26 @@ export function InvoiceForm({
       return;
     }
 
-    const invoiceNumberFormatIssue = getInvoiceNumberFormatError(
-      formData.invoice_number,
-    );
-    if (invoiceNumberFormatIssue) {
-      setError(invoiceNumberFormatIssue);
+    if (status === "recorded" || !autoSequenceActive) {
+      const invoiceNumberFormatIssue =
+        getInvoiceNumberFormatError(invoiceNumberToSave);
+      if (invoiceNumberFormatIssue) {
+        setError(invoiceNumberFormatIssue);
+        setIsLoading(false);
+        setSavingAs(null);
+        return;
+      }
+    }
+
+    if (!formData.client_id) {
+      setError("Please select a client.");
       setIsLoading(false);
       setSavingAs(null);
       return;
     }
 
-    if (!formData.client_id) {
-      setError("Please select a client.");
+    if (!invoiceNumberToSave) {
+      setError("Invoice number is required.");
       setIsLoading(false);
       setSavingAs(null);
       return;
@@ -1300,19 +1357,12 @@ export function InvoiceForm({
       let invoiceId = initialInvoice?.id;
 
       if (!invoiceId) {
-        // Use manual invoice number from form
-        const invoiceNumber = sanitizeInvoiceNumberInput(
-          formData.invoice_number,
-        );
+        const invoiceNumber = invoiceNumberToSave;
 
-        if (!invoiceNumber) {
-          setError("Invoice number is required.");
-          setIsLoading(false);
-          setSavingAs(null);
-          return;
-        }
-
-        if (!isValidInvoiceNumber(invoiceNumber)) {
+        if (
+          !autoSequenceActive &&
+          !isValidInvoiceNumber(invoiceNumber)
+        ) {
           setError(
             getInvoiceNumberFormatError(invoiceNumber) ||
               "Please enter a valid invoice number.",
@@ -1325,20 +1375,21 @@ export function InvoiceForm({
         // Generate reference number with REF. prefix
         const referenceNumber = `REF-${Date.now()}`;
 
-        // Check for duplicate invoice number
-        const { data: existingInvoice } = await supabase
-          .from("invoices")
-          .select("id")
-          .eq("invoice_number", invoiceNumber)
-          .maybeSingle();
+        if (!autoSequenceActive) {
+          const { data: existingInvoice } = await supabase
+            .from("invoices")
+            .select("id")
+            .eq("invoice_number", invoiceNumber)
+            .maybeSingle();
 
-        if (existingInvoice) {
-          setError(
-            `Invoice number "${invoiceNumber}" already exists. Please use a different invoice number.`,
-          );
-          setIsLoading(false);
-          setSavingAs(null);
-          return;
+          if (existingInvoice) {
+            setError(
+              `Invoice number "${invoiceNumber}" already exists. Please use a different invoice number.`,
+            );
+            setIsLoading(false);
+            setSavingAs(null);
+            return;
+          }
         }
 
         // Insert invoice (create mode)
@@ -1655,18 +1706,20 @@ export function InvoiceForm({
                     checked={continueInvoiceSequence}
                     onCheckedChange={async (checked) => {
                       setContinueInvoiceSequence(checked);
-                      if (!checked) return;
-                      const client = clients.find(
-                        (c) => c.id === formData.client_id,
-                      );
-                      const next =
-                        (await resolveSequenceForClient(client)) ||
-                        autoSequenceInvoiceNumber;
-                      if (next) {
+                      if (checked) {
+                        setIsInvoiceNumberDuplicate(false);
+                        const client = clients.find(
+                          (c) => c.id === formData.client_id,
+                        );
+                        const next = await resolveSequenceForClient(client);
                         setFormData((prev) => ({
                           ...prev,
-                          invoice_number: next,
+                          invoice_number:
+                            next ||
+                            sanitizeInvoiceNumberInput(autoSequenceInvoiceNumber) ||
+                            prev.invoice_number,
                         }));
+                        return;
                       }
                     }}
                   />
@@ -2208,9 +2261,9 @@ export function InvoiceForm({
           disabled={
             isLoading ||
             !formData.client_id ||
-            !formData.invoice_number ||
-            !!invoiceNumberFormatError ||
-            isInvoiceNumberDuplicate ||
+            !effectiveInvoiceNumber ||
+            (!autoSequenceActive &&
+              (!!invoiceNumberFormatError || isInvoiceNumberDuplicate)) ||
             (clientPerBirdEnabled && globalBirdCount <= 0)
           }
         >
@@ -2233,9 +2286,9 @@ export function InvoiceForm({
             disabled={
               isLoading ||
               !formData.client_id ||
-              !formData.invoice_number ||
-              !!invoiceNumberFormatError ||
-              isInvoiceNumberDuplicate
+              !effectiveInvoiceNumber ||
+              (!autoSequenceActive &&
+                (!!invoiceNumberFormatError || isInvoiceNumberDuplicate))
             }
             onClick={() => void saveInvoice("draft")}
           >
