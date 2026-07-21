@@ -33,6 +33,9 @@ export function MonthYearPicker({
     const params = new URLSearchParams(searchParams.toString())
     params.set("year", String(year))
     params.set("month", String(month))
+    // Reset custom date range when month/year changes
+    params.delete("from")
+    params.delete("to")
     router.push(`${basePath}?${params.toString()}`)
   }
 

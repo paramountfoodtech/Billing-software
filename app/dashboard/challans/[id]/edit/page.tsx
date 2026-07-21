@@ -42,15 +42,13 @@ export default async function EditChallanPage({
     .order("name")
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="p-6 lg:p-8 max-w-3xl mx-auto">
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">Edit purchase challan</h1>
         <p className="text-muted-foreground mt-1">Update draft purchase challan details</p>
       </div>
 
-      <div className="max-w-3xl">
-        <ChallanForm purchasers={purchasers || []} challan={challan} />
-      </div>
+      <ChallanForm purchasers={purchasers || []} challan={challan} />
     </div>
   )
 }

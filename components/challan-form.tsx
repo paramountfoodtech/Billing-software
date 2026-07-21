@@ -18,6 +18,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getIndianToday } from "@/lib/date-time";
 import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
+import { Trash2 } from "lucide-react";
 
 function useBoxGridColumns() {
   const [cols, setCols] = useState(1);
@@ -49,6 +50,7 @@ interface ChallanBox {
   box_number: number;
   weight_kg: string;
   num_birds: string;
+  set_number: number;
 }
 
 interface Challan {
@@ -79,15 +81,9 @@ export function ChallanForm({
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  const initialBoxCount = challan?.num_boxes || 1;
-  const [numBoxesInput, setNumBoxesInput] = useState(String(initialBoxCount));
+  const [manualBoxesInput, setManualBoxesInput] = useState("");
   const [setBoxesInput, setSetBoxesInput] = useState("");
   const [setBirdsInput, setSetBirdsInput] = useState("");
-  const numBoxes = useMemo(() => {
-    const parsed = parseInt(numBoxesInput, 10);
-    if (Number.isNaN(parsed) || parsed < 1) return 1;
-    return Math.min(100, parsed);
-  }, [numBoxesInput]);
   const boxGridColumns = useBoxGridColumns();
   const [birdsLocked, setBirdsLocked] = useState(
     () =>
@@ -97,17 +93,26 @@ export function ChallanForm({
   );
   const [boxes, setBoxes] = useState<ChallanBox[]>(() => {
     if (challan?.challan_boxes?.length) {
-      return challan.challan_boxes.map((b) => ({
-        box_number: b.box_number,
-        weight_kg: String(b.weight_kg),
-        num_birds: b.num_birds != null ? String(b.num_birds) : "",
-      }));
+      // Group consecutive same bird counts into sets for edit display
+      let setNumber = 1;
+      let prevBirds: number | null = null;
+      return [...challan.challan_boxes]
+        .sort((a, b) => a.box_number - b.box_number)
+        .map((b) => {
+          const birds = Number(b.num_birds ?? 0);
+          if (prevBirds !== null && birds !== prevBirds) {
+            setNumber += 1;
+          }
+          prevBirds = birds;
+          return {
+            box_number: b.box_number,
+            weight_kg: String(b.weight_kg),
+            num_birds: b.num_birds != null ? String(b.num_birds) : "",
+            set_number: setNumber,
+          };
+        });
     }
-    return Array.from({ length: initialBoxCount }, (_, i) => ({
-      box_number: i + 1,
-      weight_kg: "",
-      num_birds: "",
-    }));
+    return [];
   });
 
   const [formData, setFormData] = useState({
@@ -126,38 +131,73 @@ export function ChallanForm({
   );
   const canFinalize = allBoxesHaveWeights;
 
-  useEffect(() => {
-    setBoxes((prev) => {
-      const next: ChallanBox[] = [];
-      for (let i = 0; i < numBoxes; i++) {
-        const existing = prev.find((b) => b.box_number === i + 1);
-        next.push({
-          box_number: i + 1,
-          weight_kg: existing?.weight_kg || "",
-          num_birds: existing?.num_birds || "",
-        });
-      }
-      return next;
-    });
-  }, [numBoxes]);
-
   const totalWeight = useMemo(() => {
     return boxes.reduce((sum, b) => sum + (Number(b.weight_kg) || 0), 0);
   }, [boxes]);
-
-  const boxGridRows = useMemo(
-    () => Math.ceil(boxes.length / boxGridColumns) || 1,
-    [boxes.length, boxGridColumns],
-  );
 
   const totalBirds = useMemo(() => {
     return boxes.reduce((sum, b) => sum + (Number(b.num_birds) || 0), 0);
   }, [boxes]);
 
+  const setSummaries = useMemo(() => {
+    const map = new Map<
+      number,
+      { set_number: number; boxCount: number; birdsPerBox: number }
+    >();
+    for (const box of boxes) {
+      const sn = box.set_number ?? 0;
+      const existing = map.get(sn);
+      if (existing) {
+        existing.boxCount += 1;
+      } else {
+        map.set(sn, {
+          set_number: sn,
+          boxCount: 1,
+          birdsPerBox: Number(box.num_birds) || 0,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      // Manual (0) after numbered sets
+      if (a.set_number === 0) return 1;
+      if (b.set_number === 0) return -1;
+      return a.set_number - b.set_number;
+    });
+  }, [boxes]);
+
+  const boxesBySet = useMemo(() => {
+    return setSummaries.map((summary) => ({
+      ...summary,
+      boxes: boxes.filter((b) => (b.set_number ?? 0) === summary.set_number),
+    }));
+  }, [boxes, setSummaries]);
+
+  const numberedSetSummaries = setSummaries.filter((s) => s.set_number > 0);
+  const manualSummary = setSummaries.find((s) => s.set_number === 0);
+
   const purchaserOptions = purchasers.map((p) => ({
     value: p.id,
     label: p.name,
   }));
+
+  const renumberBoxes = (list: ChallanBox[]): ChallanBox[] => {
+    const setOrder = Array.from(
+      new Set(
+        list
+          .map((b) => b.set_number ?? 0)
+          .filter((n) => n > 0),
+      ),
+    ).sort((a, b) => a - b);
+    const setMap = new Map(setOrder.map((old, index) => [old, index + 1]));
+    return list.map((box, index) => {
+      const current = box.set_number ?? 0;
+      return {
+        ...box,
+        box_number: index + 1,
+        set_number: current === 0 ? 0 : setMap.get(current) || 1,
+      };
+    });
+  };
 
   const handleBoxFieldChange = (
     boxNumber: number,
@@ -171,32 +211,14 @@ export function ChallanForm({
     );
   };
 
-  const handleNumBoxesChange = (value: string) => {
-    if (value === "" || /^\d+$/.test(value)) {
-      setNumBoxesInput(value);
-      // Manual box count keeps birds editable.
-      setBirdsLocked(false);
-    }
-  };
-
-  const handleNumBoxesBlur = () => {
-    const parsed = parseInt(numBoxesInput, 10);
-    const clamped = Number.isNaN(parsed)
-      ? 1
-      : Math.min(100, Math.max(1, parsed));
-    setNumBoxesInput(String(clamped));
-  };
-
-  const handleSetFieldChange = (
-    field: "setBoxesInput" | "setBirdsInput",
+  const handleCountFieldChange = (
+    field: "manualBoxesInput" | "setBoxesInput" | "setBirdsInput",
     value: string,
   ) => {
     if (value === "" || /^\d+$/.test(value)) {
-      if (field === "setBoxesInput") {
-        setSetBoxesInput(value);
-      } else {
-        setSetBirdsInput(value);
-      }
+      if (field === "manualBoxesInput") setManualBoxesInput(value);
+      else if (field === "setBoxesInput") setSetBoxesInput(value);
+      else setSetBirdsInput(value);
     }
   };
 
@@ -222,24 +244,91 @@ export function ChallanForm({
       return;
     }
 
-    setBoxes((prev) =>
-      Array.from({ length: boxCount }, (_, index) => {
-        const boxNumber = index + 1;
-        const existing = prev.find((b) => b.box_number === boxNumber);
-        return {
-          box_number: boxNumber,
-          weight_kg: existing?.weight_kg || "",
-          num_birds: String(birdsPerBox),
-        };
-      }),
-    );
-    setNumBoxesInput(String(boxCount));
+    // Keep all existing boxes (sets + manual), then append the new set
+    const preserved = boxes;
+    const remainingSlots = 100 - preserved.length;
+    if (boxCount > remainingSlots) {
+      toast({
+        variant: "destructive",
+        title: "Box limit reached",
+        description: `Only ${remainingSlots} more box(es) can be added (max 100).`,
+      });
+      return;
+    }
+
+    const existingSetNumbers = preserved
+      .map((b) => b.set_number ?? 0)
+      .filter((n) => n > 0);
+    const nextSetNumber =
+      existingSetNumbers.length === 0
+        ? 1
+        : Math.max(...existingSetNumbers) + 1;
+
+    const added: ChallanBox[] = Array.from({ length: boxCount }, (_, index) => ({
+      box_number: preserved.length + index + 1,
+      weight_kg: "",
+      num_birds: String(birdsPerBox),
+      set_number: nextSetNumber,
+    }));
+
+    const next = renumberBoxes([...preserved, ...added]);
+    setBoxes(next);
     setBirdsLocked(true);
+    setSetBoxesInput("");
+    setSetBirdsInput("");
     toast({
       variant: "success",
-      title: "Box set created",
-      description: `${boxCount} box(es) with ${birdsPerBox} bird(s) each. Enter weights below.`,
+      title: "Box set added",
+      description: `Added ${boxCount} box(es) with ${birdsPerBox} bird(s) each. You can add more sets or manual boxes.`,
     });
+  };
+
+  const addManualBoxes = () => {
+    const boxCount = parseInt(manualBoxesInput, 10);
+
+    if (Number.isNaN(boxCount) || boxCount < 1 || boxCount > 100) {
+      toast({
+        variant: "destructive",
+        title: "Invalid box count",
+        description: "Enter between 1 and 100 boxes to add manually.",
+      });
+      return;
+    }
+
+    const remainingSlots = 100 - boxes.length;
+    if (boxCount > remainingSlots) {
+      toast({
+        variant: "destructive",
+        title: "Box limit reached",
+        description: `Only ${remainingSlots} more box(es) can be added (max 100).`,
+      });
+      return;
+    }
+
+    const added: ChallanBox[] = Array.from({ length: boxCount }, (_, index) => ({
+      box_number: boxes.length + index + 1,
+      weight_kg: "",
+      num_birds: "",
+      set_number: 0,
+    }));
+
+    setBoxes(renumberBoxes([...boxes, ...added]));
+    setManualBoxesInput("");
+    toast({
+      variant: "success",
+      title: "Manual boxes added",
+      description: `Added ${boxCount} box(es). Enter weight and birds for each.`,
+    });
+  };
+
+  const removeBoxSet = (setNumber: number) => {
+    const next = renumberBoxes(
+      boxes.filter((b) => (b.set_number ?? 0) !== setNumber),
+    );
+    setBoxes(next);
+    if (next.every((b) => (b.set_number ?? 0) === 0)) {
+      setBirdsLocked(false);
+    }
   };
 
   const saveChallan = async (status: "draft" | "final") => {
@@ -454,30 +543,17 @@ export function ChallanForm({
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <Label>Box Details (Weight &amp; Birds)</Label>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="num_boxes" className="text-sm text-muted-foreground">
-                  Number of boxes:
-                </Label>
-                <Input
-                  id="num_boxes"
-                  type="number"
-                  max={100}
-                  inputMode="numeric"
-                  value={numBoxesInput}
-                  onChange={(e) => handleNumBoxesChange(e.target.value)}
-                  onBlur={handleNumBoxesBlur}
-                  className="w-20 h-8"
-                  disabled={!isEditable}
-                />
-              </div>
+              <span className="text-sm text-muted-foreground">
+                Total boxes: {boxes.length}
+              </span>
             </div>
 
             <div className="space-y-3 rounded-lg border bg-slate-50/80 p-4">
               <div>
-                <Label>Create box set (optional)</Label>
+                <Label>Create box sets</Label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Prefill birds for all boxes. You can also just set the number of
-                  boxes above and enter birds manually.
+                  Add one or more sets with the same birds-per-box. Each set is
+                  appended to this purchase challan.
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
@@ -493,7 +569,7 @@ export function ChallanForm({
                     inputMode="numeric"
                     value={setBoxesInput}
                     onChange={(e) =>
-                      handleSetFieldChange("setBoxesInput", e.target.value)
+                      handleCountFieldChange("setBoxesInput", e.target.value)
                     }
                     placeholder="e.g. 10"
                     disabled={!isEditable}
@@ -511,7 +587,7 @@ export function ChallanForm({
                     inputMode="numeric"
                     value={setBirdsInput}
                     onChange={(e) =>
-                      handleSetFieldChange("setBirdsInput", e.target.value)
+                      handleCountFieldChange("setBirdsInput", e.target.value)
                     }
                     placeholder="e.g. 12"
                     disabled={!isEditable}
@@ -525,76 +601,202 @@ export function ChallanForm({
                   disabled={!isEditable}
                   className="h-9"
                 >
-                  Create set
+                  Add set
                 </Button>
               </div>
-            </div>
 
-            <div
-              className="grid gap-3 grid-flow-col"
-              style={{
-                gridTemplateRows: `repeat(${boxGridRows}, auto)`,
-                gridTemplateColumns: `repeat(${boxGridColumns}, minmax(0, 1fr))`,
-              }}
-            >
-              {boxes.map((box) => (
-                <div
-                  key={box.box_number}
-                  className="rounded-lg border bg-slate-50/50 p-3 space-y-2"
-                >
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    Box {box.box_number}
-                  </Label>
-                  <div className="space-y-2">
-                    <div className="space-y-1">
-                      <Label className="text-[11px] text-muted-foreground">
-                        Weight (KG)
-                      </Label>
-                      <Input
-                        type="number"
-                        step="0.001"
-                        min="0"
-                        value={box.weight_kg}
-                        onChange={(e) =>
-                          handleBoxFieldChange(
-                            box.box_number,
-                            "weight_kg",
-                            e.target.value,
-                          )
-                        }
-                        placeholder="0.000"
-                        disabled={!isEditable}
-                        className="h-8"
-                        tabIndex={0}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[11px] text-muted-foreground">
-                        No. of Birds
-                      </Label>
-                      <Input
-                        type="number"
-                        step="1"
-                        min="0"
-                        value={box.num_birds}
-                        onChange={(e) =>
-                          handleBoxFieldChange(
-                            box.box_number,
-                            "num_birds",
-                            e.target.value,
-                          )
-                        }
-                        placeholder="0"
-                        disabled={!isEditable || birdsLocked}
-                        readOnly={birdsLocked}
-                        tabIndex={birdsLocked ? -1 : 0}
-                        className={`h-8 ${birdsLocked ? "bg-muted" : ""}`}
-                      />
+              {numberedSetSummaries.length > 0 && (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Added sets ({numberedSetSummaries.length})
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      {numberedSetSummaries.map((set) => (
+                        <div
+                          key={set.set_number}
+                          className="flex items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-sm"
+                        >
+                          <span>
+                            Set {set.set_number}:{" "}
+                            <span className="font-medium">
+                              {set.boxCount} box(es) × {set.birdsPerBox} bird(s)
+                            </span>
+                          </span>
+                          {isEditable && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-destructive hover:text-destructive"
+                              onClick={() => removeBoxSet(set.set_number)}
+                              title={`Remove set ${set.set_number}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-              ))}
+                )}
             </div>
+
+            <div className="space-y-3 rounded-lg border bg-slate-50/80 p-4">
+              <div>
+                <Label>Add manual boxes</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Add boxes by count and enter weight and birds for each box
+                  yourself.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div className="space-y-1">
+                  <Label htmlFor="manual_boxes" className="text-sm">
+                    Number of boxes
+                  </Label>
+                  <Input
+                    id="manual_boxes"
+                    type="number"
+                    min={1}
+                    max={100}
+                    inputMode="numeric"
+                    value={manualBoxesInput}
+                    onChange={(e) =>
+                      handleCountFieldChange("manualBoxesInput", e.target.value)
+                    }
+                    placeholder="e.g. 5"
+                    disabled={!isEditable}
+                    className="h-9"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={addManualBoxes}
+                  disabled={!isEditable}
+                  className="h-9"
+                >
+                  Add boxes
+                </Button>
+              </div>
+
+              {manualSummary && (
+                <div className="flex items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-sm">
+                  <span>
+                    Manual boxes:{" "}
+                    <span className="font-medium">
+                      {manualSummary.boxCount} box(es)
+                    </span>
+                  </span>
+                  {isEditable && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-destructive hover:text-destructive"
+                      onClick={() => removeBoxSet(0)}
+                      title="Remove manual boxes"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {boxes.length === 0 ? (
+              <p className="text-sm text-muted-foreground rounded-lg border border-dashed px-4 py-6 text-center">
+                No boxes yet. Add a set or manual boxes above.
+              </p>
+            ) : (
+            <div className="space-y-5">
+              {boxesBySet.map((set) => {
+                const setRows =
+                  Math.ceil(set.boxes.length / boxGridColumns) || 1;
+                const isManual = set.set_number === 0;
+                const birdFieldsLocked = birdsLocked && !isManual;
+                return (
+                  <div key={set.set_number} className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-sm">
+                        {isManual ? "Manual boxes" : `Set ${set.set_number}`}
+                        <span className="ml-2 font-normal text-muted-foreground">
+                          {isManual
+                            ? `${set.boxCount} box(es) · enter birds per box`
+                            : `${set.boxCount} box(es) · ${set.birdsPerBox} bird(s) each`}
+                        </span>
+                      </Label>
+                    </div>
+                    <div
+                      className="grid gap-3 grid-flow-col"
+                      style={{
+                        gridTemplateRows: `repeat(${setRows}, auto)`,
+                        gridTemplateColumns: `repeat(${boxGridColumns}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {set.boxes.map((box) => (
+                        <div
+                          key={box.box_number}
+                          className="rounded-lg border bg-slate-50/50 p-3 space-y-2"
+                        >
+                          <Label className="text-xs font-medium text-muted-foreground">
+                            Box {box.box_number}
+                          </Label>
+                          <div className="space-y-2">
+                            <div className="space-y-1">
+                              <Label className="text-[11px] text-muted-foreground">
+                                Weight (KG)
+                              </Label>
+                              <Input
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                value={box.weight_kg}
+                                onChange={(e) =>
+                                  handleBoxFieldChange(
+                                    box.box_number,
+                                    "weight_kg",
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="0.000"
+                                disabled={!isEditable}
+                                className="h-8"
+                                tabIndex={0}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[11px] text-muted-foreground">
+                                No. of Birds
+                              </Label>
+                              <Input
+                                type="number"
+                                step="1"
+                                min="0"
+                                value={box.num_birds}
+                                onChange={(e) =>
+                                  handleBoxFieldChange(
+                                    box.box_number,
+                                    "num_birds",
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="0"
+                                disabled={!isEditable || birdFieldsLocked}
+                                readOnly={birdFieldsLocked}
+                                tabIndex={birdFieldsLocked ? -1 : 0}
+                                className={`h-8 ${birdFieldsLocked ? "bg-muted" : ""}`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            )}
 
             <div className="p-4 bg-slate-50 rounded-lg border space-y-2">
               <div className="flex justify-between items-center">
@@ -639,7 +841,9 @@ export function ChallanForm({
               </Button>
               {!canFinalize && (
                 <p className="w-full text-xs text-muted-foreground">
-                  Enter weight for every box to enable Save &amp; Finalize.
+                  {boxes.length === 0
+                    ? "Add a set or manual boxes, then enter weights to enable Save & Finalize."
+                    : "Enter weight for every box to enable Save & Finalize."}
                 </p>
               )}
               <Button

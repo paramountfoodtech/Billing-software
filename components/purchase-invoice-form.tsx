@@ -17,7 +17,11 @@ import {
   getProfileDisplayName,
   logEntryHistory,
 } from "@/lib/entry-history";
-import { getIndianToday } from "@/lib/date-time";
+import { getIndianToday, formatIndianDate } from "@/lib/date-time";
+import {
+  getPriceForCategoryOnDate,
+  type PriceCategoryHistoryEntry,
+} from "@/lib/utils";
 
 interface Purchaser {
   id: string;
@@ -30,6 +34,8 @@ interface ChallanOption {
   challan_number: string;
   purchaser_id: string;
   total_weight_kg: string;
+  total_birds?: number | null;
+  challan_date?: string | null;
   status: string;
   purchasers?: { name: string };
 }
@@ -39,6 +45,8 @@ interface PurchaseInvoiceFormProps {
   challans: ChallanOption[];
   suggestedInvoiceNumber: string;
   initialChallanId?: string;
+  liveCategoryId?: string;
+  priceHistory?: PriceCategoryHistoryEntry[];
 }
 
 export function PurchaseInvoiceForm({
@@ -46,6 +54,8 @@ export function PurchaseInvoiceForm({
   challans,
   suggestedInvoiceNumber,
   initialChallanId,
+  liveCategoryId,
+  priceHistory = [],
 }: PurchaseInvoiceFormProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -55,7 +65,9 @@ export function PurchaseInvoiceForm({
 
   const [invoiceNumber] = useState(suggestedInvoiceNumber);
   const [purchaserInvoiceNumber, setPurchaserInvoiceNumber] = useState("");
-  const [issueDate, setIssueDate] = useState(getIndianToday());
+  const [issueDate, setIssueDate] = useState(
+    initialChallan?.challan_date || getIndianToday(),
+  );
   const [purchaserId, setPurchaserId] = useState(initialChallan?.purchaser_id || "");
   const [challanId, setChallanId] = useState(initialChallan?.id || "");
   const [description, setDescription] = useState("");
@@ -70,16 +82,30 @@ export function PurchaseInvoiceForm({
 
   const availableChallans = useMemo(() => {
     return challans.filter((c) => {
+      if (c.id === challanId) return true;
       if (c.status !== "final") return false;
       if (purchaserId && c.purchaser_id !== purchaserId) return false;
+      if (!c.challan_date || c.challan_date !== issueDate) return false;
       return true;
     });
-  }, [challans, purchaserId]);
+  }, [challans, purchaserId, issueDate, challanId]);
 
-  const challanOptions = availableChallans.map((c) => ({
-    value: c.id,
-    label: `${c.challan_number} — ${Number(c.total_weight_kg).toFixed(3)} KG`,
-  }));
+  const challanOptions = [
+    { value: "none", label: "None (no challan)" },
+    ...availableChallans.map((c) => {
+      const weight = `${Number(c.total_weight_kg).toFixed(3)} KG`;
+      const birds = `${Number(c.total_birds || 0)} birds`;
+      const date = c.challan_date
+        ? formatIndianDate(c.challan_date)
+        : "";
+      const parts = [c.challan_number, weight, birds];
+      if (date) parts.push(date);
+      return {
+        value: c.id,
+        label: parts.join(" — "),
+      };
+    }),
+  ];
 
   const purchaserOptions = purchasers.map((p) => ({
     value: p.id,
@@ -94,7 +120,25 @@ export function PurchaseInvoiceForm({
     setTotalWeightInput(String(selected.total_weight_kg));
   }, [challanId, challans]);
 
+  // Clear linked challan when issue date changes and it no longer matches
+  useEffect(() => {
+    if (!challanId || initialChallanId) return;
+    const selected = challans.find((c) => c.id === challanId);
+    if (!selected || selected.challan_date !== issueDate) {
+      setChallanId("");
+    }
+  }, [issueDate, challanId, challans, initialChallanId]);
+
   const totalWeight = Number(totalWeightInput) || 0;
+  const selectedChallan = challanId
+    ? challans.find((c) => c.id === challanId)
+    : undefined;
+  const totalBirds = Number(selectedChallan?.total_birds || 0);
+
+  const liveRate =
+    liveCategoryId && issueDate
+      ? getPriceForCategoryOnDate(liveCategoryId, issueDate, priceHistory)
+      : null;
 
   const grossTotal =
     pricingMode === "per_kg"
@@ -109,13 +153,42 @@ export function PurchaseInvoiceForm({
       ? grossTotal / totalWeight
       : Number(pricePerKg) || 0;
 
+  const hasEnteredPrice =
+    pricingMode === "per_kg"
+      ? pricePerKg.trim() !== "" && Number(pricePerKg) > 0
+      : totalPrice.trim() !== "" && Number(totalPrice) > 0;
+
+  // Unit rate used for Live comparison (₹/KG)
+  const enteredRatePerKg = (() => {
+    if (!hasEnteredPrice) return null;
+    if (pricingMode === "per_kg") return Number(pricePerKg) || 0;
+    if (totalWeight > 0) return grossTotal / totalWeight;
+    return null;
+  })();
+
+  const enteredRatePerBird =
+    hasEnteredPrice && pricingMode === "total" && totalBirds > 0
+      ? grossTotal / totalBirds
+      : null;
+
+  const rateDifference =
+    enteredRatePerKg != null && liveRate != null
+      ? enteredRatePerKg - liveRate
+      : null;
+
+  const formatRupee = (value: number) =>
+    `₹${value.toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
   const lineDescription =
     description.trim() ||
     (challanId
       ? `Purchase weight (Purchase challan ${
           challans.find((c) => c.id === challanId)?.challan_number || ""
         })`
-      : "Purchase challan invoice");
+      : "Purchase invoice");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,15 +198,6 @@ export function PurchaseInvoiceForm({
         variant: "destructive",
         title: "Missing purchaser",
         description: "Please select a purchaser.",
-      });
-      return;
-    }
-
-    if (!challanId) {
-      toast({
-        variant: "destructive",
-        title: "Missing purchase challan",
-        description: "Please select a purchase challan.",
       });
       return;
     }
@@ -193,7 +257,9 @@ export function PurchaseInvoiceForm({
         throw new Error("User must belong to an organization");
       }
 
-      const selectedChallan = challans.find((c) => c.id === challanId);
+      const selectedChallan = challanId
+        ? challans.find((c) => c.id === challanId)
+        : undefined;
 
       const { data: invoice, error: invoiceError } = await supabase
         .from("purchase_invoices")
@@ -202,7 +268,7 @@ export function PurchaseInvoiceForm({
           purchaser_invoice_number: purchaserInvoiceNumber.trim() || null,
           invoice_type: "challan",
           description: lineDescription,
-          challan_id: challanId,
+          challan_id: challanId || null,
           purchaser_id: purchaserId,
           issue_date: issueDate,
           total_weight_kg: totalWeight,
@@ -220,16 +286,18 @@ export function PurchaseInvoiceForm({
 
       if (invoiceError) throw invoiceError;
 
-      const { error: challanError } = await supabase
-        .from("challans")
-        .update({
-          status: "invoiced",
-          purchase_invoice_id: invoice?.id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", challanId);
+      if (challanId) {
+        const { error: challanError } = await supabase
+          .from("challans")
+          .update({
+            status: "invoiced",
+            purchase_invoice_id: invoice?.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", challanId);
 
-      if (challanError) throw challanError;
+        if (challanError) throw challanError;
+      }
 
       if (invoice?.id) {
         const userName = await getProfileDisplayName(supabase, user.id);
@@ -242,7 +310,7 @@ export function PurchaseInvoiceForm({
           userName,
           summary: selectedChallan
             ? `From purchase challan ${selectedChallan.challan_number}`
-            : "Purchase challan invoice",
+            : "Purchase invoice (no challan)",
         });
       }
 
@@ -323,23 +391,24 @@ export function PurchaseInvoiceForm({
             </div>
 
             <div className="space-y-2 sm:col-span-2">
-              <Label>
-                Purchase challan <span className="text-red-500">*</span>
-              </Label>
+              <Label>Purchase challan (optional)</Label>
               <SearchableSelect
                 options={challanOptions}
-                value={challanId}
-                onValueChange={setChallanId}
+                value={challanId || "none"}
+                onValueChange={(value) =>
+                  setChallanId(value === "none" ? "" : value)
+                }
                 placeholder={
                   purchaserId
-                    ? "Select final purchase challan"
+                    ? "Select purchase challan (optional)"
                     : "Select purchaser first"
                 }
                 disabled={Boolean(initialChallanId) || !purchaserId}
               />
               <p className="text-xs text-muted-foreground">
-                Only final purchase challans not yet invoiced are listed. Weight
-                and purchaser auto-fill when selected.
+                Optional. Only final challans for the selected issue date are
+                listed. Link one to auto-fill weight, or create without a
+                challan.
               </p>
             </div>
 
@@ -417,6 +486,66 @@ export function PurchaseInvoiceForm({
                 />
               </div>
             )}
+
+            <div className="rounded-md border bg-muted/40 px-3 py-2 space-y-1.5 text-sm">
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">
+                  Live rate ({formatIndianDate(issueDate) || issueDate})
+                </span>
+                <span className="font-medium tabular-nums">
+                  {liveRate != null ? `${formatRupee(liveRate)} / KG` : "Not set for this date"}
+                </span>
+              </div>
+              {hasEnteredPrice && enteredRatePerKg != null && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">
+                    Entered rate
+                    {pricingMode === "total" ? " (total ÷ weight)" : ""}
+                  </span>
+                  <span className="font-medium tabular-nums">
+                    {formatRupee(enteredRatePerKg)} / KG
+                  </span>
+                </div>
+              )}
+              {enteredRatePerBird != null && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">
+                    Entered rate (total ÷ birds)
+                  </span>
+                  <span className="font-medium tabular-nums">
+                    {formatRupee(enteredRatePerBird)} / bird
+                  </span>
+                </div>
+              )}
+              {rateDifference != null && (
+                <div className="flex justify-between gap-3 border-t pt-1.5">
+                  <span className="text-muted-foreground">
+                    Difference (entered − live)
+                  </span>
+                  <span
+                    className={`font-semibold tabular-nums ${
+                      rateDifference > 0
+                        ? "text-green-700"
+                        : rateDifference < 0
+                          ? "text-red-600"
+                          : "text-foreground"
+                    }`}
+                  >
+                    {rateDifference > 0 ? "+" : ""}
+                    {formatRupee(rateDifference)} / KG
+                  </span>
+                </div>
+              )}
+              {hasEnteredPrice &&
+                pricingMode === "total" &&
+                totalWeight <= 0 &&
+                totalBirds <= 0 && (
+                  <p className="text-xs text-amber-700">
+                    Enter total weight (or link a challan with birds) to compare
+                    with the Live rate.
+                  </p>
+                )}
+            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

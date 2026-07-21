@@ -3,12 +3,17 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper";
 import { ExpenseReportsPageClient } from "@/components/expense-reports-page-client";
-import type {
-  ExpenseReportCategoryRow,
-  ExpenseSalaryMonthRow,
-} from "@/components/expense-reports-table";
+import type { ExpenseReportCategoryRow } from "@/components/expense-reports-table";
 
 export const revalidate = 0;
+
+const ENTRY_SELECT = `
+  id,
+  total_amount,
+  salary_month,
+  issue_date,
+  expense_categories(id, name, slug)
+`;
 
 export default async function ExpenseReportsPage({
   searchParams,
@@ -37,33 +42,42 @@ export default async function ExpenseReportsPage({
   const reportYear = params.year ? parseInt(params.year) : today.getFullYear();
   const reportMonth = params.month ? parseInt(params.month) : today.getMonth() + 1;
 
-  const monthStart = `${reportYear}-${String(reportMonth).padStart(2, "0")}-01`;
+  const reportMonthKey = `${reportYear}-${String(reportMonth).padStart(2, "0")}`;
+  const monthStart = `${reportMonthKey}-01`;
   const daysInMonth = new Date(reportYear, reportMonth, 0).getDate();
-  const monthEnd = `${reportYear}-${String(reportMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
+  const monthEnd = `${reportMonthKey}-${String(daysInMonth).padStart(2, "0")}`;
 
   const monthLabel = new Date(reportYear, reportMonth - 1, 1).toLocaleDateString(
     "en-IN",
     { month: "long", year: "numeric" },
   );
 
-  const { data: monthEntries } = await supabase
-    .from("expense_entries")
-    .select(
-      `
-      id,
-      total_amount,
-      salary_month,
-      expense_categories(id, name, slug)
-    `,
-    )
-    .gte("issue_date", monthStart)
-    .lte("issue_date", monthEnd)
-    .neq("status", "cancelled");
+  // Prefer the month selected on the expense entry; fall back to issue_date for legacy rows
+  const [byEntryMonthResult, legacyByIssueDateResult] = await Promise.all([
+    supabase
+      .from("expense_entries")
+      .select(ENTRY_SELECT)
+      .eq("salary_month", reportMonthKey)
+      .neq("status", "cancelled"),
+    supabase
+      .from("expense_entries")
+      .select(ENTRY_SELECT)
+      .is("salary_month", null)
+      .gte("issue_date", monthStart)
+      .lte("issue_date", monthEnd)
+      .neq("status", "cancelled"),
+  ]);
 
-  const entries = monthEntries || [];
+  const entriesById = new Map<string, any>();
+  for (const entry of [
+    ...(byEntryMonthResult.data || []),
+    ...(legacyByIssueDateResult.data || []),
+  ]) {
+    entriesById.set(entry.id, entry);
+  }
+  const entries = Array.from(entriesById.values());
 
   const categoryMap = new Map<string, ExpenseReportCategoryRow>();
-  const salaryMonthMap = new Map<string, ExpenseSalaryMonthRow>();
 
   for (const entry of entries) {
     const catRaw = entry.expense_categories;
@@ -88,28 +102,10 @@ export default async function ExpenseReportsPage({
         totalAmount: amount,
       });
     }
-
-    if (cat.slug === "salary" && entry.salary_month) {
-      const sm = entry.salary_month as string;
-      const salaryRow = salaryMonthMap.get(sm);
-      if (salaryRow) {
-        salaryRow.entryCount += 1;
-        salaryRow.totalAmount += amount;
-      } else {
-        salaryMonthMap.set(sm, {
-          month: sm,
-          entryCount: 1,
-          totalAmount: amount,
-        });
-      }
-    }
   }
 
   const categoryRows = Array.from(categoryMap.values()).sort(
     (a, b) => b.totalAmount - a.totalAmount,
-  );
-  const salaryMonthRows = Array.from(salaryMonthMap.values()).sort((a, b) =>
-    a.month.localeCompare(b.month),
   );
   const grandTotal = categoryRows.reduce((sum, r) => sum + r.totalAmount, 0);
 
@@ -127,7 +123,6 @@ export default async function ExpenseReportsPage({
           reportMonth={reportMonth}
           monthLabel={monthLabel}
           categoryRows={categoryRows}
-          salaryMonthRows={salaryMonthRows}
           grandTotal={grandTotal}
         />
       </Suspense>

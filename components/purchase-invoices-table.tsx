@@ -15,6 +15,7 @@ import {
   Trash2,
   Download,
   FileText,
+  Files,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -39,6 +40,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils";
+import { exportConsolidatedPurchaseInvoicesPDF } from "@/lib/purchase-invoice-consolidated-pdf";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
@@ -374,6 +376,48 @@ export function PurchaseInvoicesTable({
     });
   };
 
+  const handleExportConsolidatedPDF = async () => {
+    if (processedInvoices.length === 0) return;
+
+    toast({
+      title: "Generating PDF",
+      description: "Please wait while we generate the consolidated PDF...",
+    });
+
+    try {
+      const count = await exportConsolidatedPurchaseInvoicesPDF({
+        invoiceIds: processedInvoices.map((inv) => inv.id),
+        fromDate,
+        toDate,
+      });
+
+      if (count === 0) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "No valid purchase invoice data found to export.",
+        });
+        return;
+      }
+
+      toast({
+        variant: "success",
+        title: "Exported",
+        description: `Consolidated PDF with ${count} purchase invoice(s) downloaded successfully.`,
+      });
+    } catch (error) {
+      console.error("Consolidated purchase invoice export failed:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to generate consolidated PDF.",
+      });
+    }
+  };
+
   return (
     <>
       <div className="flex flex-col gap-3 sm:gap-4 mb-4">
@@ -400,6 +444,17 @@ export function PurchaseInvoicesTable({
               >
                 <FileText className="h-4 w-4" />
                 <span className="hidden sm:inline ml-2">PDF</span>
+              </Button>
+            </IconTooltip>
+            <IconTooltip label="Export consolidated PDF">
+              <Button
+                onClick={handleExportConsolidatedPDF}
+                size="sm"
+                variant="outline"
+                disabled={processedInvoices.length === 0}
+              >
+                <Files className="h-4 w-4" />
+                <span className="hidden sm:inline ml-2">Consolidated</span>
               </Button>
             </IconTooltip>
           </div>

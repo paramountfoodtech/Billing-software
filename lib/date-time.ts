@@ -8,6 +8,11 @@ export function getIndianToday(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: INDIAN_TIMEZONE })
 }
 
+/** Current calendar month in IST as YYYY-MM. */
+export function getIndianCurrentMonth(): string {
+  return getIndianToday().slice(0, 7)
+}
+
 /** Parse a date-only string as noon IST (avoids UTC midnight date shifts). */
 export function parseIndianDateOnly(dateStr: string): Date {
   return new Date(`${dateStr}T12:00:00+05:30`)

@@ -69,7 +69,7 @@ export function PrintablePurchaseInvoice({
     invoice.description?.trim() ||
     (hasChallan
       ? `Purchase weight (Purchase challan ${invoice.challans!.challan_number})`
-      : "Purchase challan invoice");
+      : "Purchase invoice");
   const boxes = invoice.challans?.challan_boxes || [];
   const totalBirds = boxes.reduce(
     (sum, box) => sum + Number(box.num_birds || 0),

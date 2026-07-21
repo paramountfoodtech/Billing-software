@@ -17,10 +17,9 @@ import {
   getProfileDisplayName,
   logEntryHistory,
 } from "@/lib/entry-history";
-import { getIndianToday } from "@/lib/date-time";
+import { getIndianToday, getIndianCurrentMonth } from "@/lib/date-time";
 import {
   calculateExpenseAmounts,
-  isSalaryCategory,
   type ExpenseDiscountType,
 } from "@/lib/expense-calculations";
 
@@ -57,12 +56,8 @@ export function ExpenseEntryForm({
   const [vendorInvoiceNumber, setVendorInvoiceNumber] = useState("");
   const [categoryId, setCategoryId] = useState(defaultCategory?.id || "");
   const [issueDate, setIssueDate] = useState(getIndianToday());
-  const [description, setDescription] = useState(
-    defaultCategory?.slug === "salary" ? "Salary payment" : "",
-  );
-  const [salaryMonth, setSalaryMonth] = useState(
-    getIndianToday().slice(0, 7),
-  );
+  const [description, setDescription] = useState("");
+  const [entryMonth, setEntryMonth] = useState(getIndianCurrentMonth());
   const [units, setUnits] = useState("1");
   const [unitCost, setUnitCost] = useState("");
   const [gstAmount, setGstAmount] = useState("");
@@ -71,6 +66,9 @@ export function ExpenseEntryForm({
   const [discountValue, setDiscountValue] = useState("");
   const [notes, setNotes] = useState("");
 
+  const today = getIndianToday();
+  const currentMonth = getIndianCurrentMonth();
+
   const activeCategories = categories.filter((c) => c.is_active !== false);
   const categoryOptions = activeCategories.map((c) => ({
     value: c.id,
@@ -78,7 +76,6 @@ export function ExpenseEntryForm({
   }));
 
   const selectedCategory = activeCategories.find((c) => c.id === categoryId);
-  const showSalaryMonth = isSalaryCategory(selectedCategory?.slug);
 
   useEffect(() => {
     if (!categoryId && defaultCategory) {
@@ -119,11 +116,29 @@ export function ExpenseEntryForm({
       return;
     }
 
-    if (showSalaryMonth && !salaryMonth) {
+    if (issueDate > today) {
       toast({
         variant: "destructive",
-        title: "Missing salary month",
-        description: "Please select the salary month.",
+        title: "Invalid issue date",
+        description: "Issue date cannot be in the future.",
+      });
+      return;
+    }
+
+    if (!entryMonth) {
+      toast({
+        variant: "destructive",
+        title: "Missing month",
+        description: "Please select the month for this entry.",
+      });
+      return;
+    }
+
+    if (entryMonth > currentMonth) {
+      toast({
+        variant: "destructive",
+        title: "Invalid month",
+        description: "Month cannot be in the future.",
       });
       return;
     }
@@ -190,7 +205,7 @@ export function ExpenseEntryForm({
           discount_amount: amounts.discountAmount,
           subtotal_amount: amounts.subtotal,
           total_amount: amounts.totalAmount,
-          salary_month: showSalaryMonth ? salaryMonth : null,
+          salary_month: entryMonth,
           status: "recorded",
           amount_paid: 0,
           notes: notes.trim() || null,
@@ -290,25 +305,31 @@ export function ExpenseEntryForm({
                 id="issue_date"
                 type="date"
                 value={issueDate}
-                onChange={(e) => setIssueDate(e.target.value)}
+                max={today}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setIssueDate(next > today ? today : next);
+                }}
                 required
               />
             </div>
 
-            {showSalaryMonth && (
-              <div className="space-y-2">
-                <Label htmlFor="salary_month">
-                  Salary Month <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="salary_month"
-                  type="month"
-                  value={salaryMonth}
-                  onChange={(e) => setSalaryMonth(e.target.value)}
-                  required
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="entry_month">
+                Month <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="entry_month"
+                type="month"
+                value={entryMonth}
+                max={currentMonth}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setEntryMonth(next > currentMonth ? currentMonth : next);
+                }}
+                required
+              />
+            </div>
 
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="description">

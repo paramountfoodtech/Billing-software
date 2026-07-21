@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { formatIndianDate } from "@/lib/date-time";
-import { isSalaryCategory } from "@/lib/expense-calculations";
 import { canAccessExpenses } from "@/lib/permissions";
 
 export default async function ExpenseDetailPage({
@@ -92,9 +91,9 @@ export default async function ExpenseDetailPage({
                 })}
               </p>
             </div>
-            {isSalaryCategory(category?.slug) && entry.salary_month && (
+            {entry.salary_month && (
               <div>
-                <p className="text-muted-foreground">Salary Month</p>
+                <p className="text-muted-foreground">Month</p>
                 <p className="font-medium">
                   {new Date(`${entry.salary_month}-01`).toLocaleDateString(
                     "en-IN",

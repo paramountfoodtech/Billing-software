@@ -239,7 +239,7 @@ export function ExpensesTable({
             day: "2-digit",
           }),
       },
-      { key: "salary_month", label: "Salary Month" },
+      { key: "salary_month", label: "Month" },
       {
         key: "units",
         label: "Units",
@@ -321,7 +321,7 @@ export function ExpensesTable({
                   className="font-semibold"
                   onClick={() => handleSort("salary_month")}
                 >
-                  Salary Month <SortIcon column="salary_month" />
+                  Month <SortIcon column="salary_month" />
                 </button>
               </TableHead>
               <TableHead className="text-right">

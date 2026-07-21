@@ -27,7 +27,13 @@ export default async function NewPurchaseInvoicePage({
 
   const organizationId = profile.organization_id;
 
-  const [purchasersResult, challansResult, invoicesResult] = await Promise.all([
+  const [
+    purchasersResult,
+    challansResult,
+    invoicesResult,
+    categoriesResult,
+    priceHistoryResult,
+  ] = await Promise.all([
     supabase
       .from("purchasers")
       .select("id, name, purchaser_code")
@@ -41,6 +47,8 @@ export default async function NewPurchaseInvoicePage({
         challan_number,
         purchaser_id,
         total_weight_kg,
+        total_birds,
+        challan_date,
         status,
         purchasers(name)
       `,
@@ -52,7 +60,21 @@ export default async function NewPurchaseInvoicePage({
       .from("purchase_invoices")
       .select("invoice_number")
       .eq("organization_id", organizationId),
+    supabase
+      .from("price_categories")
+      .select("id, name")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true),
+    supabase
+      .from("price_category_history")
+      .select("price_category_id, price, effective_date")
+      .eq("organization_id", organizationId),
   ]);
+
+  const liveCategory =
+    (categoriesResult.data || []).find(
+      (c) => c.name?.toLowerCase() === "live",
+    ) ?? null;
 
   const suggestedInvoiceNumber = suggestNextNumber(
     "PI",
@@ -78,7 +100,7 @@ export default async function NewPurchaseInvoicePage({
           Create Purchase Invoice
         </h1>
         <p className="text-muted-foreground mt-1">
-          Create an invoice from a finalized purchase challan
+          Create a purchase invoice, with or without linking a purchase challan
         </p>
       </div>
 
@@ -87,6 +109,8 @@ export default async function NewPurchaseInvoicePage({
         challans={challansResult.data || []}
         suggestedInvoiceNumber={suggestedInvoiceNumber}
         initialChallanId={challanId}
+        liveCategoryId={liveCategory?.id}
+        priceHistory={priceHistoryResult.data || []}
       />
     </div>
   );

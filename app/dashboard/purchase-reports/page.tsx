@@ -13,7 +13,14 @@ export const revalidate = 0
 export default async function PurchaseReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; year?: string; tab?: string }>
+  searchParams: Promise<{
+    month?: string
+    year?: string
+    tab?: string
+    from?: string
+    to?: string
+    purchaser?: string
+  }>
 }) {
   const supabase = await createClient()
 
@@ -42,10 +49,18 @@ export default async function PurchaseReportsPage({
   const daysInMonth = new Date(reportYear, reportMonth, 0).getDate()
   const monthEnd = `${reportYear}-${String(reportMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`
 
+  const rangeStart = params.from || monthStart
+  const rangeEnd = params.to || monthEnd
+
   const monthLabel = new Date(reportYear, reportMonth - 1, 1).toLocaleDateString(
     "en-IN",
     { month: "long", year: "numeric" },
   )
+
+  const rangeLabel =
+    params.from || params.to
+      ? `${rangeStart} to ${rangeEnd}`
+      : monthLabel
 
   const [
     purchasersResult,
@@ -59,20 +74,20 @@ export default async function PurchaseReportsPage({
       .from("purchase_invoices")
       .select("id, purchaser_id, issue_date, total_amount, total_weight_kg")
       .or("invoice_type.eq.challan,invoice_type.is.null")
-      .gte("issue_date", monthStart)
-      .lte("issue_date", monthEnd),
+      .gte("issue_date", rangeStart)
+      .lte("issue_date", rangeEnd),
     supabase
       .from("purchase_invoices")
       .select("purchaser_id, total_amount, amount_paid, issue_date")
       .or("invoice_type.eq.challan,invoice_type.is.null")
       .neq("status", "cancelled")
       .neq("status", "paid")
-      .lte("issue_date", monthEnd),
+      .lte("issue_date", rangeEnd),
     supabase
       .from("purchase_payments")
       .select("amount, purchase_invoices(purchaser_id)")
-      .gte("payment_date", monthStart)
-      .lte("payment_date", monthEnd),
+      .gte("payment_date", rangeStart)
+      .lte("payment_date", rangeEnd),
     supabase
       .from("challans")
       .select(
@@ -83,11 +98,12 @@ export default async function PurchaseReportsPage({
         total_weight_kg,
         status,
         purchase_invoice_id,
+        purchaser_id,
         purchasers(name)
       `,
       )
-      .gte("challan_date", monthStart)
-      .lte("challan_date", monthEnd)
+      .gte("challan_date", rangeStart)
+      .lte("challan_date", rangeEnd)
       .order("challan_date", { ascending: false }),
   ])
 
@@ -132,6 +148,7 @@ export default async function PurchaseReportsPage({
   }
 
   for (const inv of monthInvoices) {
+    if (!inv.purchaser_id) continue
     const row = purchaserMap.get(inv.purchaser_id)
     if (!row) continue
     row.purchase += Number(inv.total_amount)
@@ -143,12 +160,13 @@ export default async function PurchaseReportsPage({
   }
 
   for (const inv of unpaidInvoices) {
+    if (!inv.purchaser_id) continue
     const balance = Number(inv.total_amount) - Number(inv.amount_paid)
     if (balance <= 0) continue
     const row = purchaserMap.get(inv.purchaser_id)
     if (!row) continue
     row.outstanding += balance
-    if (inv.issue_date < monthStart) {
+    if (inv.issue_date < rangeStart) {
       row.oldBal += balance
     }
   }
@@ -173,6 +191,7 @@ export default async function PurchaseReportsPage({
     return {
       id: c.id,
       challan_number: c.challan_number,
+      purchaser_id: c.purchaser_id,
       purchaser_name: purchaser?.name || "Unknown",
       challan_date: c.challan_date,
       total_weight_kg: Number(c.total_weight_kg),
@@ -195,9 +214,13 @@ export default async function PurchaseReportsPage({
         <PurchaseReportsPageClient
           reportYear={reportYear}
           reportMonth={reportMonth}
-          monthLabel={monthLabel}
+          rangeLabel={rangeLabel}
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
           purchaserRows={purchaserRows}
           challanRows={challanRows}
+          purchasers={purchasers}
+          initialPurchaserId={params.purchaser || null}
         />
       </Suspense>
     </DashboardPageWrapper>

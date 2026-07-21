@@ -19,6 +19,7 @@ export interface ExpenseReportCategoryRow {
   salaryMonth?: string | null;
 }
 
+/** @deprecated kept for compatibility with older imports */
 export interface ExpenseSalaryMonthRow {
   month: string;
   totalAmount: number;
@@ -27,7 +28,6 @@ export interface ExpenseSalaryMonthRow {
 
 interface ExpenseReportsTableProps {
   categoryRows: ExpenseReportCategoryRow[];
-  salaryMonthRows: ExpenseSalaryMonthRow[];
   monthLabel: string;
   grandTotal: number;
 }
@@ -39,16 +39,8 @@ function formatINR(amount: number) {
   });
 }
 
-function formatSalaryMonth(month: string) {
-  return new Date(`${month}-01`).toLocaleDateString("en-IN", {
-    month: "long",
-    year: "numeric",
-  });
-}
-
 export function ExpenseReportsTable({
   categoryRows,
-  salaryMonthRows,
   monthLabel,
   grandTotal,
 }: ExpenseReportsTableProps) {
@@ -87,45 +79,15 @@ export function ExpenseReportsTable({
                 <TableRow className="bg-muted/50 font-semibold">
                   <TableCell>Total</TableCell>
                   <TableCell />
-                  <TableCell className="text-right">₹{formatINR(grandTotal)}</TableCell>
+                  <TableCell className="text-right">
+                    ₹{formatINR(grandTotal)}
+                  </TableCell>
                 </TableRow>
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
-
-      {salaryMonthRows.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Salary by Month (entries in {monthLabel})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Salary Month</TableHead>
-                  <TableHead className="text-right">Entries</TableHead>
-                  <TableHead className="text-right">Total Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {salaryMonthRows.map((row) => (
-                  <TableRow key={row.month}>
-                    <TableCell className="font-medium">
-                      {formatSalaryMonth(row.month)}
-                    </TableCell>
-                    <TableCell className="text-right">{row.entryCount}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      ₹{formatINR(row.totalAmount)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

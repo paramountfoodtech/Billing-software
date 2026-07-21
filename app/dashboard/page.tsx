@@ -29,6 +29,7 @@ import { DashboardCharts } from "@/components/dashboard-charts";
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper";
 import { DashboardClient } from "./dashboard-client";
 import { DashboardRefresh } from "@/components/dashboard-refresh";
+import { DashboardMonthlyHeader } from "@/components/dashboard-monthly-header";
 import { Suspense } from "react";
 import { LoadingOverlay } from "@/components/loading-overlay";
 import { MaterialDashboardWidgets } from "@/components/material-dashboard-widgets";
@@ -56,8 +57,144 @@ function getCurrentFinancialYearRange() {
   };
 }
 
-export default async function DashboardPage() {
+function computeFinancialKpis(input: {
+  invoices: Array<{ total_amount: string | number; status: string }>;
+  purchases: Array<{ total_amount: string | number; status: string }>;
+  expenses: Array<{ total_amount: string | number }>;
+}) {
+  const activeSales = input.invoices.filter((inv) => inv.status !== "cancelled");
+  const activePurchases = input.purchases.filter(
+    (inv) => inv.status !== "cancelled",
+  );
+  const totalSale = activeSales.reduce(
+    (sum, inv) => sum + Number(inv.total_amount),
+    0,
+  );
+  const totalPurchase = activePurchases.reduce(
+    (sum, inv) => sum + Number(inv.total_amount),
+    0,
+  );
+  const totalExpenses = input.expenses.reduce(
+    (sum, entry) => sum + Number(entry.total_amount),
+    0,
+  );
+  const grossAmount = totalSale - totalPurchase;
+  const netAmount = grossAmount - totalExpenses;
+
+  return {
+    activeSalesCount: activeSales.length,
+    totalSale,
+    totalPurchase,
+    totalExpenses,
+    grossAmount,
+    netAmount,
+  };
+}
+
+function FinancialKpiCards({
+  kpis,
+  periodHint,
+}: {
+  kpis: ReturnType<typeof computeFinancialKpis>;
+  periodHint: string;
+}) {
+  return (
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 mb-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-xs sm:text-sm font-medium">
+            Total Sale
+          </CardTitle>
+          <TrendingUp className="h-4 w-4 text-blue-600" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-xl sm:text-2xl font-bold text-blue-700">
+            ₹{formatINR(kpis.totalSale)}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {kpis.activeSalesCount} sales invoices {periodHint}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-xs sm:text-sm font-medium">
+            Total Purchase
+          </CardTitle>
+          <ShoppingCart className="h-4 w-4 text-orange-600" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-xl sm:text-2xl font-bold text-orange-700">
+            ₹{formatINR(kpis.totalPurchase)}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Purchase challan purchases {periodHint}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-xs sm:text-sm font-medium">
+            Total Expenses
+          </CardTitle>
+          <Receipt className="h-4 w-4 text-amber-600" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-xl sm:text-2xl font-bold text-amber-700">
+            ₹{formatINR(kpis.totalExpenses)}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Salary &amp; expense entries {periodHint}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-xs sm:text-sm font-medium">
+            Gross Amount
+          </CardTitle>
+          <Scale className="h-4 w-4 text-purple-600" />
+        </CardHeader>
+        <CardContent>
+          <div
+            className={`text-xl sm:text-2xl font-bold ${kpis.grossAmount >= 0 ? "text-purple-700" : "text-red-600"}`}
+          >
+            ₹{formatINR(kpis.grossAmount)}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">Sale − Purchase</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-xs sm:text-sm font-medium">
+            Net Amount
+          </CardTitle>
+          <Wallet className="h-4 w-4 text-green-600" />
+        </CardHeader>
+        <CardContent>
+          <div
+            className={`text-xl sm:text-2xl font-bold ${kpis.netAmount >= 0 ? "text-green-700" : "text-red-600"}`}
+          >
+            ₹{formatINR(kpis.netAmount)}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">Gross − Expenses</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string; month?: string }>;
+}) {
   const supabase = await createClient();
+  const params = await searchParams;
 
   const {
     data: { user },
@@ -74,6 +211,18 @@ export default async function DashboardPage() {
   if (profile?.role === "accountant") redirect("/dashboard/prices");
 
   const fyRange = getCurrentFinancialYearRange();
+  const today = new Date();
+  const reportYear = params.year ? parseInt(params.year, 10) : today.getFullYear();
+  const reportMonth = params.month
+    ? parseInt(params.month, 10)
+    : today.getMonth() + 1;
+  const monthStart = `${reportYear}-${String(reportMonth).padStart(2, "0")}-01`;
+  const daysInMonth = new Date(reportYear, reportMonth, 0).getDate();
+  const monthEnd = `${reportYear}-${String(reportMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
+  const monthLabel = new Date(reportYear, reportMonth - 1, 1).toLocaleDateString(
+    "en-IN",
+    { month: "long", year: "numeric" },
+  );
 
   const [
     clientsCountResult,
@@ -81,6 +230,9 @@ export default async function DashboardPage() {
     fyPayments,
     fyPurchaseInvoices,
     fyExpenseEntries,
+    monthInvoices,
+    monthPurchaseInvoices,
+    monthExpenseEntries,
     allClientsResult,
     allInvoices,
   ] = await Promise.all([
@@ -123,6 +275,35 @@ export default async function DashboardPage() {
         .order("issue_date", { ascending: true })
         .range(from, to),
     ),
+    fetchAllPages((from, to) =>
+      supabase
+        .from("invoices")
+        .select("total_amount, status")
+        .gte("issue_date", monthStart)
+        .lte("issue_date", monthEnd)
+        .order("issue_date", { ascending: true })
+        .range(from, to),
+    ),
+    fetchAllPages((from, to) =>
+      supabase
+        .from("purchase_invoices")
+        .select("total_amount, status, invoice_type")
+        .or("invoice_type.eq.challan,invoice_type.is.null")
+        .gte("issue_date", monthStart)
+        .lte("issue_date", monthEnd)
+        .order("issue_date", { ascending: true })
+        .range(from, to),
+    ),
+    fetchAllPages((from, to) =>
+      supabase
+        .from("expense_entries")
+        .select("total_amount, status")
+        .gte("issue_date", monthStart)
+        .lte("issue_date", monthEnd)
+        .neq("status", "cancelled")
+        .order("issue_date", { ascending: true })
+        .range(from, to),
+    ),
     supabase.from("clients").select("id, name").order("name", { ascending: true }),
     fetchAllPages((from, to) =>
       supabase
@@ -135,34 +316,22 @@ export default async function DashboardPage() {
 
   const totalClients = clientsCountResult.count || 0;
 
-  const today = new Date();
   const msInDay = 1000 * 60 * 60 * 24;
 
-  const activeSalesInvoices = fyInvoices.filter(
-    (inv) => inv.status !== "cancelled",
-  );
-  const activePurchaseInvoices = fyPurchaseInvoices.filter(
-    (inv) => inv.status !== "cancelled",
-  );
-
-  const totalSale = activeSalesInvoices.reduce(
-    (sum, inv) => sum + Number(inv.total_amount),
-    0,
-  );
-  const totalPurchase = activePurchaseInvoices.reduce(
-    (sum, inv) => sum + Number(inv.total_amount),
-    0,
-  );
-  const totalExpenses = fyExpenseEntries.reduce(
-    (sum, entry) => sum + Number(entry.total_amount),
-    0,
-  );
-  const grossAmount = totalSale - totalPurchase;
-  const netAmount = grossAmount - totalExpenses;
+  const fyKpis = computeFinancialKpis({
+    invoices: fyInvoices,
+    purchases: fyPurchaseInvoices,
+    expenses: fyExpenseEntries,
+  });
+  const monthKpis = computeFinancialKpis({
+    invoices: monthInvoices,
+    purchases: monthPurchaseInvoices,
+    expenses: monthExpenseEntries,
+  });
 
   // Core KPIs
   const totalRevenue = fyPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-  const totalInvoiced = totalSale;
+  const totalInvoiced = fyKpis.totalSale;
   const totalOutstanding = fyInvoices
     .filter((inv) => inv.status !== "paid" && inv.status !== "cancelled")
     .reduce(
@@ -274,97 +443,24 @@ export default async function DashboardPage() {
           <DashboardRefresh />
         </div>
 
-        {/* Financial summary: Sale, Purchase, Expenses, Gross, Net */}
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 mb-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
-                Total Sale
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-blue-700">
-                ₹{formatINR(totalSale)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {activeSalesInvoices.length} sales invoices this FY
-              </p>
-            </CardContent>
-          </Card>
+        {/* FY Financial summary: Sale, Purchase, Expenses, Gross, Net */}
+        <FinancialKpiCards kpis={fyKpis} periodHint="this FY" />
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
-                Total Purchase
-              </CardTitle>
-              <ShoppingCart className="h-4 w-4 text-orange-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-orange-700">
-                ₹{formatINR(totalPurchase)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Purchase challan purchases this FY
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
-                Total Expenses
-              </CardTitle>
-              <Receipt className="h-4 w-4 text-amber-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-amber-700">
-                ₹{formatINR(totalExpenses)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Salary &amp; expense entries this FY
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
-                Gross Amount
-              </CardTitle>
-              <Scale className="h-4 w-4 text-purple-600" />
-            </CardHeader>
-            <CardContent>
-              <div
-                className={`text-xl sm:text-2xl font-bold ${grossAmount >= 0 ? "text-purple-700" : "text-red-600"}`}
-              >
-                ₹{formatINR(grossAmount)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Sale − Purchase
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
-                Net Amount
-              </CardTitle>
-              <Wallet className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div
-                className={`text-xl sm:text-2xl font-bold ${netAmount >= 0 ? "text-green-700" : "text-red-600"}`}
-              >
-                ₹{formatINR(netAmount)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Gross − Expenses
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Monthly Financial summary */}
+        <Suspense
+          fallback={
+            <div className="mb-4 text-sm text-muted-foreground">
+              Loading monthly summary…
+            </div>
+          }
+        >
+          <DashboardMonthlyHeader
+            reportYear={reportYear}
+            reportMonth={reportMonth}
+            monthLabel={monthLabel}
+          />
+        </Suspense>
+        <FinancialKpiCards kpis={monthKpis} periodHint={`in ${monthLabel}`} />
 
         {/* Row 2: Collections & clients */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6">

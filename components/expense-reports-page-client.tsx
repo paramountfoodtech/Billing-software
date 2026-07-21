@@ -4,7 +4,6 @@ import { MonthYearPicker } from "@/components/month-year-picker";
 import {
   ExpenseReportsTable,
   type ExpenseReportCategoryRow,
-  type ExpenseSalaryMonthRow,
 } from "@/components/expense-reports-table";
 
 interface ExpenseReportsPageClientProps {
@@ -12,7 +11,6 @@ interface ExpenseReportsPageClientProps {
   reportMonth: number;
   monthLabel: string;
   categoryRows: ExpenseReportCategoryRow[];
-  salaryMonthRows: ExpenseSalaryMonthRow[];
   grandTotal: number;
 }
 
@@ -21,7 +19,6 @@ export function ExpenseReportsPageClient({
   reportMonth,
   monthLabel,
   categoryRows,
-  salaryMonthRows,
   grandTotal,
 }: ExpenseReportsPageClientProps) {
   return (
@@ -31,6 +28,10 @@ export function ExpenseReportsPageClient({
           <p className="text-xs sm:text-sm text-muted-foreground">
             Monthly Report:{" "}
             <span className="font-semibold text-foreground">{monthLabel}</span>
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Based on the month selected when recording each Salary &amp; Expenses
+            entry
           </p>
         </div>
         <MonthYearPicker
@@ -42,7 +43,6 @@ export function ExpenseReportsPageClient({
 
       <ExpenseReportsTable
         categoryRows={categoryRows}
-        salaryMonthRows={salaryMonthRows}
         monthLabel={monthLabel}
         grandTotal={grandTotal}
       />
