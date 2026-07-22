@@ -31,6 +31,8 @@ import { applyChainedPricingRules, parsePricingRuleSteps } from "@/lib/pricing-r
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { TableRowActions } from "@/components/table-row-actions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { canDelete, canEdit } from "@/lib/permissions";
 import {
   AlertDialog,
@@ -571,34 +573,33 @@ export function ClientPricingTable({
                   </TableCell>
                   {canEdit(userRole) && (
                     <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                      <div className="flex justify-end gap-1 sm:gap-2">
+                      <div className="flex justify-end gap-1">
                         <EntryHistoryButton
                           entityType="client_pricing"
                           entityId={rule.id}
                           createdAt={rule.created_at}
                         />
-                        <IconTooltip label="Edit pricing rule">
-                          <Button variant="ghost" size="sm" asChild>
+                        <TableRowActions>
+                          <DropdownMenuItem asChild>
                             <Link
                               href={`/dashboard/client-pricing/${rule.id}/edit`}
                             >
-                              <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
+                              <Pencil />
+                              Edit
                             </Link>
-                          </Button>
-                        </IconTooltip>
-                        <IconTooltip label="Delete pricing rule">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            disabled={isDeleting}
+                            onSelect={() => {
                               setRuleToDelete(rule.id);
                               setDeleteDialogOpen(true);
                             }}
-                            disabled={isDeleting}
                           >
-                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-                          </Button>
-                        </IconTooltip>
+                            <Trash2 />
+                            Delete
+                          </DropdownMenuItem>
+                        </TableRowActions>
                       </div>
                     </TableCell>
                   )}

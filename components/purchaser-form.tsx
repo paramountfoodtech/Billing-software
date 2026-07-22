@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   getProfileDisplayName,
@@ -30,6 +31,7 @@ interface Purchaser {
   zip_code: string | null;
   country: string | null;
   notes: string | null;
+  is_default?: boolean | null;
 }
 
 interface PurchaserFormProps {
@@ -54,6 +56,7 @@ export function PurchaserForm({ purchaser, suggestedCode }: PurchaserFormProps) 
     zip_code: purchaser?.zip_code || "",
     country: purchaser?.country || "India",
     notes: purchaser?.notes || "",
+    is_default: purchaser?.is_default ?? false,
   });
 
   const handlePincodeChange = async (pincode: string) => {
@@ -151,13 +154,35 @@ export function PurchaserForm({ purchaser, suggestedCode }: PurchaserFormProps) 
         return;
       }
 
+      if (formData.is_default) {
+        const clearQuery = supabase
+          .from("purchasers")
+          .update({ is_default: false })
+          .eq("organization_id", profile.organization_id)
+          .eq("is_default", true);
+
+        const { error: clearError } = purchaser
+          ? await clearQuery.neq("id", purchaser.id)
+          : await clearQuery;
+
+        if (clearError) throw clearError;
+      }
+
       if (purchaser) {
         const { error } = await supabase
           .from("purchasers")
           .update({
-            ...formData,
+            purchaser_code: formData.purchaser_code,
+            name: formData.name,
             email: formData.email || null,
             phone: formData.phone || null,
+            address: formData.address || null,
+            city: formData.city || null,
+            state: formData.state || null,
+            zip_code: formData.zip_code || null,
+            country: formData.country || null,
+            notes: formData.notes || null,
+            is_default: formData.is_default,
             updated_at: new Date().toISOString(),
           })
           .eq("id", purchaser.id);
@@ -172,6 +197,7 @@ export function PurchaserForm({ purchaser, suggestedCode }: PurchaserFormProps) 
           action: "updated",
           userId: user.id,
           userName,
+          summary: formData.is_default ? "Marked as default purchaser" : undefined,
         });
 
         toast({
@@ -183,9 +209,17 @@ export function PurchaserForm({ purchaser, suggestedCode }: PurchaserFormProps) 
         const { data: created, error } = await supabase
           .from("purchasers")
           .insert({
-            ...formData,
+            purchaser_code: formData.purchaser_code,
+            name: formData.name,
             email: formData.email || null,
             phone: formData.phone || null,
+            address: formData.address || null,
+            city: formData.city || null,
+            state: formData.state || null,
+            zip_code: formData.zip_code || null,
+            country: formData.country || null,
+            notes: formData.notes || null,
+            is_default: formData.is_default,
             created_by: user.id,
             organization_id: profile.organization_id,
           })
@@ -203,6 +237,7 @@ export function PurchaserForm({ purchaser, suggestedCode }: PurchaserFormProps) 
             action: "created",
             userId: user.id,
             userName,
+            summary: formData.is_default ? "Marked as default purchaser" : undefined,
           });
         }
 
@@ -372,6 +407,25 @@ export function PurchaserForm({ purchaser, suggestedCode }: PurchaserFormProps) 
               placeholder="Additional notes"
               rows={3}
             />
+          </div>
+
+          <div className="rounded-lg border p-4 bg-white">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="is_default">Mark as default purchaser</Label>
+                <p className="text-xs text-muted-foreground">
+                  Auto-selected when creating purchase invoices. Only one
+                  purchaser can be default.
+                </p>
+              </div>
+              <Switch
+                id="is_default"
+                checked={formData.is_default}
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, is_default: checked })
+                }
+              />
+            </div>
           </div>
 
           <div className="flex gap-3">

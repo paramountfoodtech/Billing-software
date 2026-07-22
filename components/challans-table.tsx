@@ -42,6 +42,8 @@ import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { TableRowActions } from "@/components/table-row-actions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   canDelete,
@@ -393,70 +395,66 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
                     </TableCell>
                     <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                       <div className="flex items-center justify-end gap-1">
-                        {(challan.status !== "invoiced" ||
-                          !challan.purchase_invoice_id) && (
-                          <IconTooltip label="View purchase challan">
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/dashboard/challans/${challan.id}`}>
-                                <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
-                              </Link>
-                            </Button>
-                          </IconTooltip>
-                        )}
-                        {challan.status === "final" && (
-                          <IconTooltip label="Create invoice">
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link
-                                href={`/dashboard/purchase-invoices/new?challan_id=${challan.id}`}
-                              >
-                                <FileText className="h-4 w-4 text-blue-600" />
-                              </Link>
-                            </Button>
-                          </IconTooltip>
-                        )}
-                        {challan.status === "invoiced" &&
-                          challan.purchase_invoice_id && (
-                            <IconTooltip label="View invoice">
-                              <Button variant="ghost" size="sm" asChild>
-                                <Link
-                                  href={`/dashboard/purchase-invoices/${challan.purchase_invoice_id}`}
-                                >
-                                  <FileText className="h-4 w-4" />
-                                </Link>
-                              </Button>
-                            </IconTooltip>
-                          )}
                         <EntryHistoryButton
                           entityType="challan"
                           entityId={challan.id}
                           createdAt={challan.created_at}
                           createdByName={challan.profiles?.full_name}
                         />
-                        {allowEdit && canEditChallan(challan) && (
-                          <IconTooltip label="Edit purchase challan">
-                            <Button variant="ghost" size="sm" asChild>
+                        <TableRowActions>
+                          {(challan.status !== "invoiced" ||
+                            !challan.purchase_invoice_id) && (
+                            <DropdownMenuItem asChild>
+                              <Link href={`/dashboard/challans/${challan.id}`}>
+                                <Eye />
+                                View
+                              </Link>
+                            </DropdownMenuItem>
+                          )}
+                          {challan.status === "final" && (
+                            <DropdownMenuItem asChild>
+                              <Link
+                                href={`/dashboard/purchase-invoices/new?challan_id=${challan.id}`}
+                              >
+                                <FileText />
+                                Create invoice
+                              </Link>
+                            </DropdownMenuItem>
+                          )}
+                          {challan.status === "invoiced" &&
+                            challan.purchase_invoice_id && (
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  href={`/dashboard/purchase-invoices/${challan.purchase_invoice_id}`}
+                                >
+                                  <FileText />
+                                  View invoice
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                          {allowEdit && canEditChallan(challan) && (
+                            <DropdownMenuItem asChild>
                               <Link
                                 href={`/dashboard/challans/${challan.id}/edit`}
                               >
-                                <Pencil className="h-4 w-4" />
+                                <Pencil />
+                                Edit
                               </Link>
-                            </Button>
-                          </IconTooltip>
-                        )}
-                        {allowDelete && canDeleteChallan(challan) && (
-                          <IconTooltip label="Delete purchase challan">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
+                            </DropdownMenuItem>
+                          )}
+                          {allowDelete && canDeleteChallan(challan) && (
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => {
                                 setChallanToDelete(challan.id);
                                 setDeleteDialogOpen(true);
                               }}
                             >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </IconTooltip>
-                        )}
+                              <Trash2 />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
+                        </TableRowActions>
                       </div>
                     </TableCell>
                   </TableRow>

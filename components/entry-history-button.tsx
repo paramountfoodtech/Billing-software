@@ -1,9 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import { Clock } from "lucide-react"
 
 import { useMounted } from "@/hooks/use-mounted"
-import { Clock } from "lucide-react"
+import { IconTooltip } from "@/components/icon-tooltip"
 import { Button } from "@/components/ui/button"
 import {
   Popover,
@@ -71,17 +72,13 @@ export function EntryHistoryButton({
     try {
       const supabase = createClient()
       const fetched = await fetchEntryHistory(supabase, entityType, entityId)
-      setRows(
-        buildDisplayRows(fetched, createdAt, createdByName),
-      )
+      setRows(buildDisplayRows(fetched, createdAt, createdByName))
     } finally {
       setLoading(false)
     }
   }
 
-  const displayRows =
-    rows ??
-    buildDisplayRows([], createdAt, createdByName)
+  const displayRows = rows ?? buildDisplayRows([], createdAt, createdByName)
 
   const triggerButton = (
     <Button
@@ -89,7 +86,6 @@ export function EntryHistoryButton({
       variant="ghost"
       size="sm"
       className={className}
-      title="Entry history"
       aria-label="View entry history"
     >
       <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
@@ -97,12 +93,16 @@ export function EntryHistoryButton({
   )
 
   if (!mounted) {
-    return triggerButton
+    return (
+      <IconTooltip label="Entry history">{triggerButton}</IconTooltip>
+    )
   }
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
+      <IconTooltip label="Entry history">
+        <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
+      </IconTooltip>
       <PopoverContent align="end" className="w-80 p-0">
         <div className="border-b px-3 py-2">
           <p className="text-sm font-semibold">Entry history</p>

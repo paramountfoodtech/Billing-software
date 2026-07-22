@@ -20,6 +20,7 @@ import {
   ArrowUp,
   ArrowDown,
   Banknote,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -44,7 +45,9 @@ import { exportConsolidatedPurchaseInvoicesPDF } from "@/lib/purchase-invoice-co
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
-import { canDelete } from "@/lib/permissions";
+import { TableRowActions } from "@/components/table-row-actions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { canDelete, canEdit } from "@/lib/permissions";
 
 interface PurchaseInvoice {
   id: string;
@@ -105,7 +108,7 @@ export function PurchaseInvoicesTable({
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [filters, setFilters] = useState({
-    invoice_number: "",
+    purchaser_invoice_number: "",
     purchaser: "",
     challan: "",
     status: "",
@@ -127,11 +130,11 @@ export function PurchaseInvoicesTable({
   const processedInvoices = useMemo(() => {
     let filtered = [...invoices];
 
-    if (filters.invoice_number) {
+    if (filters.purchaser_invoice_number) {
       filtered = filtered.filter((inv) =>
-        inv.invoice_number
+        (inv.purchaser_invoice_number || "")
           .toLowerCase()
-          .includes(filters.invoice_number.toLowerCase()),
+          .includes(filters.purchaser_invoice_number.toLowerCase()),
       );
     }
     if (filters.purchaser) {
@@ -159,9 +162,9 @@ export function PurchaseInvoicesTable({
         let aVal: string | number = "";
         let bVal: string | number = "";
         switch (sortColumn) {
-          case "invoice_number":
-            aVal = a.invoice_number;
-            bVal = b.invoice_number;
+          case "purchaser_invoice_number":
+            aVal = a.purchaser_invoice_number || "";
+            bVal = b.purchaser_invoice_number || "";
             break;
           case "purchaser":
             aVal = a.purchasers?.name ?? "N/A";
@@ -298,10 +301,6 @@ export function PurchaseInvoicesTable({
     }));
 
     const columns: ExportColumn[] = [
-      { key: "invoice_number", label: "Invoice Number" },
-      { key: "purchaser_invoice_number", label: "Purchaser Invoice #" },
-      { key: "challan_number", label: "Purchase challan" },
-      { key: "purchaser_name", label: "Purchaser" },
       {
         key: "issue_date",
         label: "Issue Date",
@@ -312,15 +311,18 @@ export function PurchaseInvoicesTable({
             day: "2-digit",
           }),
       },
-      {
-        key: "total_weight_kg",
-        label: "Weight (KG)",
-        formatter: (v) => Number(v).toFixed(3),
-      },
+      { key: "purchaser_invoice_number", label: "Purchaser Invoice #" },
+      { key: "challan_number", label: "Purchase challan" },
+      { key: "purchaser_name", label: "Purchaser" },
       {
         key: "total_birds",
         label: "Birds",
         formatter: (v) => String(Number(v || 0)),
+      },
+      {
+        key: "total_weight_kg",
+        label: "Weight (KG)",
+        formatter: (v) => Number(v).toFixed(3),
       },
       {
         key: "total_amount",
@@ -346,7 +348,7 @@ export function PurchaseInvoicesTable({
 
   const handleExportPDF = async () => {
     const enriched = processedInvoices.map((inv) => ({
-      invoice_number: inv.invoice_number,
+      purchaser_invoice_number: inv.purchaser_invoice_number || "—",
       challan_number: getChallanLabel(inv),
       purchaser_name: inv.purchasers?.name ?? "N/A",
       issue_date_fmt: formatIndianDate(inv.issue_date, {
@@ -365,12 +367,12 @@ export function PurchaseInvoicesTable({
     }));
 
     const pdfColumns: ExportColumn[] = [
-      { key: "invoice_number", label: "Invoice #", widthFrac: 0.1 },
-      { key: "challan_number", label: "Purchase challan", widthFrac: 0.1 },
-      { key: "purchaser_name", label: "Purchaser", widthFrac: 0.18 },
       { key: "issue_date_fmt", label: "Date", widthFrac: 0.1 },
-      { key: "weight_fmt", label: "Weight", widthFrac: 0.09 },
+      { key: "purchaser_invoice_number", label: "Purchaser Invoice #", widthFrac: 0.12 },
+      { key: "challan_number", label: "Purchase challan", widthFrac: 0.1 },
+      { key: "purchaser_name", label: "Purchaser", widthFrac: 0.16 },
       { key: "birds_fmt", label: "Birds", widthFrac: 0.07 },
+      { key: "weight_fmt", label: "Weight", widthFrac: 0.09 },
       { key: "total_fmt", label: "Total", widthFrac: 0.1, align: "right" },
       { key: "paid_fmt", label: "Paid", widthFrac: 0.1, align: "right" },
       { key: "due_fmt", label: "Due", widthFrac: 0.1, align: "right" },
@@ -482,10 +484,18 @@ export function PurchaseInvoicesTable({
           <TableHeader>
             <TableRow>
               <TableHead
-                className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
-                onClick={() => handleSort("invoice_number")}
+                className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                onClick={() => handleSort("issue_date")}
               >
-                Invoice #<SortIcon column="invoice_number" />
+                Issue Date
+                <SortIcon column="issue_date" />
+              </TableHead>
+              <TableHead
+                className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                onClick={() => handleSort("purchaser_invoice_number")}
+              >
+                Purchaser Invoice #
+                <SortIcon column="purchaser_invoice_number" />
               </TableHead>
               <TableHead className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3">
                 Purchase challan
@@ -498,11 +508,11 @@ export function PurchaseInvoicesTable({
                 <SortIcon column="purchaser" />
               </TableHead>
               <TableHead
-                className="hidden md:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
-                onClick={() => handleSort("issue_date")}
+                className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                onClick={() => handleSort("total_birds")}
               >
-                Issue Date
-                <SortIcon column="issue_date" />
+                Birds
+                <SortIcon column="total_birds" />
               </TableHead>
               <TableHead
                 className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
@@ -510,13 +520,6 @@ export function PurchaseInvoicesTable({
               >
                 Weight (KG)
                 <SortIcon column="total_weight_kg" />
-              </TableHead>
-              <TableHead
-                className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
-                onClick={() => handleSort("total_birds")}
-              >
-                Birds
-                <SortIcon column="total_birds" />
               </TableHead>
               <TableHead
                 className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
@@ -551,12 +554,13 @@ export function PurchaseInvoicesTable({
               </TableHead>
             </TableRow>
             <TableRow>
+              <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
                 <Input
                   placeholder="Filter..."
-                  value={filters.invoice_number}
+                  value={filters.purchaser_invoice_number}
                   onChange={(e) =>
-                    handleFilterChange("invoice_number", e.target.value)
+                    handleFilterChange("purchaser_invoice_number", e.target.value)
                   }
                   className="h-7 text-xs"
                 />
@@ -581,7 +585,6 @@ export function PurchaseInvoicesTable({
                   className="h-7 text-xs"
                 />
               </TableHead>
-              <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
@@ -619,8 +622,11 @@ export function PurchaseInvoicesTable({
                   Number(invoice.total_amount) - Number(invoice.amount_paid);
                 return (
                   <TableRow key={invoice.id}>
+                    <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                      {formatIndianDate(invoice.issue_date)}
+                    </TableCell>
                     <TableCell className="font-mono font-medium px-2 sm:px-4 py-2 sm:py-3">
-                      {invoice.invoice_number}
+                      {invoice.purchaser_invoice_number || "—"}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3">
                       {getChallanLabel(invoice)}
@@ -628,14 +634,11 @@ export function PurchaseInvoicesTable({
                     <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
                       {invoice.purchasers?.name ?? "N/A"}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3">
-                      {formatIndianDate(invoice.issue_date)}
+                    <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                      {Number(invoice.total_birds || 0).toLocaleString("en-IN")}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
                       {Number(invoice.total_weight_kg).toFixed(3)}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
-                      {Number(invoice.total_birds || 0).toLocaleString("en-IN")}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
                       ₹
@@ -665,38 +668,48 @@ export function PurchaseInvoicesTable({
                           createdAt={invoice.created_at}
                           createdByName={invoice.profiles?.full_name}
                         />
-                        {due > 0.01 && invoice.status !== "cancelled" && (
-                          <IconTooltip label="Record payment">
-                            <Button variant="ghost" size="sm" asChild>
+                        <TableRowActions>
+                          {due > 0.01 && invoice.status !== "cancelled" && (
+                            <DropdownMenuItem asChild>
                               <Link
                                 href={`/dashboard/purchase-payments/new?invoice_id=${invoice.id}${invoice.purchaser_id ? `&purchaser_id=${invoice.purchaser_id}` : ""}`}
                               >
-                                <Banknote className="h-4 w-4 text-green-600" />
+                                <Banknote />
+                                Record payment
                               </Link>
-                            </Button>
-                          </IconTooltip>
-                        )}
-                        <IconTooltip label="View purchase invoice">
-                          <Button variant="ghost" size="sm" asChild>
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem asChild>
                             <Link href={`/dashboard/purchase-invoices/${invoice.id}`}>
-                              <Eye className="h-4 w-4" />
+                              <Eye />
+                              View
                             </Link>
-                          </Button>
-                        </IconTooltip>
-                        {canDelete(userRole) && (
-                          <IconTooltip label="Delete purchase invoice">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
+                          </DropdownMenuItem>
+                          {canEdit(userRole) &&
+                            invoice.status !== "cancelled" &&
+                            Number(invoice.amount_paid) <= 0.01 && (
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  href={`/dashboard/purchase-invoices/${invoice.id}/edit`}
+                                >
+                                  <Pencil />
+                                  Edit
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                          {canDelete(userRole) && (
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => {
                                 setInvoiceToDelete(invoice.id);
                                 setDeleteDialogOpen(true);
                               }}
                             >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </IconTooltip>
-                        )}
+                              <Trash2 />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
+                        </TableRowActions>
                       </div>
                     </TableCell>
                   </TableRow>

@@ -44,7 +44,7 @@ export default async function NewExpensePage() {
   );
 
   return (
-    <div className="p-6 lg:p-8 max-w-3xl mx-auto">
+    <div className="p-6 lg:p-8 max-w-3xl">
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">New Expense Entry</h1>
         <p className="text-muted-foreground mt-1">

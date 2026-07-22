@@ -127,7 +127,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
       <IconTooltip label="Notifications">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="relative p-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors duration-200"
+          className="relative cursor-pointer p-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors duration-200"
         >
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
@@ -152,7 +152,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
               <IconTooltip label="Close">
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                  className="cursor-pointer text-slate-400 hover:text-slate-600 transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -187,7 +187,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                           {!notification.is_read && (
                             <button
                               onClick={() => markAsRead(notification.id)}
-                              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                              className="cursor-pointer text-xs text-blue-600 hover:text-blue-700 font-medium"
                             >
                               Mark as read
                             </button>
@@ -199,7 +199,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                           <Link
                             href={getNotificationLink(notification)}
                             onClick={() => handleNotificationNavigation(notification)}
-                            className="text-blue-600 hover:text-blue-700 p-1"
+                            className="cursor-pointer text-blue-600 hover:text-blue-700 p-1"
                           >
                             <ExternalLink className="h-4 w-4" />
                           </Link>
@@ -207,7 +207,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                         <IconTooltip label="Delete">
                           <button
                             onClick={() => deleteNotification(notification.id)}
-                            className="text-slate-400 hover:text-red-600 p-1 transition-colors"
+                            className="cursor-pointer text-slate-400 hover:text-red-600 p-1 transition-colors"
                           >
                             <X className="h-4 w-4" />
                           </button>
@@ -225,7 +225,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                 <Link
                   href="/dashboard/notifications"
                   onClick={() => setIsOpen(false)}
-                  className="flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors"
+                  className="flex cursor-pointer items-center justify-center gap-2 text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors"
                 >
                   <ExternalLink className="h-4 w-4" />
                   {remainingCount > 0 ? `View All (${remainingCount} more)` : "View All Notifications"}

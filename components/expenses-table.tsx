@@ -40,6 +40,8 @@ import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/expo
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { TableRowActions } from "@/components/table-row-actions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { canDelete } from "@/lib/permissions";
 
 export interface ExpenseEntryRow {
@@ -431,33 +433,32 @@ export function ExpensesTable({
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <IconTooltip label="View entry">
-                          <Button variant="ghost" size="icon" asChild>
-                            <Link href={`/dashboard/expenses/${entry.id}`}>
-                              <Eye className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                        </IconTooltip>
                         <EntryHistoryButton
                           entityType="expense_entry"
                           entityId={entry.id}
                           createdAt={entry.created_at}
                           createdByName={entry.profiles?.full_name}
                         />
-                        {allowDelete && (
-                          <IconTooltip label="Delete entry">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
+                        <TableRowActions>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/dashboard/expenses/${entry.id}`}>
+                              <Eye />
+                              View
+                            </Link>
+                          </DropdownMenuItem>
+                          {allowDelete && (
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => {
                                 setEntryToDelete(entry.id);
                                 setDeleteDialogOpen(true);
                               }}
                             >
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
-                          </IconTooltip>
-                        )}
+                              <Trash2 />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
+                        </TableRowActions>
                       </div>
                     </TableCell>
                   </TableRow>

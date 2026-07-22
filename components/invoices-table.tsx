@@ -33,6 +33,10 @@ import { formatIndianDate } from "@/lib/date-time";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { TableRowActions } from "@/components/table-row-actions";
+import {
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { canDelete, canEditInvoice } from "@/lib/permissions";
 import {
   AlertDialog,
@@ -1151,47 +1155,45 @@ export function InvoicesTable({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                        <div className="flex justify-end gap-1 sm:gap-2">
+                        <div className="flex justify-end gap-1">
                           <EntryHistoryButton
                             entityType="invoice"
                             entityId={invoice.id}
                             createdAt={invoice.created_at}
                             createdByName={invoice.profiles?.full_name}
                           />
-                          <IconTooltip label="View invoice">
-                            <Button variant="ghost" size="sm" asChild>
+                          <TableRowActions>
+                            <DropdownMenuItem asChild>
                               <Link href={`/dashboard/invoices/${invoice.id}`}>
-                                <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
+                                <Eye />
+                                View
                               </Link>
-                            </Button>
-                          </IconTooltip>
-                          {canEditInvoice(userRole, invoice.status) &&
-                            (invoice.status === "draft" ||
-                              invoice.status === "recorded") && (
-                            <IconTooltip label="Edit invoice">
-                              <Button variant="ghost" size="sm" asChild>
-                                <Link
-                                  href={`/dashboard/invoices/${invoice.id}/edit`}
-                                >
-                                  <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
-                                </Link>
-                              </Button>
-                            </IconTooltip>
-                          )}
-                          {canDelete(userRole) && (
-                            <IconTooltip label="Delete invoice">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
+                            </DropdownMenuItem>
+                            {canEditInvoice(userRole, invoice.status) &&
+                              (invoice.status === "draft" ||
+                                invoice.status === "recorded") && (
+                                <DropdownMenuItem asChild>
+                                  <Link
+                                    href={`/dashboard/invoices/${invoice.id}/edit`}
+                                  >
+                                    <Pencil />
+                                    Edit
+                                  </Link>
+                                </DropdownMenuItem>
+                              )}
+                            {canDelete(userRole) && (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => {
                                   setInvoiceToDelete(invoice.id);
                                   setDeleteDialogOpen(true);
                                 }}
                               >
-                                <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-                              </Button>
-                            </IconTooltip>
-                          )}
+                                <Trash2 />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
+                          </TableRowActions>
                         </div>
                       </TableCell>
                     </TableRow>

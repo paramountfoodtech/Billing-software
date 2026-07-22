@@ -41,6 +41,8 @@ import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/expo
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { TableRowActions } from "@/components/table-row-actions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { canDelete } from "@/lib/permissions";
 
 interface PurchasePayment {
@@ -512,27 +514,26 @@ export function PurchasePaymentsTable({
                           createdAt={payment.created_at}
                           createdByName={payment.profiles?.full_name}
                         />
-                        <IconTooltip label="View payment">
-                          <Button variant="ghost" size="sm" asChild>
+                        <TableRowActions>
+                          <DropdownMenuItem asChild>
                             <Link href={`/dashboard/purchase-payments/${payment.id}`}>
-                              <Eye className="h-4 w-4" />
+                              <Eye />
+                              View
                             </Link>
-                          </Button>
-                        </IconTooltip>
-                        {canDelete(userRole) && (
-                          <IconTooltip label="Delete payment">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
+                          </DropdownMenuItem>
+                          {canDelete(userRole) && (
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => {
                                 setPaymentToDelete(payment.id);
                                 setDeleteDialogOpen(true);
                               }}
                             >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </IconTooltip>
-                        )}
+                              <Trash2 />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
+                        </TableRowActions>
                       </div>
                     </TableCell>
                   </TableRow>

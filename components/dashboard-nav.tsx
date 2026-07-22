@@ -298,7 +298,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
       <IconTooltip label={isMobileMenuOpen ? "Close menu" : "Open menu"}>
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-md shadow-md"
+          className="lg:hidden fixed top-4 left-4 z-50 cursor-pointer p-2 bg-white rounded-md shadow-md"
         >
           {isMobileMenuOpen ? (
             <X className="h-6 w-6" />
@@ -352,7 +352,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
           >
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="hidden lg:flex items-center justify-center p-2 hover:bg-slate-100 rounded-md transition-colors ml-2 flex-shrink-0"
+              className="hidden lg:flex cursor-pointer items-center justify-center p-2 hover:bg-slate-100 rounded-md transition-colors ml-2 flex-shrink-0"
             >
               <ChevronLeft
                 className={cn(
@@ -384,30 +384,33 @@ export function DashboardNav({ profile }: DashboardNavProps) {
                   pathname === item.href ||
                   (item.href !== "/dashboard" &&
                     pathname.startsWith(item.href));
-                return (
+                const link = (
                   <Link
-                    key={item.href}
                     href={item.href}
                     onClick={handleNavigation}
                     prefetch
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors relative group",
+                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
                       isSidebarCollapsed && "lg:justify-center",
                       isActive
                         ? "bg-blue-50 text-blue-700"
                         : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
                     )}
-                    title={isSidebarCollapsed ? item.label : ""}
                   >
                     <Icon className="h-5 w-5 flex-shrink-0" />
                     {!isSidebarCollapsed && <span>{item.label}</span>}
-                    {isSidebarCollapsed && (
-                      <div className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-xs rounded whitespace-nowrap z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        {item.label}
-                      </div>
-                    )}
                   </Link>
                 );
+
+                if (isSidebarCollapsed) {
+                  return (
+                    <IconTooltip key={item.href} label={item.label} side="right">
+                      {link}
+                    </IconTooltip>
+                  );
+                }
+
+                return <div key={item.href}>{link}</div>;
               })}
             </div>
           ))}

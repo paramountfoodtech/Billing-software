@@ -18,6 +18,7 @@ interface PurchaseInvoice {
   id: string;
   purchaser_id: string | null;
   invoice_number: string;
+  purchaser_invoice_number?: string | null;
   issue_date: string;
   total_weight_kg: string;
   total_birds?: number | null;

@@ -33,6 +33,8 @@ import { usePagination } from "@/hooks/use-pagination"
 import { TablePagination } from "@/components/table-pagination"
 import { EntryHistoryButton } from "@/components/entry-history-button"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { TableRowActions } from "@/components/table-row-actions"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { getProfileDisplayName, logEntryHistory } from "@/lib/entry-history"
 import { getEntryStockBreakdown } from "@/lib/material-processing"
 import type { MaterialProcessingEntry } from "@/lib/material-processing"
@@ -390,29 +392,34 @@ export function MaterialProcessingTable({
                   <TableCell className="text-center">
                     <div className="flex justify-center gap-1">
                       <EntryHistoryButton entityType="material_processing" entityId={entry.id} />
-                      <IconTooltip label="View processing entry">
-                        <Button variant="ghost" size="sm" asChild>
+                      <TableRowActions>
+                        <DropdownMenuItem asChild>
                           <Link href={`/dashboard/operations/processing/${entry.id}`}>
-                            <Eye className="h-4 w-4" />
+                            <Eye />
+                            View
                           </Link>
-                        </Button>
-                      </IconTooltip>
-                      {canEditEntries && (
-                        <>
-                          <IconTooltip label="Edit processing entry">
-                            <Button variant="ghost" size="sm" asChild>
+                        </DropdownMenuItem>
+                        {canEditEntries && (
+                          <>
+                            <DropdownMenuItem asChild>
                               <Link href={`/dashboard/operations/processing/${entry.id}/edit`}>
-                                <Pencil className="h-4 w-4" />
+                                <Pencil />
+                                Edit
                               </Link>
-                            </Button>
-                          </IconTooltip>
-                          <IconTooltip label="Delete processing entry">
-                            <Button variant="ghost" size="sm" onClick={() => { setEntryToDelete(entry); setDeleteDialogOpen(true) }}>
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
-                          </IconTooltip>
-                        </>
-                      )}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => {
+                                setEntryToDelete(entry)
+                                setDeleteDialogOpen(true)
+                              }}
+                            >
+                              <Trash2 />
+                              Delete
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </TableRowActions>
                     </div>
                   </TableCell>
                 </TableRow>

@@ -120,6 +120,12 @@
     @apply border-border outline-ring/50;
   }
 
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [data-slot="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
   input[type="number"] {
     -moz-appearance: textfield;
     appearance: textfield;

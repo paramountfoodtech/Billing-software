@@ -41,6 +41,8 @@ import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { TableRowActions } from "@/components/table-row-actions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { canDelete, canEdit } from "@/lib/permissions";
 
 interface Client {
@@ -404,35 +406,36 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
                   })}
                 </TableCell>
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                  <div className="flex justify-end gap-1 sm:gap-2">
+                  <div className="flex justify-end gap-1">
                     <EntryHistoryButton
                       entityType="client"
                       entityId={client.id}
                       createdAt={client.created_at}
                       createdByName={client.profiles?.full_name}
                     />
-                    {canEdit(userRole) && (
-                      <IconTooltip label="Edit client">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/dashboard/clients/${client.id}/edit`}>
-                            <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </Link>
-                        </Button>
-                      </IconTooltip>
-                    )}
-                    {canDelete(userRole) && (
-                      <IconTooltip label="Delete client">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setClientToDelete(client.id);
-                            setDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-                        </Button>
-                      </IconTooltip>
+                    {(canEdit(userRole) || canDelete(userRole)) && (
+                      <TableRowActions>
+                        {canEdit(userRole) && (
+                          <DropdownMenuItem asChild>
+                            <Link href={`/dashboard/clients/${client.id}/edit`}>
+                              <Pencil />
+                              Edit
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
+                        {canDelete(userRole) && (
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => {
+                              setClientToDelete(client.id);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 />
+                            Delete
+                          </DropdownMenuItem>
+                        )}
+                      </TableRowActions>
                     )}
                   </div>
                 </TableCell>

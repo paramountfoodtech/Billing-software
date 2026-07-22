@@ -1,14 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PurchaseInvoiceForm } from "@/components/purchase-invoice-form";
-import { suggestNextNumber } from "@/lib/purchase-document-numbers";
+import { canEdit } from "@/lib/permissions";
 
-export default async function NewPurchaseInvoicePage({
-  searchParams,
+export default async function EditPurchaseInvoicePage({
+  params,
 }: {
-  searchParams: Promise<{ challan_id?: string }>;
+  params: Promise<{ id: string }>;
 }) {
-  const { challan_id: challanId } = await searchParams;
+  const { id } = await params;
   const supabase = await createClient();
 
   const {
@@ -19,18 +19,34 @@ export default async function NewPurchaseInvoicePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("organization_id")
+    .select("role, organization_id")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.organization_id) redirect("/dashboard");
+  if (!profile?.organization_id || !canEdit(profile.role)) {
+    notFound();
+  }
 
   const organizationId = profile.organization_id;
+
+  const { data: invoice } = await supabase
+    .from("purchase_invoices")
+    .select("*")
+    .eq("id", id)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (!invoice || invoice.status === "cancelled") {
+    notFound();
+  }
+
+  if (Number(invoice.amount_paid) > 0.01) {
+    redirect(`/dashboard/purchase-invoices/${id}`);
+  }
 
   const [
     purchasersResult,
     challansResult,
-    invoicesResult,
     categoriesResult,
     priceHistoryResult,
   ] = await Promise.all([
@@ -50,16 +66,17 @@ export default async function NewPurchaseInvoicePage({
         total_birds,
         challan_date,
         status,
+        purchase_invoice_id,
         purchasers(name)
       `,
       )
       .eq("organization_id", organizationId)
-      .eq("status", "final")
+      .or(
+        invoice.challan_id
+          ? `status.eq.final,id.eq.${invoice.challan_id}`
+          : "status.eq.final",
+      )
       .order("challan_date", { ascending: false }),
-    supabase
-      .from("purchase_invoices")
-      .select("invoice_number")
-      .eq("organization_id", organizationId),
     supabase
       .from("price_categories")
       .select("id, name")
@@ -76,41 +93,30 @@ export default async function NewPurchaseInvoicePage({
       (c) => c.name?.toLowerCase() === "live",
     ) ?? null;
 
-  const suggestedInvoiceNumber = suggestNextNumber(
-    "PI",
-    (invoicesResult.data || []).map((i) => i.invoice_number),
+  const challans = (challansResult.data || []).filter(
+    (c) =>
+      c.id === invoice.challan_id ||
+      (c.status === "final" && !c.purchase_invoice_id),
   );
-
-  if (challanId) {
-    const { data: challan } = await supabase
-      .from("challans")
-      .select("id, status, purchase_invoice_id")
-      .eq("id", challanId)
-      .maybeSingle();
-
-    if (!challan || challan.status === "invoiced" || challan.purchase_invoice_id) {
-      redirect("/dashboard/purchase-invoices/new");
-    }
-  }
 
   return (
     <div className="p-6 lg:p-8 max-w-3xl">
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">
-          Create Purchase Invoice
+          Edit Purchase Invoice
         </h1>
         <p className="text-muted-foreground mt-1">
-          Create a purchase invoice, with or without linking a purchase challan
+          Update purchaser invoice details. Payments already recorded are kept.
         </p>
       </div>
 
       <PurchaseInvoiceForm
         purchasers={purchasersResult.data || []}
-        challans={challansResult.data || []}
-        suggestedInvoiceNumber={suggestedInvoiceNumber}
-        initialChallanId={challanId}
+        challans={challans}
+        suggestedInvoiceNumber={invoice.invoice_number}
         liveCategoryId={liveCategory?.id}
         priceHistory={priceHistoryResult.data || []}
+        initialInvoice={invoice}
       />
     </div>
   );

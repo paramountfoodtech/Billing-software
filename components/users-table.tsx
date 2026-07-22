@@ -23,6 +23,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { TableRowActions } from "@/components/table-row-actions"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 
 interface User {
   id: string
@@ -272,29 +274,27 @@ export function UsersTable({ users, userRole }: { users: User[]; userRole?: stri
                 </TableCell>
                 {userRole === "super_admin" && (
                   <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                    <div className="flex justify-end gap-1 sm:gap-2">
-                      <IconTooltip label="Edit user">
-                        <Button variant="ghost" size="sm" asChild>
+                    <div className="flex justify-end">
+                      <TableRowActions>
+                        <DropdownMenuItem asChild>
                           <Link href={`/dashboard/users/${user.id}/edit`}>
-                            <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+                            <Edit />
+                            Edit
                           </Link>
-                        </Button>
-                      </IconTooltip>
-                      {user.is_active && (
-                        <IconTooltip label="Deactivate user">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
+                        </DropdownMenuItem>
+                        {user.is_active && (
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => {
                               setUserToDelete({ id: user.id, name: user.full_name })
                               setDeleteDialogOpen(true)
                             }}
-                            className="text-red-600 hover:text-red-700"
                           >
-                            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </Button>
-                        </IconTooltip>
-                      )}
+                            <Trash2 />
+                            Deactivate
+                          </DropdownMenuItem>
+                        )}
+                      </TableRowActions>
                     </div>
                   </TableCell>
                 )}

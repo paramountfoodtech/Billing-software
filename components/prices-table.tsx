@@ -47,6 +47,8 @@ import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils"
 import { Input } from "@/components/ui/input"
 import { EntryHistoryButton } from "@/components/entry-history-button"
 import { IconTooltip } from "@/components/icon-tooltip"
+import { TableRowActions } from "@/components/table-row-actions"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { canDelete, canEdit } from "@/lib/permissions"
 
 interface PriceCategory {
@@ -140,32 +142,33 @@ function SortableCategoryRow({
           : "-"}
       </TableCell>
       <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-        <div className="flex justify-end gap-1 sm:gap-2">
+        <div className="flex justify-end gap-1">
           <EntryHistoryButton
             entityType="price_category"
             entityId={category.id}
             createdAt={category.created_at}
           />
-          {canEdit(userRole) && (
-            <IconTooltip label="Edit price category">
-              <Button variant="ghost" size="sm" asChild>
-                <Link href={`/dashboard/prices/${category.id}/edit`}>
-                  <Pencil className="h-3 w-3 sm:h-4 sm:w-4" />
-                </Link>
-              </Button>
-            </IconTooltip>
-          )}
-          {canDelete(userRole) && (
-            <IconTooltip label="Delete price category">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onDelete(category.id)}
-                disabled={isDeleting}
-              >
-                <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-              </Button>
-            </IconTooltip>
+          {(canEdit(userRole) || canDelete(userRole)) && (
+            <TableRowActions>
+              {canEdit(userRole) && (
+                <DropdownMenuItem asChild>
+                  <Link href={`/dashboard/prices/${category.id}/edit`}>
+                    <Pencil />
+                    Edit
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              {canDelete(userRole) && (
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={isDeleting}
+                  onSelect={() => onDelete(category.id)}
+                >
+                  <Trash2 />
+                  Delete
+                </DropdownMenuItem>
+              )}
+            </TableRowActions>
           )}
         </div>
       </TableCell>
@@ -615,26 +618,26 @@ export function PricesTable({
                         })}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-1 sm:gap-2">
+                        <div className="flex justify-end gap-1">
                           <EntryHistoryButton
                             entityType="price_history"
                             entityId={price.id}
                             createdAt={price.created_at}
                           />
                           {canDelete(userRole) && (
-                            <IconTooltip label="Delete price">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
+                            <TableRowActions>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                disabled={isDeleting}
+                                onSelect={() => {
                                   setDeleteTarget({ id: price.id, type: 'price' })
                                   setDeleteDialogOpen(true)
                                 }}
-                                disabled={isDeleting}
                               >
-                                <Trash2 className="h-4 w-4 text-red-600" />
-                              </Button>
-                            </IconTooltip>
+                                <Trash2 />
+                                Delete
+                              </DropdownMenuItem>
+                            </TableRowActions>
                           )}
                         </div>
                       </TableCell>

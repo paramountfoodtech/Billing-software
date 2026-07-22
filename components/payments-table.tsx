@@ -41,6 +41,8 @@ import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/expo
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { TableRowActions } from "@/components/table-row-actions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { canDelete } from "@/lib/permissions";
 
 interface Payment {
@@ -611,34 +613,33 @@ export function PaymentsTable({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                        <div className="flex justify-end gap-1 sm:gap-2">
+                        <div className="flex justify-end gap-1">
                           <EntryHistoryButton
                             entityType="payment"
                             entityId={payment.id}
                             createdAt={payment.created_at}
                             createdByName={payment.profiles?.full_name}
                           />
-                          <IconTooltip label="View payment">
-                            <Button variant="ghost" size="sm" asChild>
+                          <TableRowActions>
+                            <DropdownMenuItem asChild>
                               <Link href={`/dashboard/payments/${payment.id}`}>
-                                <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
+                                <Eye />
+                                View
                               </Link>
-                            </Button>
-                          </IconTooltip>
-                          {canDelete(userRole) && (
-                            <IconTooltip label="Delete payment">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
+                            </DropdownMenuItem>
+                            {canDelete(userRole) && (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => {
                                   setPaymentToDelete(payment.id);
                                   setDeleteDialogOpen(true);
                                 }}
                               >
-                                <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-                              </Button>
-                            </IconTooltip>
-                          )}
+                                <Trash2 />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
+                          </TableRowActions>
                         </div>
                       </TableCell>
                     </TableRow>

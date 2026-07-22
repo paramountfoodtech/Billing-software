@@ -19,6 +19,7 @@ import { getIndianToday } from "@/lib/date-time";
 import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
 import { Trash2 } from "lucide-react";
+import { IconTooltip } from "@/components/icon-tooltip";
 
 function useBoxGridColumns() {
   const [cols, setCols] = useState(1);
@@ -623,16 +624,20 @@ export function ChallanForm({
                             </span>
                           </span>
                           {isEditable && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2 text-destructive hover:text-destructive"
-                              onClick={() => removeBoxSet(set.set_number)}
-                              title={`Remove set ${set.set_number}`}
+                            <IconTooltip
+                              label={`Remove set ${set.set_number}`}
                             >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2 text-destructive hover:text-destructive"
+                                onClick={() => removeBoxSet(set.set_number)}
+                                aria-label={`Remove set ${set.set_number}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </IconTooltip>
                           )}
                         </div>
                       ))}
@@ -689,16 +694,18 @@ export function ChallanForm({
                     </span>
                   </span>
                   {isEditable && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 text-destructive hover:text-destructive"
-                      onClick={() => removeBoxSet(0)}
-                      title="Remove manual boxes"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <IconTooltip label="Remove manual boxes">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-destructive hover:text-destructive"
+                        onClick={() => removeBoxSet(0)}
+                        aria-label="Remove manual boxes"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </IconTooltip>
                   )}
                 </div>
               )}

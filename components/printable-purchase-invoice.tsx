@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Banknote, Printer } from "lucide-react";
+import { Plus, Printer } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatIndianDate } from "@/lib/date-time";
@@ -128,9 +128,6 @@ export function PrintablePurchaseInvoice({
       document.head.removeChild(style);
     };
   }, []);
-
-  const showRecordPayment =
-    balance > 0.01 && invoice.status !== "cancelled";
 
   return (
     <>
@@ -365,20 +362,16 @@ export function PrintablePurchaseInvoice({
         </CardContent>
       </Card>
 
-      {showRecordPayment && (
-        <div className="no-print mt-4 flex justify-end">
-          <IconTooltip label="Record Payment">
-            <Button asChild>
-              <Link
-                href={`/dashboard/purchase-payments/new?invoice_id=${invoice.id}${invoice.purchaser_id ? `&purchaser_id=${invoice.purchaser_id}` : ""}`}
-              >
-                <Banknote className="h-4 w-4 mr-2" />
-                Record Payment
-              </Link>
-            </Button>
-          </IconTooltip>
-        </div>
-      )}
+      <div className="no-print mt-4 flex justify-end">
+        <IconTooltip label="Create New Invoice">
+          <Button asChild>
+            <Link href="/dashboard/purchase-invoices/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Create New Invoice
+            </Link>
+          </Button>
+        </IconTooltip>
+      </div>
     </>
   );
 }

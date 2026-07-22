@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Pencil,
   Trash2,
@@ -18,6 +19,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Star,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -41,6 +43,8 @@ import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { TableRowActions } from "@/components/table-row-actions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { canDelete, canEdit } from "@/lib/permissions";
 
 interface Purchaser {
@@ -54,6 +58,7 @@ interface Purchaser {
   state: string | null;
   created_at: string;
   outstanding?: number;
+  is_default?: boolean | null;
   profiles?: { full_name: string };
 }
 
@@ -66,6 +71,7 @@ export function PurchasersTable({ purchasers, userRole }: PurchasersTableProps) 
   const router = useRouter();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdatingDefault, setIsUpdatingDefault] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [purchaserToDelete, setPurchaserToDelete] = useState<string | null>(null);
 
@@ -193,10 +199,74 @@ export function PurchasersTable({ purchasers, userRole }: PurchasersTableProps) 
     }
   };
 
+  const handleSetDefault = async (purchaser: Purchaser) => {
+    if (purchaser.is_default) return;
+    setIsUpdatingDefault(purchaser.id);
+    const supabase = createClient();
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Authentication required");
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.organization_id) {
+        throw new Error("User must belong to an organization");
+      }
+
+      const { error: clearError } = await supabase
+        .from("purchasers")
+        .update({ is_default: false })
+        .eq("organization_id", profile.organization_id)
+        .eq("is_default", true);
+
+      if (clearError) throw clearError;
+
+      const { error } = await supabase
+        .from("purchasers")
+        .update({
+          is_default: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", purchaser.id);
+
+      if (error) throw error;
+
+      toast({
+        variant: "success",
+        title: "Default purchaser set",
+        description: `${purchaser.name} will be auto-selected on new purchase invoices.`,
+      });
+      router.refresh();
+    } catch (error: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update default purchaser.",
+      });
+    } finally {
+      setIsUpdatingDefault(null);
+    }
+  };
+
   const handleExport = () => {
     const columns: ExportColumn[] = [
       { key: "purchaser_code", label: "Purchaser ID" },
       { key: "name", label: "Name" },
+      {
+        key: "is_default",
+        label: "Default",
+        formatter: (val) => (val ? "Yes" : "No"),
+      },
       { key: "email", label: "Email" },
       { key: "phone", label: "Phone" },
       { key: "city", label: "City" },
@@ -338,7 +408,14 @@ export function PurchasersTable({ purchasers, userRole }: PurchasersTableProps) 
                     {purchaser.purchaser_code}
                   </TableCell>
                   <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3 max-w-[120px] sm:max-w-none truncate">
-                    {purchaser.name}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="truncate">{purchaser.name}</span>
+                      {purchaser.is_default && (
+                        <Badge variant="secondary" className="shrink-0 text-[10px]">
+                          Default
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3">
                     <div className="flex flex-col gap-1">
@@ -383,29 +460,43 @@ export function PurchasersTable({ purchasers, userRole }: PurchasersTableProps) 
                         createdAt={purchaser.created_at}
                         createdByName={purchaser.profiles?.full_name}
                       />
-                      {canEdit(userRole) && (
-                        <IconTooltip label="Edit purchaser">
-                          <Button variant="ghost" size="sm" asChild>
+                      <TableRowActions>
+                        {!purchaser.is_default && (
+                          <DropdownMenuItem
+                            disabled={isUpdatingDefault === purchaser.id}
+                            onSelect={() => handleSetDefault(purchaser)}
+                          >
+                            <Star />
+                            Mark as default
+                          </DropdownMenuItem>
+                        )}
+                        {purchaser.is_default && (
+                          <DropdownMenuItem disabled>
+                            <Star className="fill-amber-400 text-amber-500" />
+                            Default purchaser
+                          </DropdownMenuItem>
+                        )}
+                        {canEdit(userRole) && (
+                          <DropdownMenuItem asChild>
                             <Link href={`/dashboard/purchasers/${purchaser.id}/edit`}>
-                              <Pencil className="h-4 w-4" />
+                              <Pencil />
+                              Edit
                             </Link>
-                          </Button>
-                        </IconTooltip>
-                      )}
-                      {canDelete(userRole) && (
-                        <IconTooltip label="Delete purchaser">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
+                          </DropdownMenuItem>
+                        )}
+                        {canDelete(userRole) && (
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => {
                               setPurchaserToDelete(purchaser.id);
                               setDeleteDialogOpen(true);
                             }}
                           >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </IconTooltip>
-                      )}
+                            <Trash2 />
+                            Delete
+                          </DropdownMenuItem>
+                        )}
+                      </TableRowActions>
                     </div>
                   </TableCell>
                 </TableRow>
