@@ -8,8 +8,6 @@ import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper";
 import { MissedInvoiceNumbers } from "@/components/missed-invoice-numbers";
 import { findMissedInvoiceNumbers, groupMissedInvoices } from "@/lib/invoice-gaps";
 import { excludeDiscardedMissedNumbers } from "@/lib/discarded-invoice-numbers";
-import { Suspense } from "react";
-import { LoadingOverlay } from "@/components/loading-overlay";
 
 export default async function InvoicesPage() {
   const supabase = await createClient();
@@ -19,24 +17,22 @@ export default async function InvoicesPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Get user profile
-  let userRole: string | undefined;
-  let organizationId: string | undefined;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, organization_id")
-      .eq("id", user.id)
-      .maybeSingle();
-    userRole = profile?.role;
-    organizationId = profile?.organization_id ?? undefined;
-  }
+  // Get all clients for selector (parallel with profile lookup)
+  const profilePromise = user
+    ? supabase
+        .from("profiles")
+        .select("role, organization_id")
+        .eq("id", user.id)
+        .maybeSingle()
+    : Promise.resolve({ data: null });
 
-  // Get all clients for selector
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("id, name")
-    .order("name", { ascending: true });
+  const [{ data: profile }, { data: clients }] = await Promise.all([
+    profilePromise,
+    supabase.from("clients").select("id, name").order("name", { ascending: true }),
+  ]);
+
+  const userRole = profile?.role;
+  const organizationId = profile?.organization_id ?? undefined;
 
   const invoices = await fetchAllPages((from, to) =>
     supabase
@@ -100,13 +96,11 @@ export default async function InvoicesPage() {
           </Button>
         </div>
 
-        <Suspense fallback={<LoadingOverlay />}>
-          <InvoicesPageClient
-            clients={clients || []}
-            invoices={invoices || []}
-            userRole={userRole}
-          />
-        </Suspense>
+        <InvoicesPageClient
+          clients={clients || []}
+          invoices={invoices || []}
+          userRole={userRole}
+        />
       </div>
     </DashboardPageWrapper>
   );

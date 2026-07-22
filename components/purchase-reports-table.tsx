@@ -35,6 +35,7 @@ export interface PurchaserReportRow {
   todayPurchaseKg: number;
   todayPurchaseValue: number;
   purchaseKgs: number;
+  purchaseBirds: number;
   payments: number;
   outstanding: number;
   oldBal: number;
@@ -47,6 +48,7 @@ export interface ChallanTrackingRow {
   purchaser_name: string;
   challan_date: string;
   total_weight_kg: number;
+  total_birds: number;
   status: string;
   invoice_number: string | null;
 }
@@ -150,6 +152,10 @@ export function PurchaseReportsTable({
             aVal = a.total_weight_kg;
             bVal = b.total_weight_kg;
             break;
+          case "total_birds":
+            aVal = a.total_birds;
+            bVal = b.total_birds;
+            break;
           case "status":
             aVal = a.status;
             bVal = b.status;
@@ -194,6 +200,7 @@ export function PurchaseReportsTable({
         purchaser_id,
         issue_date,
         total_weight_kg,
+        total_birds,
         price_per_kg,
         total_amount,
         amount_paid,
@@ -296,6 +303,7 @@ export function PurchaseReportsTable({
         { key: "name", label: "Purchaser" },
         { key: "purchase", label: "Purchase (Rs)", formatter: (v) => Number(v).toFixed(2) },
         { key: "purchaseKgs", label: "Weight (KG)", formatter: (v) => Number(v).toFixed(3) },
+        { key: "purchaseBirds", label: "Birds", formatter: (v) => String(Number(v || 0)) },
         { key: "payments", label: "Payments (Rs)", formatter: (v) => Number(v).toFixed(2) },
         { key: "outstanding", label: "Outstanding (Rs)", formatter: (v) => Number(v).toFixed(2) },
         { key: "oldBal", label: "Old Balance (Rs)", formatter: (v) => Number(v).toFixed(2) },
@@ -326,6 +334,7 @@ export function PurchaseReportsTable({
           date: inv.issue_date,
           challan: inv.challans?.challan_number || "",
           weight_kg: Number(inv.total_weight_kg || 0).toFixed(3),
+          birds: String(Number(inv.total_birds || 0)),
           amount: Number(inv.total_amount || 0).toFixed(2),
           paid: Number(inv.amount_paid || 0).toFixed(2),
           due: (
@@ -341,6 +350,7 @@ export function PurchaseReportsTable({
           date: p.payment_date,
           challan: "",
           weight_kg: "",
+          birds: "",
           amount: Number(p.amount || 0).toFixed(2),
           paid: Number(p.amount || 0).toFixed(2),
           due: "",
@@ -354,11 +364,12 @@ export function PurchaseReportsTable({
           date: c.challan_date,
           challan: c.challan_number,
           weight_kg: Number(c.total_weight_kg || 0).toFixed(3),
+          birds: String(Number(c.total_birds || 0)),
           amount: "",
           paid: "",
           due: "",
           status: c.status,
-          notes: `Birds: ${Number(c.total_birds || 0)}`,
+          notes: "",
         })),
       ];
 
@@ -380,6 +391,7 @@ export function PurchaseReportsTable({
           },
           { key: "challan", label: "Challan" },
           { key: "weight_kg", label: "Weight (KG)" },
+          { key: "birds", label: "Birds" },
           { key: "amount", label: "Amount" },
           { key: "paid", label: "Paid" },
           { key: "due", label: "Due" },
@@ -412,6 +424,7 @@ export function PurchaseReportsTable({
         name: r.name,
         purchase_fmt: `Rs.${r.purchase.toFixed(2)}`,
         kgs_fmt: r.purchaseKgs.toFixed(3),
+        birds_fmt: String(r.purchaseBirds),
         payments_fmt: `Rs.${r.payments.toFixed(2)}`,
         outstanding_fmt: `Rs.${r.outstanding.toFixed(2)}`,
         oldBal_fmt: `Rs.${r.oldBal.toFixed(2)}`,
@@ -419,12 +432,13 @@ export function PurchaseReportsTable({
       await exportToPDF(
         enriched,
         [
-          { key: "name", label: "Purchaser", widthFrac: 0.22 },
-          { key: "purchase_fmt", label: "Purchase", widthFrac: 0.16, align: "right" },
-          { key: "kgs_fmt", label: "Weight KG", widthFrac: 0.12, align: "right" },
-          { key: "payments_fmt", label: "Payments", widthFrac: 0.16, align: "right" },
-          { key: "outstanding_fmt", label: "Outstanding", widthFrac: 0.17, align: "right" },
-          { key: "oldBal_fmt", label: "Old Bal", widthFrac: 0.17, align: "right" },
+          { key: "name", label: "Purchaser", widthFrac: 0.2 },
+          { key: "purchase_fmt", label: "Purchase", widthFrac: 0.14, align: "right" },
+          { key: "kgs_fmt", label: "Weight KG", widthFrac: 0.11, align: "right" },
+          { key: "birds_fmt", label: "Birds", widthFrac: 0.09, align: "right" },
+          { key: "payments_fmt", label: "Payments", widthFrac: 0.14, align: "right" },
+          { key: "outstanding_fmt", label: "Outstanding", widthFrac: 0.15, align: "right" },
+          { key: "oldBal_fmt", label: "Old Bal", widthFrac: 0.15, align: "right" },
         ],
         `Purchase Report — ${monthLabel}`,
         `purchase-report-${getTimestamp()}.pdf`,
@@ -489,6 +503,7 @@ export function PurchaseReportsTable({
           { key: "purchaser_name", label: "Purchaser" },
           { key: "challan_date", label: "Date" },
           { key: "total_weight_kg", label: "Weight (KG)", formatter: (v) => Number(v).toFixed(3) },
+          { key: "total_birds", label: "Birds", formatter: (v) => String(Number(v || 0)) },
           { key: "status", label: "Status" },
           { key: "invoice_number", label: "Invoice" },
         ];
@@ -515,6 +530,7 @@ export function PurchaseReportsTable({
           date: r.challan_date,
           challan: r.challan_number,
           weight_kg: r.total_weight_kg.toFixed(3),
+          birds: String(r.total_birds),
           amount: "",
           paid: "",
           due: "",
@@ -528,6 +544,7 @@ export function PurchaseReportsTable({
           date: inv.issue_date,
           challan: inv.challans?.challan_number || "",
           weight_kg: Number(inv.total_weight_kg || 0).toFixed(3),
+          birds: String(Number(inv.total_birds || 0)),
           amount: Number(inv.total_amount || 0).toFixed(2),
           paid: Number(inv.amount_paid || 0).toFixed(2),
           due: (
@@ -543,6 +560,7 @@ export function PurchaseReportsTable({
           date: p.payment_date,
           challan: "",
           weight_kg: "",
+          birds: "",
           amount: Number(p.amount || 0).toFixed(2),
           paid: Number(p.amount || 0).toFixed(2),
           due: "",
@@ -569,6 +587,7 @@ export function PurchaseReportsTable({
           },
           { key: "challan", label: "Challan" },
           { key: "weight_kg", label: "Weight (KG)" },
+          { key: "birds", label: "Birds" },
           { key: "amount", label: "Amount" },
           { key: "paid", label: "Paid" },
           { key: "due", label: "Due" },
@@ -602,18 +621,20 @@ export function PurchaseReportsTable({
         purchaser_name: r.purchaser_name,
         challan_date: r.challan_date,
         weight_fmt: r.total_weight_kg.toFixed(3),
+        birds_fmt: String(r.total_birds),
         status: r.status,
         invoice_number: r.invoice_number || "—",
       }));
       await exportToPDF(
         enriched,
         [
-          { key: "challan_number", label: "Purchase challan", widthFrac: 0.14 },
-          { key: "purchaser_name", label: "Purchaser", widthFrac: 0.22 },
-          { key: "challan_date", label: "Date", widthFrac: 0.12 },
-          { key: "weight_fmt", label: "Weight", widthFrac: 0.12, align: "right" },
-          { key: "status", label: "Status", widthFrac: 0.14 },
-          { key: "invoice_number", label: "Invoice", widthFrac: 0.14 },
+          { key: "challan_number", label: "Purchase challan", widthFrac: 0.13 },
+          { key: "purchaser_name", label: "Purchaser", widthFrac: 0.2 },
+          { key: "challan_date", label: "Date", widthFrac: 0.11 },
+          { key: "weight_fmt", label: "Weight", widthFrac: 0.1, align: "right" },
+          { key: "birds_fmt", label: "Birds", widthFrac: 0.08, align: "right" },
+          { key: "status", label: "Status", widthFrac: 0.12 },
+          { key: "invoice_number", label: "Invoice", widthFrac: 0.12 },
         ],
         `Purchase challan tracking — ${monthLabel}`,
         `challan-tracking-${getTimestamp()}.pdf`,
@@ -701,6 +722,12 @@ export function PurchaseReportsTable({
                 </TableHead>
                 <TableHead
                   className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort("total_birds")}
+                >
+                  Birds <SortIcon column="total_birds" />
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer hover:bg-muted/50"
                   onClick={() => handleSort("status")}
                 >
                   Status <SortIcon column="status" />
@@ -708,7 +735,7 @@ export function PurchaseReportsTable({
                 <TableHead>Invoice</TableHead>
               </TableRow>
               <TableRow>
-                <TableHead colSpan={6}>
+                <TableHead colSpan={7}>
                   <Input
                     placeholder="Filter purchase challan, purchaser, or invoice..."
                     value={challanFilter}
@@ -721,7 +748,7 @@ export function PurchaseReportsTable({
             <TableBody>
               {pagination.paginatedItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No purchase challans for this period.
                   </TableCell>
                 </TableRow>
@@ -732,6 +759,7 @@ export function PurchaseReportsTable({
                     <TableCell>{row.purchaser_name}</TableCell>
                     <TableCell>{row.challan_date}</TableCell>
                     <TableCell>{row.total_weight_kg.toFixed(3)}</TableCell>
+                    <TableCell>{row.total_birds.toLocaleString("en-IN")}</TableCell>
                     <TableCell className="capitalize">{row.status}</TableCell>
                     <TableCell>{row.invoice_number || "—"}</TableCell>
                   </TableRow>
@@ -756,10 +784,11 @@ export function PurchaseReportsTable({
     (acc, row) => ({
       purchase: acc.purchase + row.purchase,
       purchaseKgs: acc.purchaseKgs + row.purchaseKgs,
+      purchaseBirds: acc.purchaseBirds + row.purchaseBirds,
       payments: acc.payments + row.payments,
       outstanding: acc.outstanding + row.outstanding,
     }),
-    { purchase: 0, purchaseKgs: 0, payments: 0, outstanding: 0 },
+    { purchase: 0, purchaseKgs: 0, purchaseBirds: 0, payments: 0, outstanding: 0 },
   );
 
   return (
@@ -792,6 +821,12 @@ export function PurchaseReportsTable({
               </TableHead>
               <TableHead
                 className="text-right cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSort("purchaseBirds")}
+              >
+                Birds <SortIcon column="purchaseBirds" />
+              </TableHead>
+              <TableHead
+                className="text-right cursor-pointer hover:bg-muted/50"
                 onClick={() => handleSort("payments")}
               >
                 Payments (₹) <SortIcon column="payments" />
@@ -810,7 +845,7 @@ export function PurchaseReportsTable({
               </TableHead>
             </TableRow>
             <TableRow>
-              <TableHead colSpan={6}>
+              <TableHead colSpan={7}>
                 <Input
                   placeholder="Filter purchaser..."
                   value={purchaserFilter}
@@ -823,7 +858,7 @@ export function PurchaseReportsTable({
           <TableBody>
             {pagination.paginatedItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   No purchase data for this period.
                 </TableCell>
               </TableRow>
@@ -836,6 +871,9 @@ export function PurchaseReportsTable({
                       ₹{row.purchase.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right">{row.purchaseKgs.toFixed(3)}</TableCell>
+                    <TableCell className="text-right">
+                      {row.purchaseBirds.toLocaleString("en-IN")}
+                    </TableCell>
                     <TableCell className="text-right">
                       ₹{row.payments.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </TableCell>
@@ -853,6 +891,9 @@ export function PurchaseReportsTable({
                     ₹{totals.purchase.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </TableCell>
                   <TableCell className="text-right">{totals.purchaseKgs.toFixed(3)}</TableCell>
+                  <TableCell className="text-right">
+                    {totals.purchaseBirds.toLocaleString("en-IN")}
+                  </TableCell>
                   <TableCell className="text-right">
                     ₹{totals.payments.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </TableCell>

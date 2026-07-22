@@ -1,5 +1,5 @@
-import { LoadingOverlay } from "@/components/loading-overlay"
+import { PageLoadingFallback } from "@/components/page-loading-fallback";
 
 export default function DashboardLoading() {
-  return <LoadingOverlay />
+  return <PageLoadingFallback scope="page" />;
 }

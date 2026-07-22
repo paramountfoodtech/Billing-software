@@ -103,13 +103,25 @@ export type InvoiceNumberRecord = {
   invoice_number: string;
   client_id: string;
   created_at?: string | null;
+  /** When false, invoice is excluded from auto sequence advancement. Defaults to true. */
+  counts_toward_sequence?: boolean | null;
 };
+
+export function invoiceCountsTowardSequence(
+  invoice: Pick<InvoiceNumberRecord, "counts_toward_sequence">,
+): boolean {
+  return invoice.counts_toward_sequence !== false;
+}
 
 /** True when the invoice belongs to the org-wide general series (not client-specific). */
 export function isGeneralSeriesInvoice(
   invoice: InvoiceNumberRecord,
   clients: ClientInvoicePattern[],
 ): boolean {
+  if (!invoiceCountsTowardSequence(invoice)) {
+    return false;
+  }
+
   const client = clients.find((c) => c.id === invoice.client_id);
   if (
     client?.invoice_number_pattern_type === "client_specific" &&
@@ -251,5 +263,114 @@ export async function isInvoiceNumberDuplicate(
   return {
     isDuplicate: Boolean(data?.length),
     error: null,
+  };
+}
+
+async function loadActiveDiscardedInvoiceNumbers(
+  supabase: SupabaseClient,
+  organizationId: string,
+): Promise<{ discarded: Set<string>; error: Error | null }> {
+  const { data, error } = await supabase
+    .from("discarded_invoice_numbers")
+    .select("invoice_number")
+    .eq("organization_id", organizationId)
+    .is("restored_at", null);
+
+  if (error) {
+    return { discarded: new Set(), error };
+  }
+
+  return {
+    discarded: new Set(
+      (data || []).map((row) =>
+        sanitizeInvoiceNumberInput(row.invoice_number || ""),
+      ),
+    ),
+    error: null,
+  };
+}
+
+const MAX_SEQUENCE_SKIP_ATTEMPTS = 500;
+export const MAX_SEQUENCE_INSERT_RETRIES = 10;
+
+export function isInvoiceNumberUniqueViolation(error: {
+  code?: string;
+  message?: string;
+} | null): boolean {
+  if (!error) return false;
+  if (error.code === "23505") return true;
+  return /duplicate key|unique constraint|invoices_organization_invoice_number/i.test(
+    error.message || "",
+  );
+}
+
+/**
+ * Starting from `candidate`, return the first invoice number that is not already
+ * used and not actively discarded. Advances with getNextInvoiceNumber when taken.
+ */
+export async function findNextAvailableInvoiceNumber(
+  supabase: SupabaseClient,
+  organizationId: string,
+  candidate: string,
+  excludeInvoiceId?: string,
+): Promise<{ invoiceNumber: string; error: Error | null }> {
+  let current = sanitizeInvoiceNumberInput(candidate.trim());
+  if (!current || !isValidInvoiceNumber(current)) {
+    return { invoiceNumber: "", error: null };
+  }
+
+  const { discarded, error: discardedError } =
+    await loadActiveDiscardedInvoiceNumbers(supabase, organizationId);
+  if (discardedError) {
+    return { invoiceNumber: "", error: discardedError };
+  }
+
+  for (let attempt = 0; attempt < MAX_SEQUENCE_SKIP_ATTEMPTS; attempt++) {
+    if (discarded.has(current)) {
+      const next = getNextInvoiceNumber(current);
+      if (!next) {
+        return {
+          invoiceNumber: "",
+          error: new Error(
+            `No available invoice number after "${current}". Sequence may be exhausted.`,
+          ),
+        };
+      }
+      current = next;
+      continue;
+    }
+
+    const { isDuplicate, error } = await isInvoiceNumberDuplicate(
+      supabase,
+      organizationId,
+      current,
+      excludeInvoiceId,
+    );
+
+    if (error) {
+      return { invoiceNumber: "", error };
+    }
+
+    if (!isDuplicate) {
+      return { invoiceNumber: current, error: null };
+    }
+
+    const next = getNextInvoiceNumber(current);
+    if (!next) {
+      return {
+        invoiceNumber: "",
+        error: new Error(
+          `No available invoice number after "${current}". Sequence may be exhausted.`,
+        ),
+      };
+    }
+    current = next;
+  }
+
+  return {
+    invoiceNumber: "",
+    error: new Error(
+      "Could not find an available invoice number after many attempts.",
+    ),
   };
 }

@@ -74,7 +74,7 @@ export default async function NewInvoicePage() {
       .eq("organization_id", organizationId),
     supabase
       .from("invoices")
-      .select("invoice_number, client_id, created_at")
+      .select("invoice_number, client_id, created_at, counts_toward_sequence")
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: false })
       .limit(500),

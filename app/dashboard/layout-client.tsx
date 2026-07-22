@@ -5,7 +5,7 @@ import { DashboardNav } from "@/components/dashboard-nav"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { useSidebarContext } from "@/app/dashboard/sidebar-context"
 import { cn } from "@/lib/utils"
-import { Suspense, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 
 interface Profile {
   id: string
@@ -38,18 +38,7 @@ export function DashboardLayoutClient({ profile, children }: DashboardLayoutClie
       >
         <DashboardHeader userId={profile?.id || ""} />
         <div className="flex-1 overflow-y-auto overflow-x-auto pt-16">
-          <Suspense 
-            fallback={
-              <div className="w-full h-full bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100" 
-                style={{
-                  animation: 'shimmerContent 2s infinite',
-                  backgroundSize: '200% 100%'
-                }}
-              />
-            }
-          >
-            {children}
-          </Suspense>
+          {children}
         </div>
       </main>
     </div>

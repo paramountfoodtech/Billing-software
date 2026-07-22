@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
-import { useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -65,7 +64,6 @@ export function DashboardNav({ profile }: DashboardNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
-  const [isPending, startTransition] = useTransition();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isSidebarCollapsed, setIsSidebarCollapsed } = useSidebarContext();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -95,11 +93,8 @@ export function DashboardNav({ profile }: DashboardNavProps) {
     }
   };
 
-  const handleNavigation = (href: string) => {
+  const handleNavigation = () => {
     setIsMobileMenuOpen(false);
-    startTransition(() => {
-      router.push(href);
-    });
   };
 
   const getNavGroupsForRole = (role: string | undefined): NavGroup[] => {
@@ -393,10 +388,8 @@ export function DashboardNav({ profile }: DashboardNavProps) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleNavigation(item.href);
-                    }}
+                    onClick={handleNavigation}
+                    prefetch
                     className={cn(
                       "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors relative group",
                       isSidebarCollapsed && "lg:justify-center",

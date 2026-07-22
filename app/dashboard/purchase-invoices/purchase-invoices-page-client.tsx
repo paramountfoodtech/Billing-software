@@ -20,6 +20,7 @@ interface PurchaseInvoice {
   invoice_number: string;
   issue_date: string;
   total_weight_kg: string;
+  total_birds?: number | null;
   price_per_kg: string;
   total_amount: string;
   amount_paid: string;

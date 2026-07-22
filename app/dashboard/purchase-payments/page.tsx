@@ -4,8 +4,6 @@ import { Plus } from "lucide-react"
 import Link from "next/link"
 import { PurchasePaymentsPageClient } from "./purchase-payments-page-client"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
-import { Suspense } from "react"
-import { LoadingOverlay } from "@/components/loading-overlay"
 
 export default async function PurchasePaymentsPage() {
   const supabase = await createClient()
@@ -63,14 +61,12 @@ export default async function PurchasePaymentsPage() {
           </Button>
         </div>
 
-        <Suspense fallback={<LoadingOverlay />}>
-          <PurchasePaymentsPageClient
-            purchasers={purchasers || []}
-            payments={payments || []}
-            purchaserInvoices={purchaserInvoices}
-            userRole={userRole}
-          />
-        </Suspense>
+        <PurchasePaymentsPageClient
+          purchasers={purchasers || []}
+          payments={payments || []}
+          purchaserInvoices={purchaserInvoices}
+          userRole={userRole}
+        />
       </div>
     </DashboardPageWrapper>
   )

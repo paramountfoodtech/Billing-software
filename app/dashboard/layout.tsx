@@ -1,12 +1,9 @@
 import type React from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { DashboardNav } from "@/components/dashboard-nav"
 import { PageTitleProvider } from "@/app/dashboard/page-title-context"
 import { SidebarProvider } from "@/app/dashboard/sidebar-context"
-import { DashboardHeader } from "@/components/dashboard-header"
 import { DashboardLayoutClient } from "@/app/dashboard/layout-client"
-import { Suspense } from "react"
 
 // Prevent caching of dashboard pages to ensure auth check on every request
 export const revalidate = 0

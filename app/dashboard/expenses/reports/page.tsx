@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper";
@@ -111,21 +110,13 @@ export default async function ExpenseReportsPage({
 
   return (
     <DashboardPageWrapper title="Expense Reports">
-      <Suspense
-        fallback={
-          <div className="w-full p-8 text-sm text-muted-foreground">
-            Loading expense reports…
-          </div>
-        }
-      >
-        <ExpenseReportsPageClient
+      <ExpenseReportsPageClient
           reportYear={reportYear}
           reportMonth={reportMonth}
           monthLabel={monthLabel}
           categoryRows={categoryRows}
           grandTotal={grandTotal}
-        />
-      </Suspense>
+      />
     </DashboardPageWrapper>
   );
 }

@@ -1,5 +1,10 @@
-import { LoadingOverlay } from "@/components/loading-overlay"
+import { PageLoadingFallback } from "@/components/page-loading-fallback";
 
 export default function RootLoading() {
-  return <LoadingOverlay />
+  return (
+    <PageLoadingFallback
+      scope="page"
+      className="flex min-h-screen items-start justify-center p-8"
+    />
+  );
 }

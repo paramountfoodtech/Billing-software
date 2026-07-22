@@ -53,6 +53,7 @@ interface PurchaseInvoice {
   purchaser_id: string | null;
   issue_date: string;
   total_weight_kg: string;
+  total_birds?: number | null;
   price_per_kg: string;
   total_amount: string;
   amount_paid: string;
@@ -169,6 +170,14 @@ export function PurchaseInvoicesTable({
           case "issue_date":
             aVal = new Date(a.issue_date).getTime();
             bVal = new Date(b.issue_date).getTime();
+            break;
+          case "total_weight_kg":
+            aVal = Number(a.total_weight_kg);
+            bVal = Number(b.total_weight_kg);
+            break;
+          case "total_birds":
+            aVal = Number(a.total_birds || 0);
+            bVal = Number(b.total_birds || 0);
             break;
           case "total_amount":
             aVal = Number(a.total_amount);
@@ -309,6 +318,11 @@ export function PurchaseInvoicesTable({
         formatter: (v) => Number(v).toFixed(3),
       },
       {
+        key: "total_birds",
+        label: "Birds",
+        formatter: (v) => String(Number(v || 0)),
+      },
+      {
         key: "total_amount",
         label: "Total Amount",
         formatter: (v) => Number(v).toFixed(2),
@@ -341,6 +355,7 @@ export function PurchaseInvoicesTable({
         day: "2-digit",
       }),
       weight_fmt: `${Number(inv.total_weight_kg).toFixed(3)} KG`,
+      birds_fmt: String(Number(inv.total_birds || 0)),
       total_fmt: `Rs.${Number(inv.total_amount).toFixed(2)}`,
       paid_fmt: `Rs.${Number(inv.amount_paid).toFixed(2)}`,
       due_fmt: `Rs.${(Number(inv.total_amount) - Number(inv.amount_paid)).toFixed(2)}`,
@@ -354,7 +369,8 @@ export function PurchaseInvoicesTable({
       { key: "challan_number", label: "Purchase challan", widthFrac: 0.1 },
       { key: "purchaser_name", label: "Purchaser", widthFrac: 0.18 },
       { key: "issue_date_fmt", label: "Date", widthFrac: 0.1 },
-      { key: "weight_fmt", label: "Weight", widthFrac: 0.1 },
+      { key: "weight_fmt", label: "Weight", widthFrac: 0.09 },
+      { key: "birds_fmt", label: "Birds", widthFrac: 0.07 },
       { key: "total_fmt", label: "Total", widthFrac: 0.1, align: "right" },
       { key: "paid_fmt", label: "Paid", widthFrac: 0.1, align: "right" },
       { key: "due_fmt", label: "Due", widthFrac: 0.1, align: "right" },
@@ -490,6 +506,20 @@ export function PurchaseInvoicesTable({
               </TableHead>
               <TableHead
                 className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                onClick={() => handleSort("total_weight_kg")}
+              >
+                Weight (KG)
+                <SortIcon column="total_weight_kg" />
+              </TableHead>
+              <TableHead
+                className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                onClick={() => handleSort("total_birds")}
+              >
+                Birds
+                <SortIcon column="total_birds" />
+              </TableHead>
+              <TableHead
+                className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
                 onClick={() => handleSort("total_amount")}
               >
                 Total
@@ -553,6 +583,8 @@ export function PurchaseInvoicesTable({
               </TableHead>
               <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
@@ -572,7 +604,7 @@ export function PurchaseInvoicesTable({
             {pagination.paginatedItems.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={11}
                   className="text-center py-8 text-muted-foreground"
                 >
                   No purchase invoices found.
@@ -598,6 +630,12 @@ export function PurchaseInvoicesTable({
                     </TableCell>
                     <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3">
                       {formatIndianDate(invoice.issue_date)}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                      {Number(invoice.total_weight_kg).toFixed(3)}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                      {Number(invoice.total_birds || 0).toLocaleString("en-IN")}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
                       ₹

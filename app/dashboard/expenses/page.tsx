@@ -1,30 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { ExpensesPageClient } from "./expenses-page-client";
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper";
-import { Suspense } from "react";
-import { LoadingOverlay } from "@/components/loading-overlay";
 import { Button } from "@/components/ui/button";
 import { Plus, Tags, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { canAccessExpenses } from "@/lib/permissions";
-
-async function ExpensesContent({ userRole }: { userRole?: string }) {
-  const supabase = await createClient();
-
-  const { data: entries } = await supabase
-    .from("expense_entries")
-    .select(
-      `
-      *,
-      expense_categories(name, slug),
-      profiles!expense_entries_created_by_fkey(full_name)
-    `,
-    )
-    .order("created_at", { ascending: false });
-
-  return <ExpensesPageClient entries={entries || []} userRole={userRole} />;
-}
 
 export default async function ExpensesPage() {
   const supabase = await createClient();
@@ -45,6 +26,17 @@ export default async function ExpensesPage() {
   }
 
   const userRole = profile?.role;
+
+  const { data: entries } = await supabase
+    .from("expense_entries")
+    .select(
+      `
+      *,
+      expense_categories(name, slug),
+      profiles!expense_entries_created_by_fkey(full_name)
+    `,
+    )
+    .order("created_at", { ascending: false });
 
   return (
     <DashboardPageWrapper title="Salary & Expenses">
@@ -69,9 +61,8 @@ export default async function ExpensesPage() {
             </Link>
           </Button>
         </div>
-        <Suspense fallback={<LoadingOverlay />}>
-          <ExpensesContent userRole={userRole} />
-        </Suspense>
+
+        <ExpensesPageClient entries={entries || []} userRole={userRole} />
       </div>
     </DashboardPageWrapper>
   );

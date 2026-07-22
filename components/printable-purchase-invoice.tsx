@@ -24,6 +24,7 @@ interface PurchaseInvoice {
   purchaser_invoice_number?: string | null;
   issue_date: string;
   total_weight_kg: string;
+  total_birds?: number | null;
   price_per_kg: string;
   total_amount: string;
   discount_amount?: string;
@@ -71,10 +72,10 @@ export function PrintablePurchaseInvoice({
       ? `Purchase weight (Purchase challan ${invoice.challans!.challan_number})`
       : "Purchase invoice");
   const boxes = invoice.challans?.challan_boxes || [];
-  const totalBirds = boxes.reduce(
-    (sum, box) => sum + Number(box.num_birds || 0),
-    0,
-  );
+  const totalBirds =
+    Number(invoice.total_birds || 0) ||
+    Number(invoice.challans?.total_birds || 0) ||
+    boxes.reduce((sum, box) => sum + Number(box.num_birds || 0), 0);
   const showWeightColumns = Number(invoice.total_weight_kg) > 0;
 
   const defaultTemplate: InvoiceTemplate = {

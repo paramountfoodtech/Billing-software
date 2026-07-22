@@ -1,4 +1,3 @@
-import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
@@ -72,7 +71,7 @@ export default async function PurchaseReportsPage({
     supabase.from("purchasers").select("id, name").order("name"),
     supabase
       .from("purchase_invoices")
-      .select("id, purchaser_id, issue_date, total_amount, total_weight_kg")
+      .select("id, purchaser_id, issue_date, total_amount, total_weight_kg, total_birds")
       .or("invoice_type.eq.challan,invoice_type.is.null")
       .gte("issue_date", rangeStart)
       .lte("issue_date", rangeEnd),
@@ -96,6 +95,7 @@ export default async function PurchaseReportsPage({
         challan_number,
         challan_date,
         total_weight_kg,
+        total_birds,
         status,
         purchase_invoice_id,
         purchaser_id,
@@ -141,6 +141,7 @@ export default async function PurchaseReportsPage({
       todayPurchaseKg: 0,
       todayPurchaseValue: 0,
       purchaseKgs: 0,
+      purchaseBirds: 0,
       payments: 0,
       outstanding: 0,
       oldBal: 0,
@@ -153,6 +154,7 @@ export default async function PurchaseReportsPage({
     if (!row) continue
     row.purchase += Number(inv.total_amount)
     row.purchaseKgs += Number(inv.total_weight_kg)
+    row.purchaseBirds += Number(inv.total_birds || 0)
     if (inv.issue_date === todayDate) {
       row.todayPurchaseKg += Number(inv.total_weight_kg)
       row.todayPurchaseValue += Number(inv.total_amount)
@@ -195,6 +197,7 @@ export default async function PurchaseReportsPage({
       purchaser_name: purchaser?.name || "Unknown",
       challan_date: c.challan_date,
       total_weight_kg: Number(c.total_weight_kg),
+      total_birds: Number(c.total_birds || 0),
       status: c.status,
       invoice_number: c.purchase_invoice_id
         ? invoiceNumberById.get(c.purchase_invoice_id) || null
@@ -204,14 +207,7 @@ export default async function PurchaseReportsPage({
 
   return (
     <DashboardPageWrapper title="Purchase Reports">
-      <Suspense
-        fallback={
-          <div className="w-full p-8 text-sm text-muted-foreground">
-            Loading purchase reports…
-          </div>
-        }
-      >
-        <PurchaseReportsPageClient
+      <PurchaseReportsPageClient
           reportYear={reportYear}
           reportMonth={reportMonth}
           rangeLabel={rangeLabel}
@@ -221,8 +217,7 @@ export default async function PurchaseReportsPage({
           challanRows={challanRows}
           purchasers={purchasers}
           initialPurchaserId={params.purchaser || null}
-        />
-      </Suspense>
+      />
     </DashboardPageWrapper>
   )
 }

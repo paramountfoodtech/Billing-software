@@ -4,61 +4,48 @@ import { Plus } from "lucide-react"
 import Link from "next/link"
 import { PaymentsPageClient } from "./payments-page-client"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
-import { Suspense } from "react"
-import { LoadingOverlay } from "@/components/loading-overlay"
 
 export default async function PaymentsPage() {
   const supabase = await createClient()
 
-  // Get current user role
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  let userRole: string | undefined
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle()
+  const profilePromise = user
+    ? supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+    : Promise.resolve({ data: null })
 
-    userRole = profile?.role
-  }
+  const [{ data: profile }, { data: clients }, { data: payments }, { data: invoices }] =
+    await Promise.all([
+      profilePromise,
+      supabase.from("clients").select("id, name").order("name", { ascending: true }),
+      supabase
+        .from("payments")
+        .select(
+          `
+          *,
+          invoices(id, invoice_number, total_amount, amount_paid, status, client_id, clients(name)),
+          profiles!payments_created_by_fkey(full_name)
+        `,
+        )
+        .order("payment_date", { ascending: false }),
+      supabase
+        .from("invoices")
+        .select("id, invoice_number, total_amount, amount_paid, status, client_id")
+        .order("client_id", { ascending: true }),
+    ])
 
-  // Get all clients for selector
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("id, name")
-    .order("name", { ascending: true })
+  const userRole = profile?.role
 
-  // Get all payments
-  const { data: payments } = await supabase
-    .from("payments")
-    .select(
-      `
-      *,
-      invoices(id, invoice_number, total_amount, amount_paid, status, client_id, clients(name)),
-      profiles!payments_created_by_fkey(full_name)
-    `,
-    )
-    .order("payment_date", { ascending: false })
-
-  // Get all invoices grouped by client for summary calculations
-  const { data: invoices } = await supabase
-    .from("invoices")
-    .select("id, invoice_number, total_amount, amount_paid, status, client_id")
-    .order("client_id", { ascending: true })
-
-  // Create a map of invoices by client
-  const clientInvoices: Record<string, any[]> = {}
+  const clientInvoices: Record<string, typeof invoices> = {}
   if (invoices) {
-    invoices.forEach((invoice) => {
+    for (const invoice of invoices) {
       if (!clientInvoices[invoice.client_id]) {
         clientInvoices[invoice.client_id] = []
       }
       clientInvoices[invoice.client_id].push(invoice)
-    })
+    }
   }
 
   return (
@@ -73,14 +60,12 @@ export default async function PaymentsPage() {
           </Button>
         </div>
 
-        <Suspense fallback={<LoadingOverlay />}>
-          <PaymentsPageClient
-            clients={clients || []}
-            payments={payments || []}
-            clientInvoices={clientInvoices}
-            userRole={userRole}
-          />
-        </Suspense>
+        <PaymentsPageClient
+          clients={clients || []}
+          payments={payments || []}
+          clientInvoices={clientInvoices}
+          userRole={userRole}
+        />
       </div>
     </DashboardPageWrapper>
   )

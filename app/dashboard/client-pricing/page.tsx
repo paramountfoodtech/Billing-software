@@ -5,8 +5,6 @@ import { Plus } from "lucide-react"
 import Link from "next/link"
 import { ClientPricingPageClient } from "./client-pricing-page-client"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
-import { Suspense } from "react"
-import { LoadingOverlay } from "@/components/loading-overlay"
 
 export default async function ClientPricingPage() {
   const supabase = await createClient()
@@ -19,33 +17,34 @@ export default async function ClientPricingPage() {
     redirect("/auth/login")
   }
 
-  // Check role (super_admin full, admin view-only)
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
 
   if (!profile || (profile.role !== "super_admin" && profile.role !== "admin")) {
     redirect("/dashboard")
   }
 
-  // Get all clients
-  const { data: clients } = await supabase.from("clients").select("id, name").order("name", { ascending: true })
-
-  // Get all pricing rules with client, product, and category details
-  const { data: pricingRules } = await supabase
-    .from("client_product_pricing")
-    .select(
-      `
-      *,
-      clients(name),
-      products(name, paper_price),
-      price_categories(name)
-    `,
-    )
-    .order("created_at", { ascending: false })
-
-  // Get price history for calculations
-  const { data: priceHistory } = await supabase
-    .from("price_category_history")
-    .select("price_category_id, price, effective_date")
+  const [{ data: clients }, { data: pricingRules }, { data: priceHistory }] =
+    await Promise.all([
+      supabase.from("clients").select("id, name").order("name", { ascending: true }),
+      supabase
+        .from("client_product_pricing")
+        .select(
+          `
+          *,
+          clients(name),
+          products(name, paper_price),
+          price_categories(name)
+        `,
+        )
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("price_category_history")
+        .select("price_category_id, price, effective_date"),
+    ])
 
   return (
     <DashboardPageWrapper title="Client-Specific Pricing">
@@ -61,14 +60,12 @@ export default async function ClientPricingPage() {
           )}
         </div>
 
-        <Suspense fallback={<LoadingOverlay />}>
-          <ClientPricingPageClient
-            pricingRules={pricingRules || []}
-            priceHistory={priceHistory || []}
-            clients={clients || []}
-            userRole={profile.role}
-          />
-        </Suspense>
+        <ClientPricingPageClient
+          pricingRules={pricingRules || []}
+          priceHistory={priceHistory || []}
+          clients={clients || []}
+          userRole={profile.role}
+        />
       </div>
     </DashboardPageWrapper>
   )

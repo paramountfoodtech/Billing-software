@@ -31,7 +31,7 @@ import { DashboardClient } from "./dashboard-client";
 import { DashboardRefresh } from "@/components/dashboard-refresh";
 import { DashboardMonthlyHeader } from "@/components/dashboard-monthly-header";
 import { Suspense } from "react";
-import { LoadingOverlay } from "@/components/loading-overlay";
+import { PageLoadingFallback } from "@/components/page-loading-fallback";
 import { MaterialDashboardWidgets } from "@/components/material-dashboard-widgets";
 
 // Prevent caching to ensure fresh data on every request
@@ -447,19 +447,11 @@ export default async function DashboardPage({
         <FinancialKpiCards kpis={fyKpis} periodHint="this FY" />
 
         {/* Monthly Financial summary */}
-        <Suspense
-          fallback={
-            <div className="mb-4 text-sm text-muted-foreground">
-              Loading monthly summary…
-            </div>
-          }
-        >
-          <DashboardMonthlyHeader
-            reportYear={reportYear}
-            reportMonth={reportMonth}
-            monthLabel={monthLabel}
-          />
-        </Suspense>
+        <DashboardMonthlyHeader
+          reportYear={reportYear}
+          reportMonth={reportMonth}
+          monthLabel={monthLabel}
+        />
         <FinancialKpiCards kpis={monthKpis} periodHint={`in ${monthLabel}`} />
 
         {/* Row 2: Collections & clients */}
@@ -565,9 +557,7 @@ export default async function DashboardPage({
         </div>
 
         {/* Charts: Pending/Outstanding/Collection Rate/Avg Invoice + 3 charts */}
-        <Suspense fallback={<LoadingOverlay />}>
-          <DashboardCharts invoices={chartsInvoices} payments={chartsPayments} />
-        </Suspense>
+        <DashboardCharts invoices={chartsInvoices} payments={chartsPayments} />
 
         {/* Tabs: Client View | Overdue by Days | Top Clients | Recent Activity */}
         <Tabs defaultValue="client" className="mt-8 space-y-6">
@@ -862,7 +852,7 @@ export default async function DashboardPage({
           </TabsContent>
         </Tabs>
 
-        <Suspense fallback={<LoadingOverlay />}>
+        <Suspense fallback={<PageLoadingFallback scope="content" variant="kpi-section" />}>
           <MaterialDashboardWidgets />
         </Suspense>
       </div>

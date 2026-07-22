@@ -74,6 +74,9 @@ export function PurchaseInvoiceForm({
   const [totalWeightInput, setTotalWeightInput] = useState(
     initialChallan ? String(initialChallan.total_weight_kg) : "",
   );
+  const [totalBirdsInput, setTotalBirdsInput] = useState(
+    initialChallan ? String(initialChallan.total_birds || 0) : "",
+  );
   const [pricePerKg, setPricePerKg] = useState("");
   const [totalPrice, setTotalPrice] = useState("");
   const [discount, setDiscount] = useState("");
@@ -118,6 +121,7 @@ export function PurchaseInvoiceForm({
     if (!selected) return;
     setPurchaserId(selected.purchaser_id);
     setTotalWeightInput(String(selected.total_weight_kg));
+    setTotalBirdsInput(String(selected.total_birds || 0));
   }, [challanId, challans]);
 
   // Clear linked challan when issue date changes and it no longer matches
@@ -130,11 +134,10 @@ export function PurchaseInvoiceForm({
   }, [issueDate, challanId, challans, initialChallanId]);
 
   const totalWeight = Number(totalWeightInput) || 0;
+  const totalBirds = Math.max(0, Math.round(Number(totalBirdsInput) || 0));
   const selectedChallan = challanId
     ? challans.find((c) => c.id === challanId)
     : undefined;
-  const totalBirds = Number(selectedChallan?.total_birds || 0);
-
   const liveRate =
     liveCategoryId && issueDate
       ? getPriceForCategoryOnDate(liveCategoryId, issueDate, priceHistory)
@@ -202,6 +205,15 @@ export function PurchaseInvoiceForm({
       return;
     }
 
+    if (!purchaserInvoiceNumber.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Missing purchaser invoice number",
+        description: "Please enter the invoice number from the purchaser.",
+      });
+      return;
+    }
+
     if (totalWeight <= 0) {
       toast({
         variant: "destructive",
@@ -265,13 +277,14 @@ export function PurchaseInvoiceForm({
         .from("purchase_invoices")
         .insert({
           invoice_number: invoiceNumber.trim(),
-          purchaser_invoice_number: purchaserInvoiceNumber.trim() || null,
+          purchaser_invoice_number: purchaserInvoiceNumber.trim(),
           invoice_type: "challan",
           description: lineDescription,
           challan_id: challanId || null,
           purchaser_id: purchaserId,
           issue_date: issueDate,
           total_weight_kg: totalWeight,
+          total_birds: totalBirds,
           price_per_kg: computedPricePerKg,
           discount_amount: discountAmount,
           total_amount: finalTotal,
@@ -356,13 +369,15 @@ export function PurchaseInvoiceForm({
 
             <div className="space-y-2">
               <Label htmlFor="purchaser_invoice_number">
-                Purchaser Invoice Number
+                Purchaser Invoice Number{" "}
+                <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="purchaser_invoice_number"
                 value={purchaserInvoiceNumber}
                 onChange={(e) => setPurchaserInvoiceNumber(e.target.value)}
                 placeholder="Invoice number from purchaser"
+                required
               />
             </div>
 
@@ -422,6 +437,21 @@ export function PurchaseInvoiceForm({
                 value={totalWeightInput}
                 onChange={(e) => setTotalWeightInput(e.target.value)}
                 placeholder="0.000"
+                readOnly={Boolean(challanId)}
+                className={challanId ? "bg-muted" : undefined}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="total_birds">Total Birds</Label>
+              <Input
+                id="total_birds"
+                type="number"
+                step="1"
+                min="0"
+                value={totalBirdsInput}
+                onChange={(e) => setTotalBirdsInput(e.target.value)}
+                placeholder="0"
                 readOnly={Boolean(challanId)}
                 className={challanId ? "bg-muted" : undefined}
               />
@@ -623,7 +653,10 @@ export function PurchaseInvoiceForm({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button
+              type="submit"
+              disabled={isLoading || !purchaserInvoiceNumber.trim()}
+            >
               {isLoading && <Spinner className="mr-2 h-4 w-4" />}
               Create Invoice
             </Button>

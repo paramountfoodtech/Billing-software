@@ -17,6 +17,7 @@ type PurchaseInvoiceForExport = {
   purchaser_invoice_number?: string | null;
   issue_date: string;
   total_weight_kg: string | number;
+  total_birds?: number | null;
   price_per_kg: string | number;
   total_amount: string | number;
   discount_amount?: string | number | null;
@@ -123,6 +124,7 @@ export async function fetchPurchaseInvoicesForExport(invoiceIds: string[]) {
       purchaser_invoice_number,
       issue_date,
       total_weight_kg,
+      total_birds,
       price_per_kg,
       total_amount,
       discount_amount,
@@ -228,6 +230,7 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
     const hasChallan = Boolean(invoice.challans?.challan_number);
     const boxes = invoice.challans?.challan_boxes || [];
     const totalBirds =
+      Number(invoice.total_birds || 0) ||
       Number(invoice.challans?.total_birds || 0) ||
       boxes.reduce((sum, box) => sum + Number(box.num_birds || 0), 0);
     const lineDescription =

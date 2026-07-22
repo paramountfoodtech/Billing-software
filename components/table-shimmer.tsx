@@ -1,24 +1,34 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ShimmerBox } from "@/components/shimmer-primitives";
 
 interface TableShimmerProps {
-  rows?: number
-  columns?: number
-  columnWidths?: (string | number)[]
+  rows?: number;
+  columns?: number;
+  columnWidths?: (string | number)[];
+  showFilterRow?: boolean;
 }
 
-export function TableShimmer({ rows = 8, columns = 6, columnWidths }: TableShimmerProps) {
+/** @deprecated Prefer PageLoadingFallback / DataTableShimmer for route-aware layouts. */
+export function TableShimmer({
+  rows = 8,
+  columns = 6,
+  columnWidths,
+  showFilterRow = true,
+}: TableShimmerProps) {
   const getColumnWidth = (index: number) => {
-    if (!columnWidths || index >= columnWidths.length) return "auto"
-    const width = columnWidths[index]
-    return typeof width === "number" ? `${width}px` : width
-  }
+    if (!columnWidths || index >= columnWidths.length) return undefined;
+    const width = columnWidths[index];
+    return typeof width === "number" ? `${width}px` : width;
+  };
 
-  const widthPattern = ["w-full", "w-5/6", "w-3/4"]
-
-  const shimmerStyle = {
-    animation: "shimmerContent 1.6s linear infinite",
-    backgroundSize: "200% 100%",
-  } as const
+  const widthPattern = ["w-full", "w-5/6", "w-3/4"];
 
   return (
     <div
@@ -27,84 +37,88 @@ export function TableShimmer({ rows = 8, columns = 6, columnWidths }: TableShimm
       aria-busy="true"
       aria-label="Loading table data"
     >
-      <Table>
+      <Table className="text-xs sm:text-sm">
         <TableHeader>
-          <TableRow className="bg-slate-50">
+          <TableRow>
             {Array.from({ length: columns }).map((_, i) => (
-              <TableHead key={`header-${i}`} style={{ width: getColumnWidth(i) }}>
-                <div
-                  className="h-4 w-3/5 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 rounded"
-                  style={shimmerStyle}
-                />
+              <TableHead
+                key={`header-${i}`}
+                className="px-2 sm:px-4 py-2 sm:py-3"
+                style={{ width: getColumnWidth(i) }}
+              >
+                <ShimmerBox className="h-4 w-3/5" />
               </TableHead>
             ))}
           </TableRow>
+          {showFilterRow && (
+            <TableRow>
+              {Array.from({ length: columns }).map((_, i) => (
+                <TableHead key={`filter-${i}`} className="px-2 sm:px-4 py-2 sm:py-3">
+                  {i < columns - 1 ? (
+                    <ShimmerBox className="h-7 w-full max-w-[140px] rounded-md" />
+                  ) : null}
+                </TableHead>
+              ))}
+            </TableRow>
+          )}
         </TableHeader>
         <TableBody>
           {Array.from({ length: rows }).map((_, rowIndex) => (
             <TableRow key={`row-${rowIndex}`} className="hover:bg-transparent">
               {Array.from({ length: columns }).map((_, colIndex) => {
-                const patternIndex = (rowIndex + colIndex) % widthPattern.length
-                let widthClass = widthPattern[patternIndex]
-
-                if (colIndex === columns - 1) {
-                  widthClass = "w-16"
-                }
+                const patternIndex = (rowIndex + colIndex) % widthPattern.length;
+                const widthClass =
+                  colIndex === columns - 1
+                    ? "w-16"
+                    : widthPattern[patternIndex];
 
                 return (
-                  <TableCell key={`cell-${rowIndex}-${colIndex}`} style={{ width: getColumnWidth(colIndex) }}>
-                    <div
-                      className={`h-4 ${widthClass} bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 rounded`}
-                      style={{
-                        ...shimmerStyle,
-                        animationDelay: `${colIndex * 80}ms`,
-                      }}
-                    />
+                  <TableCell
+                    key={`cell-${rowIndex}-${colIndex}`}
+                    className="px-2 sm:px-4 py-2 sm:py-3"
+                    style={{ width: getColumnWidth(colIndex) }}
+                  >
+                    <ShimmerBox className={`h-4 ${widthClass}`} />
                   </TableCell>
-                )
+                );
               })}
             </TableRow>
           ))}
         </TableBody>
       </Table>
     </div>
-  )
+  );
 }
 
-export function TableRowShimmer({ columns = 6, columnWidths }: Omit<TableShimmerProps, 'rows'>) {
+export function TableRowShimmer({
+  columns = 6,
+  columnWidths,
+}: Omit<TableShimmerProps, "rows">) {
   const getColumnWidth = (index: number) => {
-    if (!columnWidths || index >= columnWidths.length) return "auto"
-    const width = columnWidths[index]
-    return typeof width === "number" ? `${width}px` : width
-  }
+    if (!columnWidths || index >= columnWidths.length) return undefined;
+    const width = columnWidths[index];
+    return typeof width === "number" ? `${width}px` : width;
+  };
 
-  const widthPattern = ["w-full", "w-5/6", "w-3/4"]
-  const shimmerStyle = {
-    animation: "shimmerContent 1.6s linear infinite",
-    backgroundSize: "200% 100%",
-  } as const
+  const widthPattern = ["w-full", "w-5/6", "w-3/4"];
 
   return (
     <TableRow className="hover:bg-transparent">
       {Array.from({ length: columns }).map((_, colIndex) => {
-        const patternIndex = colIndex % widthPattern.length
-        let widthClass = widthPattern[patternIndex]
-        if (colIndex === columns - 1) {
-          widthClass = "w-16"
-        }
+        const patternIndex = colIndex % widthPattern.length;
+        const widthClass =
+          colIndex === columns - 1 ? "w-16" : widthPattern[patternIndex];
 
         return (
-          <TableCell key={`cell-${colIndex}`} style={{ width: getColumnWidth(colIndex) }}>
-            <div
-              className={`h-4 ${widthClass} bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 rounded`}
-              style={{
-                ...shimmerStyle,
-                animationDelay: `${colIndex * 80}ms`,
-              }}
-            />
+          <TableCell
+            key={`cell-${colIndex}`}
+            className="px-2 sm:px-4 py-2 sm:py-3"
+            style={{ width: getColumnWidth(colIndex) }}
+          >
+            <ShimmerBox className={`h-4 ${widthClass}`} />
           </TableCell>
-        )
+        );
       })}
     </TableRow>
-  )
+  );
 }

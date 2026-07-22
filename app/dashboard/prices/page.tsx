@@ -6,15 +6,11 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Plus } from "lucide-react"
 import { PricesPageClient } from "@/app/dashboard/prices/prices-page-client"
-import PricesAccountantSimple from "@/app/dashboard/prices/prices-accountant-simple"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
-import { Suspense } from "react"
-import { LoadingOverlay } from "@/components/loading-overlay"
 
 export default async function PricesPage() {
   const supabase = await createClient()
 
-  // Check authentication
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -23,31 +19,32 @@ export default async function PricesPage() {
     redirect("/auth/login")
   }
 
-  // Get user's organization
-  const { data: profile } = await supabase.from("profiles").select("organization_id, role").eq("id", user.id).single()
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("organization_id, role")
+    .eq("id", user.id)
+    .single()
 
   if (!profile) {
     redirect("/dashboard")
   }
 
-  // If accountant, go directly to Update Prices page
   if (profile.role === "accountant") {
     redirect("/dashboard/prices/new")
   }
 
-  // Get all price categories with latest prices
-  const { data: priceCategories } = await supabase
-    .from("price_categories")
-    .select("*")
-    .eq("organization_id", profile.organization_id)
-    .order("position", { ascending: true })
-
-  // Get latest price for each category
-  const { data: priceHistory } = await supabase
-    .from("price_category_history")
-    .select("*")
-    .eq("organization_id", profile.organization_id)
-    .order("effective_date", { ascending: false })
+  const [{ data: priceCategories }, { data: priceHistory }] = await Promise.all([
+    supabase
+      .from("price_categories")
+      .select("*")
+      .eq("organization_id", profile.organization_id)
+      .order("position", { ascending: true }),
+    supabase
+      .from("price_category_history")
+      .select("*")
+      .eq("organization_id", profile.organization_id)
+      .order("effective_date", { ascending: false }),
+  ])
 
   return (
     <DashboardPageWrapper title="Price Management">
@@ -66,13 +63,11 @@ export default async function PricesPage() {
           </Button>
         </div>
 
-        <Suspense fallback={<LoadingOverlay />}>
-          <PricesPageClient 
-            priceCategories={priceCategories || []} 
-            priceHistory={priceHistory || []}
-            userRole={profile.role}
-          />
-        </Suspense>
+        <PricesPageClient
+          priceCategories={priceCategories || []}
+          priceHistory={priceHistory || []}
+          userRole={profile.role}
+        />
       </div>
     </DashboardPageWrapper>
   )
