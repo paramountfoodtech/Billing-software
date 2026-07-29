@@ -34,8 +34,8 @@ export default async function InvoicesPage() {
   const userRole = profile?.role;
   const organizationId = profile?.organization_id ?? undefined;
 
-  const invoices = await fetchAllPages((from, to) =>
-    supabase
+  const invoices = await fetchAllPages(async (from, to) => {
+    const { data, error } = await supabase
       .from("invoices")
       .select(
         `
@@ -45,8 +45,9 @@ export default async function InvoicesPage() {
       `,
       )
       .order("created_at", { ascending: false })
-      .range(from, to),
-  );
+      .range(from, to);
+    return { data, error };
+  });
 
   let discardedNumbers: Array<{
     id: string;

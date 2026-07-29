@@ -246,81 +246,89 @@ export default async function DashboardPage({
     allInvoices,
   ] = await Promise.all([
     supabase.from("clients").select("id", { count: "exact", head: true }),
-    fetchAllPages((from, to) =>
-      supabase
+    fetchAllPages(async (from, to) => {
+      const { data, error } = await supabase
         .from("invoices")
         .select("*, clients(name)")
         .gte("issue_date", fyRange.start)
         .lte("issue_date", fyRange.end)
         .order("created_at", { ascending: false })
-        .range(from, to),
-    ),
-    fetchAllPages((from, to) =>
-      supabase
+        .range(from, to);
+      return { data, error };
+    }),
+    fetchAllPages(async (from, to) => {
+      const { data, error } = await supabase
         .from("payments")
         .select("*")
         .gte("payment_date", fyRange.start)
         .lte("payment_date", fyRange.end)
         .order("payment_date", { ascending: false })
-        .range(from, to),
-    ),
-    fetchAllPages((from, to) =>
-      supabase
+        .range(from, to);
+      return { data, error };
+    }),
+    fetchAllPages(async (from, to) => {
+      const { data, error } = await supabase
         .from("purchase_invoices")
         .select("total_amount, status, invoice_type")
         .or("invoice_type.eq.challan,invoice_type.is.null")
         .gte("issue_date", fyRange.start)
         .lte("issue_date", fyRange.end)
         .order("issue_date", { ascending: true })
-        .range(from, to),
-    ),
-    fetchAllPages((from, to) =>
-      supabase
+        .range(from, to);
+      return { data, error };
+    }),
+    fetchAllPages(async (from, to) => {
+      const { data, error } = await supabase
         .from("expense_entries")
         .select("total_amount, status, salary_month")
         .gte("issue_date", fyRange.start)
         .lte("issue_date", fyRange.end)
         .neq("status", "cancelled")
         .order("issue_date", { ascending: true })
-        .range(from, to),
-    ),
-    fetchAllPages((from, to) =>
-      supabase
+        .range(from, to);
+      return { data, error };
+    }),
+    fetchAllPages(async (from, to) => {
+      const { data, error } = await supabase
         .from("invoices")
         .select("total_amount, status")
         .gte("issue_date", monthStart)
         .lte("issue_date", monthEnd)
         .order("issue_date", { ascending: true })
-        .range(from, to),
-    ),
-    fetchAllPages((from, to) =>
-      supabase
+        .range(from, to);
+      return { data, error };
+    }),
+    fetchAllPages(async (from, to) => {
+      const { data, error } = await supabase
         .from("purchase_invoices")
         .select("total_amount, status, invoice_type")
         .or("invoice_type.eq.challan,invoice_type.is.null")
         .gte("issue_date", monthStart)
         .lte("issue_date", monthEnd)
         .order("issue_date", { ascending: true })
-        .range(from, to),
-    ),
-    fetchAllPages((from, to) =>
-      supabase
+        .range(from, to);
+      return { data, error };
+    }),
+    fetchAllPages(async (from, to) => {
+      const { data, error } = await supabase
         .from("expense_entries")
         .select("total_amount, status")
         .gte("issue_date", monthStart)
         .lte("issue_date", monthEnd)
         .neq("status", "cancelled")
         .order("issue_date", { ascending: true })
-        .range(from, to),
-    ),
+        .range(from, to);
+      return { data, error };
+    }),
     supabase.from("clients").select("id, name").order("name", { ascending: true }),
-    fetchAllPages((from, to) =>
-      supabase
+    fetchAllPages(async (from, to) => {
+      const { data, error } = await supabase
         .from("invoices")
         .select("*, clients(name, email)")
         .order("created_at", { ascending: false })
-        .range(from, to),
-    ),
+        .range(from, to);
+      return { data, error };
+    }),
   ]);
 
   const totalClients = clientsCountResult.count || 0;
