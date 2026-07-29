@@ -1,13 +1,25 @@
 import { Resend } from "resend"
 
+export type EmailAttachment = {
+  filename: string
+  content: string
+}
+
 interface SendEmailParams {
   to: string
   subject: string
   html: string
   from?: string
+  attachments?: EmailAttachment[]
 }
 
-export async function sendEmail({ to, subject, html, from }: SendEmailParams) {
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  from,
+  attachments,
+}: SendEmailParams) {
   try {
     // Prefer server-only env vars, fallback to NEXT_PUBLIC for backward compatibility
     const resendApiKey =
@@ -45,6 +57,10 @@ export async function sendEmail({ to, subject, html, from }: SendEmailParams) {
       to,
       subject,
       html,
+      attachments: attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        content: attachment.content,
+      })),
     })
 
     if (error) {

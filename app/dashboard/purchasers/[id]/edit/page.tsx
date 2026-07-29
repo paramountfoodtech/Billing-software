@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import { PurchaserForm } from "@/components/purchaser-form"
 import { canEdit } from "@/lib/permissions"
+import { fetchUnlinkedClients } from "@/lib/client-purchaser-link"
 
 export default async function EditPurchaserPage({
   params,
@@ -18,7 +19,7 @@ export default async function EditPurchaserPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organization_id")
     .eq("id", user.id)
     .single()
 
@@ -32,6 +33,20 @@ export default async function EditPurchaserPage({
 
   if (!purchaser) notFound()
 
+  let linkedClientName: string | null = null
+  if (purchaser.linked_client_id) {
+    const { data: client } = await supabase
+      .from("clients")
+      .select("name")
+      .eq("id", purchaser.linked_client_id)
+      .maybeSingle()
+    linkedClientName = client?.name || null
+  }
+
+  const unlinkedClients = profile?.organization_id
+    ? await fetchUnlinkedClients(supabase, profile.organization_id)
+    : []
+
   return (
     <div className="p-6 lg:p-8">
       <div className="mb-6">
@@ -40,7 +55,11 @@ export default async function EditPurchaserPage({
       </div>
 
       <div className="max-w-2xl">
-        <PurchaserForm purchaser={purchaser} />
+        <PurchaserForm
+          purchaser={purchaser}
+          linkedClientName={linkedClientName}
+          unlinkedClients={unlinkedClients}
+        />
       </div>
     </div>
   )

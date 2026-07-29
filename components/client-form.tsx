@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
+import { FormBusyOverlay } from "@/components/form-busy-overlay";
 import { useToast } from "@/hooks/use-toast";
 import {
   getProfileDisplayName,
@@ -17,12 +18,19 @@ import {
 } from "@/lib/entry-history";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { sendClientInvitation } from "@/app/actions/send-client-invitation";
 import {
   getInvoiceNumberPatternConfigError,
   sanitizeInvoiceNumberInput,
 } from "@/lib/invoice-number";
+import {
+  createPurchaserFromClientContact,
+  linkClientAndPurchaser,
+  unlinkClientPurchaser,
+  type LinkableOption,
+} from "@/lib/client-purchaser-link";
+import Link from "next/link";
 
 interface Client {
   id: string;
@@ -41,18 +49,31 @@ interface Client {
   value_per_bird?: number | null;
   invoice_number_pattern_type?: string | null;
   invoice_number_pattern?: string | null;
+  linked_purchaser_id?: string | null;
 }
 
 interface ClientFormProps {
   client?: Client;
+  linkedPurchaserName?: string | null;
+  unlinkedPurchasers?: LinkableOption[];
 }
 
-export function ClientForm({ client }: ClientFormProps) {
+export function ClientForm({
+  client,
+  linkedPurchaserName = null,
+  unlinkedPurchasers: initialUnlinkedPurchasers = [],
+}: ClientFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [fetchingPincode, setFetchingPincode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDualRole, setIsDualRole] = useState(Boolean(client?.linked_purchaser_id));
+  const [linkMode, setLinkMode] = useState<"create" | "existing">("create");
+  const [selectedPurchaserId, setSelectedPurchaserId] = useState("");
+  const [unlinkedPurchasers, setUnlinkedPurchasers] = useState(
+    initialUnlinkedPurchasers,
+  );
 
   const [formData, setFormData] = useState({
     name: client?.name || "",
@@ -72,6 +93,14 @@ export function ClientForm({ client }: ClientFormProps) {
       client?.invoice_number_pattern_type || "general",
     invoice_number_pattern: client?.invoice_number_pattern || "",
   });
+
+  useEffect(() => {
+    setUnlinkedPurchasers(initialUnlinkedPurchasers);
+  }, [initialUnlinkedPurchasers]);
+
+  useEffect(() => {
+    setIsDualRole(Boolean(client?.linked_purchaser_id));
+  }, [client?.linked_purchaser_id]);
 
   const handlePincodeChange = async (pincode: string) => {
     const digitsOnly = pincode.replace(/\D/g, "").slice(0, 6);
@@ -156,7 +185,7 @@ export function ClientForm({ client }: ClientFormProps) {
       // Get user's organization
       const { data: profile } = await supabase
         .from("profiles")
-        .select("organization_id")
+        .select("organization_id, role")
         .eq("id", user.id)
         .single();
 
@@ -238,6 +267,36 @@ export function ClientForm({ client }: ClientFormProps) {
 
         if (error) throw error;
 
+        const currentlyLinked = Boolean(client.linked_purchaser_id);
+
+        if (isDualRole && !currentlyLinked) {
+          let purchaserId = selectedPurchaserId;
+          if (linkMode === "create") {
+            purchaserId = await createPurchaserFromClientContact(
+              supabase,
+              profile.organization_id,
+              user.id,
+              formData,
+              profile.role,
+            );
+          } else if (!purchaserId) {
+            throw new Error("Please select a purchaser to link.");
+          }
+          await linkClientAndPurchaser(
+            supabase,
+            client.id,
+            purchaserId,
+            profile.organization_id,
+            profile.role,
+          );
+        } else if (!isDualRole && currentlyLinked) {
+          await unlinkClientPurchaser(supabase, {
+            clientId: client.id,
+            purchaserId: client.linked_purchaser_id,
+            organizationId: profile.organization_id,
+          });
+        }
+
         const userName = await getProfileDisplayName(supabase, user.id);
         await logEntryHistory(supabase, {
           organizationId: profile.organization_id,
@@ -267,6 +326,28 @@ export function ClientForm({ client }: ClientFormProps) {
 
         if (error) throw error;
 
+        if (created?.id && isDualRole) {
+          let purchaserId = selectedPurchaserId;
+          if (linkMode === "create") {
+            purchaserId = await createPurchaserFromClientContact(
+              supabase,
+              profile.organization_id,
+              user.id,
+              formData,
+              profile.role,
+            );
+          } else if (!purchaserId) {
+            throw new Error("Please select a purchaser to link.");
+          }
+          await linkClientAndPurchaser(
+            supabase,
+            created.id,
+            purchaserId,
+            profile.organization_id,
+            profile.role,
+          );
+        }
+
         const userName = await getProfileDisplayName(supabase, user.id);
         if (created?.id) {
           await logEntryHistory(supabase, {
@@ -285,11 +366,14 @@ export function ClientForm({ client }: ClientFormProps) {
         toast({
           variant: "success",
           title: "Client created",
-          description: `${formData.name} has been added successfully.`,
+          description: isDualRole
+            ? `${formData.name} has been added as client and purchaser.`
+            : `${formData.name} has been added successfully.`,
         });
       }
 
       await router.push("/dashboard/clients");
+      router.refresh();
     } catch (error: unknown) {
       let errorMessage = "An unexpected error occurred. Please try again.";
 
@@ -318,9 +402,17 @@ export function ClientForm({ client }: ClientFormProps) {
   };
 
   return (
-    <Card>
+    <Card className="relative overflow-hidden">
+      <FormBusyOverlay
+        active={isLoading}
+        label={client ? "Updating client…" : "Creating client…"}
+      />
       <CardContent className="pt-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form
+          onSubmit={handleSubmit}
+          className={`space-y-6 ${isLoading ? "pointer-events-none select-none" : ""}`}
+          aria-busy={isLoading}
+        >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="name">
@@ -600,6 +692,98 @@ export function ClientForm({ client }: ClientFormProps) {
               placeholder="Additional information about this client..."
               rows={4}
             />
+          </div>
+
+          <div className="rounded-lg border p-4 bg-white space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="is_dual_role">Also a purchaser</Label>
+                <p className="text-xs text-muted-foreground">
+                  Same party sells to you and buys from you. Creates or links a
+                  purchaser record.
+                </p>
+              </div>
+              <Switch
+                id="is_dual_role"
+                checked={isDualRole}
+                onCheckedChange={(checked) => {
+                  setIsDualRole(checked);
+                  if (!checked) {
+                    setSelectedPurchaserId("");
+                    setLinkMode("create");
+                  }
+                }}
+              />
+            </div>
+
+            {isDualRole && client?.linked_purchaser_id && (
+              <div className="text-sm space-y-2">
+                <p>
+                  Linked purchaser:{" "}
+                  <span className="font-medium">
+                    {linkedPurchaserName || "Purchaser"}
+                  </span>
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <Link
+                    href={`/dashboard/trade-summary?clientId=${client.id}`}
+                  >
+                    View buy &amp; sell summary
+                  </Link>
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Turn off the toggle and save to unlink (records are kept).
+                </p>
+              </div>
+            )}
+
+            {isDualRole && !client?.linked_purchaser_id && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={linkMode === "create" ? "default" : "outline"}
+                    onClick={() => setLinkMode("create")}
+                  >
+                    Create new purchaser
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={linkMode === "existing" ? "default" : "outline"}
+                    onClick={() => setLinkMode("existing")}
+                  >
+                    Link existing purchaser
+                  </Button>
+                </div>
+                {linkMode === "create" ? (
+                  <p className="text-xs text-muted-foreground">
+                    A purchaser will be created with the same name, phone,
+                    email, and address.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Select purchaser</Label>
+                    <SearchableSelect
+                      value={selectedPurchaserId}
+                      onValueChange={setSelectedPurchaserId}
+                      options={unlinkedPurchasers.map((p) => ({
+                        value: p.id,
+                        label: p.label,
+                      }))}
+                      placeholder="Choose purchaser..."
+                      searchPlaceholder="Search purchasers..."
+                    />
+                    {unlinkedPurchasers.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No unlinked purchasers available.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex gap-4 pt-4">

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
+import { FormBusyOverlay } from "@/components/form-busy-overlay";
 import { useToast } from "@/hooks/use-toast";
 import {
   getProfileDisplayName,
@@ -489,9 +490,17 @@ export function ChallanForm({
   };
 
   return (
-    <Card>
+    <Card className="relative overflow-hidden">
+      <FormBusyOverlay
+        active={isLoading}
+        label="Saving purchase challan…"
+      />
       <CardContent className="pt-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form
+          onSubmit={handleSubmit}
+          className={`space-y-6 ${isLoading ? "pointer-events-none select-none" : ""}`}
+          aria-busy={isLoading}
+        >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="challan_number">
@@ -836,7 +845,7 @@ export function ChallanForm({
             <div className="flex flex-wrap gap-3">
               <Button type="submit" disabled={isLoading || !canFinalize}>
                 {isLoading && <Spinner className="mr-2 h-4 w-4" />}
-                Save & Finalize
+                {isLoading ? "Saving..." : "Save & Finalize"}
               </Button>
               <Button
                 type="button"
@@ -844,7 +853,8 @@ export function ChallanForm({
                 disabled={isLoading}
                 onClick={() => saveChallan("draft")}
               >
-                Save as Draft
+                {isLoading && <Spinner className="mr-2 h-4 w-4" />}
+                {isLoading ? "Saving..." : "Save as Draft"}
               </Button>
               {!canFinalize && (
                 <p className="w-full text-xs text-muted-foreground">

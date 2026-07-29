@@ -1,6 +1,30 @@
+import { createClient } from "@/lib/supabase/server"
 import { ClientForm } from "@/components/client-form"
+import { redirect } from "next/navigation"
+import { fetchUnlinkedPurchasers } from "@/lib/client-purchaser-link"
+import { canCreate } from "@/lib/permissions"
 
-export default function NewClientPage() {
+export default async function NewClientPage() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect("/auth/login")
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("organization_id, role")
+    .eq("id", user.id)
+    .single()
+
+  if (!canCreate(profile?.role)) {
+    redirect("/dashboard")
+  }
+
+  const unlinkedPurchasers = profile?.organization_id
+    ? await fetchUnlinkedPurchasers(supabase, profile.organization_id)
+    : []
+
   return (
     <div className="p-6 lg:p-8">
       <div className="mb-6">
@@ -9,7 +33,7 @@ export default function NewClientPage() {
       </div>
 
       <div className="max-w-2xl">
-        <ClientForm />
+        <ClientForm unlinkedPurchasers={unlinkedPurchasers} />
       </div>
     </div>
   )

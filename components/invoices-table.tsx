@@ -104,6 +104,9 @@ export function InvoicesTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState<"pdf" | "consolidated" | null>(
+    null,
+  );
 
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null);
@@ -323,6 +326,8 @@ export function InvoicesTable({
   };
 
   const handleExportPDF = async () => {
+    setIsExporting("pdf");
+    try {
     const enrichedInvoices = processedInvoices.map((invoice) => ({
       ...invoice,
       client_name: invoice.clients.name,
@@ -373,6 +378,9 @@ export function InvoicesTable({
       title: "Exported",
       description: `${enrichedInvoices.length} invoice(s) exported to PDF successfully.`,
     });
+    } finally {
+      setIsExporting(null);
+    }
   };
 
   // Helper function to format currency for jsPDF-compatible fonts
@@ -384,11 +392,13 @@ export function InvoicesTable({
   const handleExportConsolidatedPDF = async () => {
     if (processedInvoices.length === 0) return;
 
+    setIsExporting("consolidated");
     toast({
       title: "Generating PDF",
       description: "Please wait while we generate the consolidated PDF...",
     });
 
+    try {
     const supabase = createClient();
 
     // Get user's organization
@@ -888,6 +898,16 @@ export function InvoicesTable({
       title: "PDF Generated",
       description: `Consolidated PDF with ${validInvoices.length} invoice(s) downloaded successfully.`,
     });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Export failed",
+        description:
+          error instanceof Error ? error.message : "Failed to generate PDF.",
+      });
+    } finally {
+      setIsExporting(null);
+    }
   };
 
   return (
@@ -912,10 +932,16 @@ export function InvoicesTable({
                 onClick={handleExportPDF}
                 size="sm"
                 variant="outline"
-                disabled={processedInvoices.length === 0}
+                disabled={processedInvoices.length === 0 || !!isExporting}
               >
-                <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline ml-2">PDF</span>
+                {isExporting === "pdf" ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <FileText className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline ml-2">
+                  {isExporting === "pdf" ? "Exporting..." : "PDF"}
+                </span>
               </Button>
             </IconTooltip>
             <IconTooltip label="Export consolidated PDF">
@@ -923,10 +949,16 @@ export function InvoicesTable({
                 onClick={handleExportConsolidatedPDF}
                 size="sm"
                 variant="outline"
-                disabled={processedInvoices.length === 0}
+                disabled={processedInvoices.length === 0 || !!isExporting}
               >
-                <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline ml-2">Consolidated</span>
+                {isExporting === "consolidated" ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <FileText className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline ml-2">
+                  {isExporting === "consolidated" ? "Exporting..." : "Consolidated"}
+                </span>
               </Button>
             </IconTooltip>
           </div>

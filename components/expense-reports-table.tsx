@@ -9,6 +9,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 export interface ExpenseReportCategoryRow {
   categoryId: string;
@@ -32,6 +40,19 @@ interface ExpenseReportsTableProps {
   grandTotal: number;
 }
 
+const PIE_COLORS = [
+  "#2563eb",
+  "#16a34a",
+  "#ea580c",
+  "#9333ea",
+  "#db2777",
+  "#0891b2",
+  "#ca8a04",
+  "#4f46e5",
+  "#dc2626",
+  "#0d9488",
+];
+
 function formatINR(amount: number) {
   return amount.toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -44,50 +65,99 @@ export function ExpenseReportsTable({
   monthLabel,
   grandTotal,
 }: ExpenseReportsTableProps) {
+  const pieData = categoryRows
+    .filter((row) => row.totalAmount > 0)
+    .map((row, index) => ({
+      name: row.categoryName,
+      value: row.totalAmount,
+      color: PIE_COLORS[index % PIE_COLORS.length],
+    }));
+
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Expenses by Category — {monthLabel}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {categoryRows.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              No expense entries for this month
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Entries</TableHead>
-                  <TableHead className="text-right">Total Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categoryRows.map((row) => (
-                  <TableRow key={row.categoryId}>
-                    <TableCell className="font-medium">
-                      {row.categoryName}
-                    </TableCell>
-                    <TableCell className="text-right">{row.entryCount}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      ₹{formatINR(row.totalAmount)}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Expenses by Category — {monthLabel}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {categoryRows.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                No expense entries for this month
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="text-right">Entries</TableHead>
+                    <TableHead className="text-right">Total Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {categoryRows.map((row) => (
+                    <TableRow key={row.categoryId}>
+                      <TableCell className="font-medium">
+                        {row.categoryName}
+                      </TableCell>
+                      <TableCell className="text-right">{row.entryCount}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        ₹{formatINR(row.totalAmount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="bg-muted/50 font-semibold">
+                    <TableCell>Total</TableCell>
+                    <TableCell />
+                    <TableCell className="text-right">
+                      ₹{formatINR(grandTotal)}
                     </TableCell>
                   </TableRow>
-                ))}
-                <TableRow className="bg-muted/50 font-semibold">
-                  <TableCell>Total</TableCell>
-                  <TableCell />
-                  <TableCell className="text-right">
-                    ₹{formatINR(grandTotal)}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Category Share</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {pieData.length === 0 ? (
+              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                No expense data available
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) =>
+                      `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
+                    }
+                    outerRadius={90}
+                    dataKey="value"
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value) =>
+                      `₹${formatINR(Number(value ?? 0))}`
+                    }
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

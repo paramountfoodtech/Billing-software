@@ -59,6 +59,7 @@ interface Purchaser {
   created_at: string;
   outstanding?: number;
   is_default?: boolean | null;
+  linked_client_id?: string | null;
   profiles?: { full_name: string };
 }
 
@@ -414,6 +415,18 @@ export function PurchasersTable({ purchasers, userRole }: PurchasersTableProps) 
                         <Badge variant="secondary" className="shrink-0 text-[10px]">
                           Default
                         </Badge>
+                      )}
+                      {purchaser.linked_client_id && (
+                        <IconTooltip label="Also a client — view buy & sell">
+                          <Link
+                            href={`/dashboard/trade-summary?purchaserId=${purchaser.id}`}
+                            className="shrink-0"
+                          >
+                            <Badge variant="outline" className="text-[10px]">
+                              Also client
+                            </Badge>
+                          </Link>
+                        </IconTooltip>
                       )}
                     </div>
                   </TableCell>

@@ -1,6 +1,12 @@
 import { formatIndianDate } from "@/lib/date-time";
 import { createClient } from "@/lib/supabase/client";
 import { getTimestamp } from "@/lib/export-utils";
+import {
+  createPurchaseInvoiceRateDiscountLookup,
+  formatPurchaseInvoiceRateDiscount,
+  getPurchaseInvoiceRateDiscountFromLookup,
+} from "@/lib/purchase-invoice-rate-discount";
+import type { PriceCategoryHistoryEntry } from "@/lib/utils";
 
 type InvoiceTemplate = {
   company_name: string;
@@ -23,7 +29,6 @@ type PurchaseInvoiceForExport = {
   discount_amount?: string | number | null;
   amount_paid: string | number;
   notes?: string | null;
-  description?: string | null;
   purchasers?: {
     name: string;
     purchaser_code?: string | null;
@@ -115,10 +120,7 @@ export async function fetchPurchaseInvoicesForExport(invoiceIds: string[]) {
   if (invoiceIds.length === 0) return [] as PurchaseInvoiceForExport[];
 
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("purchase_invoices")
-    .select(
-      `
+  const selectClause = `
       id,
       invoice_number,
       purchaser_invoice_number,
@@ -130,7 +132,6 @@ export async function fetchPurchaseInvoicesForExport(invoiceIds: string[]) {
       discount_amount,
       amount_paid,
       notes,
-      description,
       purchasers(
         name,
         purchaser_code,
@@ -148,13 +149,36 @@ export async function fetchPurchaseInvoicesForExport(invoiceIds: string[]) {
         total_birds,
         challan_boxes(box_number, weight_kg, num_birds)
       )
-    `,
-    )
-    .in("id", invoiceIds)
-    .order("issue_date", { ascending: true });
+    `;
 
-  if (error) throw error;
-  return (data || []) as unknown as PurchaseInvoiceForExport[];
+  // Chunk .in() filters to avoid URL length limits, and page past the 1000-row cap.
+  const chunkSize = 200;
+  const all: PurchaseInvoiceForExport[] = [];
+  for (let i = 0; i < invoiceIds.length; i += chunkSize) {
+    const chunk = invoiceIds.slice(i, i + chunkSize);
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from("purchase_invoices")
+        .select(selectClause)
+        .in("id", chunk)
+        .order("issue_date", { ascending: true })
+        .range(from, from + pageSize - 1);
+
+      if (error) throw error;
+      const batch = (data || []) as unknown as PurchaseInvoiceForExport[];
+      all.push(...batch);
+      if (batch.length < pageSize) break;
+      from += pageSize;
+    }
+  }
+
+  // Preserve caller order (filtered/sorted list order)
+  const byId = new Map(all.map((inv) => [inv.id, inv]));
+  return invoiceIds
+    .map((id) => byId.get(id))
+    .filter((inv): inv is PurchaseInvoiceForExport => Boolean(inv));
 }
 
 export async function exportConsolidatedPurchaseInvoicesPDF(options: {
@@ -162,12 +186,16 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
   fromDate?: string;
   toDate?: string;
   filenamePrefix?: string;
+  liveCategoryId?: string | null;
+  priceHistory?: PriceCategoryHistoryEntry[];
 }): Promise<number> {
   const {
     invoiceIds,
     fromDate = "",
     toDate = "",
     filenamePrefix = "consolidated_purchase_invoices",
+    liveCategoryId: liveCategoryIdInput,
+    priceHistory: priceHistoryInput,
   } = options;
 
   if (invoiceIds.length === 0) return 0;
@@ -178,6 +206,9 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
   } = await supabase.auth.getUser();
 
   let template: InvoiceTemplate | null = null;
+  let liveCategoryId = liveCategoryIdInput ?? null;
+  let priceHistory = priceHistoryInput ?? [];
+
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -186,18 +217,51 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
       .single();
 
     if (profile?.organization_id) {
-      const { data: templateData } = await supabase
-        .from("invoice_templates")
-        .select("*")
-        .eq("organization_id", profile.organization_id)
-        .maybeSingle();
-      template = templateData;
+      const organizationId = profile.organization_id;
+      const needsLivePricing = !liveCategoryId || priceHistory.length === 0;
+
+      const [templateResult, categoriesResult, priceHistoryResult] =
+        await Promise.all([
+          supabase
+            .from("invoice_templates")
+            .select("*")
+            .eq("organization_id", organizationId)
+            .maybeSingle(),
+          needsLivePricing
+            ? supabase
+                .from("price_categories")
+                .select("id, name")
+                .eq("organization_id", organizationId)
+                .eq("is_active", true)
+            : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+          needsLivePricing
+            ? supabase
+                .from("price_category_history")
+                .select("price_category_id, price, effective_date")
+                .eq("organization_id", organizationId)
+            : Promise.resolve({
+                data: [] as PriceCategoryHistoryEntry[],
+              }),
+        ]);
+
+      template = templateResult.data;
+      if (!liveCategoryId) {
+        liveCategoryId =
+          (categoriesResult.data || []).find(
+            (c) => c.name?.toLowerCase() === "live",
+          )?.id ?? null;
+      }
+      if (priceHistory.length === 0) {
+        priceHistory = priceHistoryResult.data || [];
+      }
     }
   }
 
   const activeTemplate = template || DEFAULT_TEMPLATE;
   const invoices = await fetchPurchaseInvoicesForExport(invoiceIds);
   if (invoices.length === 0) return 0;
+
+  const priceLookup = createPurchaseInvoiceRateDiscountLookup(priceHistory);
 
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({
@@ -222,10 +286,10 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
       logoTopPadding: 0,
     };
 
-    const discountAmount = Number(invoice.discount_amount || 0);
+    const flatDiscountAmount = Number(invoice.discount_amount || 0);
     const weight = Number(invoice.total_weight_kg || 0);
     const rate = Number(invoice.price_per_kg || 0);
-    const subtotal = weight * rate || Number(invoice.total_amount) + discountAmount;
+    const subtotal = weight * rate || Number(invoice.total_amount) + flatDiscountAmount;
     const balance = Number(invoice.total_amount) - Number(invoice.amount_paid);
     const hasChallan = Boolean(invoice.challans?.challan_number);
     const boxes = invoice.challans?.challan_boxes || [];
@@ -233,11 +297,16 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
       Number(invoice.total_birds || 0) ||
       Number(invoice.challans?.total_birds || 0) ||
       boxes.reduce((sum, box) => sum + Number(box.num_birds || 0), 0);
-    const lineDescription =
-      invoice.description?.trim() ||
-      (hasChallan
-        ? `Purchase weight (Purchase challan ${invoice.challans!.challan_number})`
-        : "Purchase invoice");
+    const average =
+      totalBirds > 0 && weight > 0 ? (weight / totalBirds).toFixed(3) : "—";
+    const rateDiscount = getPurchaseInvoiceRateDiscountFromLookup(
+      invoice,
+      liveCategoryId,
+      priceLookup,
+    );
+    const rateDiscountText = formatPurchaseInvoiceRateDiscount(rateDiscount, {
+      currencySymbol: "Rs.",
+    });
 
     const headerTopY = y;
     const logoX = margin;
@@ -389,22 +458,29 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
 
     const tableWidth = pageWidth - 2 * margin;
     const cols = {
-      description: tableWidth * 0.46,
-      qty: tableWidth * 0.18,
-      rate: tableWidth * 0.18,
-      amount: tableWidth * 0.18,
+      average: tableWidth * 0.2,
+      qty: tableWidth * 0.2,
+      rate: tableWidth * 0.2,
+      discount: tableWidth * 0.2,
+      amount: tableWidth * 0.2,
     };
     pdf.setFillColor(240, 240, 240);
     pdf.rect(margin, y - 4, tableWidth, 7, "F");
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(7);
-    pdf.text("Description", margin + 1, y);
-    pdf.text("Qty (KG)", margin + cols.description + cols.qty - 1, y, {
+    pdf.text("Average", margin + 1, y);
+    pdf.text("Qty (KG)", margin + cols.average + cols.qty - 1, y, {
       align: "right",
     });
     pdf.text(
       "Rate",
-      margin + cols.description + cols.qty + cols.rate - 1,
+      margin + cols.average + cols.qty + cols.rate - 1,
+      y,
+      { align: "right" },
+    );
+    pdf.text(
+      "Discount",
+      margin + cols.average + cols.qty + cols.rate + cols.discount - 1,
       y,
       { align: "right" },
     );
@@ -412,29 +488,34 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
     y += 6;
 
     pdf.setFont("helvetica", "normal");
-    const descLines = pdf.splitTextToSize(lineDescription, cols.description - 2);
-    pdf.text(descLines, margin + 1, y);
+    pdf.text(average, margin + 1, y);
     pdf.text(
       weight > 0 ? weight.toFixed(3) : "—",
-      margin + cols.description + cols.qty - 1,
+      margin + cols.average + cols.qty - 1,
       y,
       { align: "right" },
     );
     pdf.text(
       weight > 0 ? formatCurrency(rate) : "—",
-      margin + cols.description + cols.qty + cols.rate - 1,
+      margin + cols.average + cols.qty + cols.rate - 1,
+      y,
+      { align: "right" },
+    );
+    pdf.text(
+      rateDiscountText,
+      margin + cols.average + cols.qty + cols.rate + cols.discount - 1,
       y,
       { align: "right" },
     );
     pdf.text(formatCurrency(subtotal), margin + tableWidth - 1, y, {
       align: "right",
     });
-    y += Math.max(descLines.length * spacing.lineGap, spacing.lineGap) + 2;
+    y += spacing.lineGap + 2;
 
     if (weight > 0) {
       pdf.setFont("helvetica", "bold");
       pdf.text("Total weight (kgs):", margin + 1, y);
-      pdf.text(weight.toFixed(3), margin + cols.description + cols.qty - 1, y, {
+      pdf.text(weight.toFixed(3), margin + cols.average + cols.qty - 1, y, {
         align: "right",
       });
       y += spacing.lineGap;
@@ -443,7 +524,7 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
       pdf.text("Boxes:", margin + 1, y);
       pdf.text(
         String(invoice.challans!.num_boxes),
-        margin + cols.description + cols.qty - 1,
+        margin + cols.average + cols.qty - 1,
         y,
         { align: "right" },
       );
@@ -451,7 +532,7 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
     }
     if (totalBirds > 0) {
       pdf.text("Total birds:", margin + 1, y);
-      pdf.text(String(totalBirds), margin + cols.description + cols.qty - 1, y, {
+      pdf.text(String(totalBirds), margin + cols.average + cols.qty - 1, y, {
         align: "right",
       });
       y += spacing.lineGap;
@@ -498,8 +579,8 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
       align: "right",
     });
     y += spacing.lineGap;
-    if (discountAmount > 0) {
-      pdf.text(`Discount: -${formatCurrency(discountAmount)}`, totalsX, y, {
+    if (flatDiscountAmount > 0) {
+      pdf.text(`Discount: -${formatCurrency(flatDiscountAmount)}`, totalsX, y, {
         align: "right",
       });
       y += spacing.lineGap;

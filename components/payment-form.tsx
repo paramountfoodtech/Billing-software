@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
+import { FormBusyOverlay } from "@/components/form-busy-overlay";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -439,9 +440,14 @@ export function PaymentForm({
   const remainingBalance = balance - paymentAmount;
 
   return (
-    <Card>
+    <Card className="relative overflow-hidden">
+      <FormBusyOverlay active={isLoading} label="Recording payment…" />
       <CardContent className="pt-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form
+          onSubmit={handleSubmit}
+          className={`space-y-6 ${isLoading ? "pointer-events-none select-none" : ""}`}
+          aria-busy={isLoading}
+        >
           {/* Payment Mode Selector */}
           <Tabs
             value={paymentMode}

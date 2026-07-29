@@ -1,5 +1,7 @@
 import { Activity, PackageCheck, Scale, TrendingUp } from "lucide-react"
+import type { ReactNode } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { KpiValue } from "@/components/kpi-value"
 import { createClient } from "@/lib/supabase/server"
 import { getIndianToday } from "@/lib/date-time"
 import { fmtPercent } from "@/lib/material-calculations"
@@ -16,6 +18,32 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length
 }
 
+function OpsKpiCard({
+  title,
+  icon,
+  display,
+  className,
+}: {
+  title: string
+  icon: ReactNode
+  display: string
+  className?: string
+}) {
+  return (
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+        <CardTitle className="text-xs sm:text-sm font-medium truncate">{title}</CardTitle>
+        {icon}
+      </CardHeader>
+      <CardContent className="min-w-0">
+        <KpiValue display={display} className={className}>
+          {display}
+        </KpiValue>
+      </CardContent>
+    </Card>
+  )
+}
+
 export async function MaterialDashboardWidgets() {
   const supabase = await createClient()
   const today = getIndianToday()
@@ -29,7 +57,9 @@ export async function MaterialDashboardWidgets() {
         .eq("purchase_date", today),
       supabase
         .from("material_processing_entries")
-        .select("processed_weight_kg, mortality_weight_kg, actual_leftover_weight_kg, yield_percent")
+        .select(
+          "processed_weight_kg, mortality_weight_kg, actual_leftover_weight_kg, yield_percent",
+        )
         .eq("processing_date", today)
         .maybeSingle(),
       supabase
@@ -45,121 +75,97 @@ export async function MaterialDashboardWidgets() {
     ])
 
   const todayPurchasedWeight = (todayStockResult.data || []).reduce(
-    (sum, entry) => sum + Number(entry.bridge_weight_kg || 0),
+    (sum, row) => sum + Number(row.bridge_weight_kg || 0),
     0,
   )
   const todayProcessing = todayProcessingResult.data
-  const monthStock = monthStockResult.data || []
-  const monthProcessing = monthProcessingResult.data || []
-
-  const monthlyPurchaseWeight = monthStock.reduce(
-    (sum, entry) => sum + Number(entry.bridge_weight_kg || 0),
+  const monthlyPurchaseWeight = (monthStockResult.data || []).reduce(
+    (sum, row) => sum + Number(row.bridge_weight_kg || 0),
     0,
   )
+  const monthProcessing = monthProcessingResult.data || []
   const monthlyProcessingWeight = monthProcessing.reduce(
-    (sum, entry) => sum + Number(entry.processed_weight_kg || 0),
+    (sum, row) => sum + Number(row.processed_weight_kg || 0),
     0,
   )
   const monthlyMortalityWeight = monthProcessing.reduce(
-    (sum, entry) => sum + Number(entry.mortality_weight_kg || 0),
+    (sum, row) => sum + Number(row.mortality_weight_kg || 0),
     0,
   )
   const monthlyAverageYield = average(
     monthProcessing.map((entry) => Number(entry.yield_percent || 0)),
   )
 
+  const todayYield = `${fmtPercent(todayProcessing?.yield_percent)}%`
+  const monthYield = `${fmtPercent(monthlyAverageYield)}%`
+
   return (
     <div className="mt-8 space-y-6">
       <div>
         <h2 className="mb-3 text-lg font-semibold">Today&apos;s Operations</h2>
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Purchased Weight</CardTitle>
-              <Scale className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-blue-700">{formatKg(todayPurchasedWeight)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Processed Weight</CardTitle>
-              <PackageCheck className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-green-700">{formatKg(Number(todayProcessing?.processed_weight_kg || 0))}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Mortality Weight</CardTitle>
-              <Activity className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-red-600">{formatKg(Number(todayProcessing?.mortality_weight_kg || 0))}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Leftover Weight</CardTitle>
-              <Scale className="h-4 w-4 text-amber-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-amber-700">{formatKg(Number(todayProcessing?.actual_leftover_weight_kg || 0))}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Yield %</CardTitle>
-              <TrendingUp className="h-4 w-4 text-purple-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-purple-700">{fmtPercent(todayProcessing?.yield_percent)}%</div>
-            </CardContent>
-          </Card>
+          <OpsKpiCard
+            title="Purchased Weight"
+            icon={<Scale className="h-4 w-4 shrink-0 text-blue-600" />}
+            display={formatKg(todayPurchasedWeight)}
+            className="text-blue-700"
+          />
+          <OpsKpiCard
+            title="Processed Weight"
+            icon={<PackageCheck className="h-4 w-4 shrink-0 text-green-600" />}
+            display={formatKg(Number(todayProcessing?.processed_weight_kg || 0))}
+            className="text-green-700"
+          />
+          <OpsKpiCard
+            title="Mortality Weight"
+            icon={<Activity className="h-4 w-4 shrink-0 text-red-600" />}
+            display={formatKg(Number(todayProcessing?.mortality_weight_kg || 0))}
+            className="text-red-600"
+          />
+          <OpsKpiCard
+            title="Leftover Weight"
+            icon={<Scale className="h-4 w-4 shrink-0 text-amber-600" />}
+            display={formatKg(
+              Number(todayProcessing?.actual_leftover_weight_kg || 0),
+            )}
+            className="text-amber-700"
+          />
+          <OpsKpiCard
+            title="Yield %"
+            icon={<TrendingUp className="h-4 w-4 shrink-0 text-purple-600" />}
+            display={todayYield}
+            className="text-purple-700"
+          />
         </div>
       </div>
 
       <div>
         <h2 className="mb-3 text-lg font-semibold">Monthly Operations</h2>
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Purchase Weight</CardTitle>
-              <Scale className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-blue-700">{formatKg(monthlyPurchaseWeight)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Processing Weight</CardTitle>
-              <PackageCheck className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-green-700">{formatKg(monthlyProcessingWeight)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Mortality Weight</CardTitle>
-              <Activity className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-red-600">{formatKg(monthlyMortalityWeight)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">Average Yield %</CardTitle>
-              <TrendingUp className="h-4 w-4 text-purple-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-purple-700">{fmtPercent(monthlyAverageYield)}%</div>
-            </CardContent>
-          </Card>
+          <OpsKpiCard
+            title="Purchase Weight"
+            icon={<Scale className="h-4 w-4 shrink-0 text-blue-600" />}
+            display={formatKg(monthlyPurchaseWeight)}
+            className="text-blue-700"
+          />
+          <OpsKpiCard
+            title="Processing Weight"
+            icon={<PackageCheck className="h-4 w-4 shrink-0 text-green-600" />}
+            display={formatKg(monthlyProcessingWeight)}
+            className="text-green-700"
+          />
+          <OpsKpiCard
+            title="Mortality Weight"
+            icon={<Activity className="h-4 w-4 shrink-0 text-red-600" />}
+            display={formatKg(monthlyMortalityWeight)}
+            className="text-red-600"
+          />
+          <OpsKpiCard
+            title="Average Yield %"
+            icon={<TrendingUp className="h-4 w-4 shrink-0 text-purple-600" />}
+            display={monthYield}
+            className="text-purple-700"
+          />
         </div>
       </div>
     </div>

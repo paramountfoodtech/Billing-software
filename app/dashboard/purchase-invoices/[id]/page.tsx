@@ -135,21 +135,39 @@ export default async function PurchaseInvoiceDetailPage({
 
 
   let template = null
+  let liveCategoryId: string | null = null
+  let priceHistory: Array<{
+    price_category_id: string
+    price: number
+    effective_date: string
+  }> = []
 
   if (profileResult.data?.organization_id) {
+    const organizationId = profileResult.data.organization_id
+    const [templateResult, categoriesResult, priceHistoryResult] =
+      await Promise.all([
+        supabase
+          .from("invoice_templates")
+          .select("*")
+          .eq("organization_id", organizationId)
+          .single(),
+        supabase
+          .from("price_categories")
+          .select("id, name")
+          .eq("organization_id", organizationId)
+          .eq("is_active", true),
+        supabase
+          .from("price_category_history")
+          .select("price_category_id, price, effective_date")
+          .eq("organization_id", organizationId),
+      ])
 
-    const { data: templateData } = await supabase
-
-      .from("invoice_templates")
-
-      .select("*")
-
-      .eq("organization_id", profileResult.data.organization_id)
-
-      .single()
-
-    template = templateData
-
+    template = templateResult.data
+    liveCategoryId =
+      (categoriesResult.data || []).find(
+        (c) => c.name?.toLowerCase() === "live",
+      )?.id ?? null
+    priceHistory = priceHistoryResult.data || []
   }
 
 
@@ -228,7 +246,12 @@ export default async function PurchaseInvoiceDetailPage({
 
       </div>
 
-      <PrintablePurchaseInvoice invoice={invoiceForPrint} template={template} />
+      <PrintablePurchaseInvoice
+        invoice={invoiceForPrint}
+        template={template}
+        liveCategoryId={liveCategoryId}
+        priceHistory={priceHistory}
+      />
 
       <Notes
 

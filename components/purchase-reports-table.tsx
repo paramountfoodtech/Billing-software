@@ -19,14 +19,20 @@ import {
   Download,
   FileText,
   Files,
+  FileDown,
 } from "lucide-react";
-import { usePagination } from "@/hooks/use-pagination";
-import { TablePagination } from "@/components/table-pagination";
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV, exportToPDF, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { createClient } from "@/lib/supabase/client";
 import { exportConsolidatedPurchaseInvoicesPDF } from "@/lib/purchase-invoice-consolidated-pdf";
 import { formatIndianDate, getIndianToday } from "@/lib/date-time";
+import {
+  buildPdfColumnLayout,
+  measurePdfTextBlockHeight,
+  wrapInvoiceListForPdf,
+  type PdfColumnDef,
+} from "@/lib/pdf-invoice-wrap";
+import { buildStatementRows } from "@/lib/ledger-report";
 
 export interface PurchaserReportRow {
   id: string;
@@ -75,12 +81,14 @@ export function PurchaseReportsTable({
   selectedPurchaserName = "All Purchasers",
 }: PurchaseReportsTableProps) {
   const { toast } = useToast();
-  const [itemsPerPage, setItemsPerPage] = useState(25);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [purchaserFilter, setPurchaserFilter] = useState("");
   const [challanFilter, setChallanFilter] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [generatingStatementFor, setGeneratingStatementFor] = useState<
+    string | null
+  >(null);
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -168,10 +176,6 @@ export function PurchaseReportsTable({
     }
     return filtered;
   }, [challanRows, challanFilter, sortColumn, sortDirection]);
-
-  const activeRows =
-    activeTab === "purchaser" ? processedPurchaserRows : processedChallanRows;
-  const pagination = usePagination({ items: activeRows, itemsPerPage });
 
   const fetchExportInvoices = async () => {
     const supabase = createClient();
@@ -293,6 +297,314 @@ export function PurchaseReportsTable({
       })),
       challans: challansResult.data || [],
     };
+  };
+
+  const handleExportPurchaserStatement = async (purchaser: PurchaserReportRow) => {
+    setGeneratingStatementFor(purchaser.id);
+    const supabase = createClient();
+
+    try {
+      const invoicesResult = await supabase
+        .from("purchase_invoices")
+        .select(
+          "id, invoice_number, purchaser_invoice_number, issue_date, total_amount, status",
+        )
+        .eq("purchaser_id", purchaser.id)
+        .neq("status", "cancelled")
+        .or("invoice_type.eq.challan,invoice_type.is.null")
+        .order("issue_date", { ascending: true })
+        .order("invoice_number", { ascending: true });
+
+      if (invoicesResult.error) throw invoicesResult.error;
+
+      const invoices = (invoicesResult.data || []).map((inv) => ({
+        invoice_number:
+          inv.purchaser_invoice_number?.trim() || inv.invoice_number || "",
+        issue_date: inv.issue_date,
+        total_amount: inv.total_amount,
+        status: inv.status,
+      }));
+
+      type StatementPaymentRow = {
+        payment_date: string;
+        amount: string | number | null;
+        status: string;
+        purchase_invoice_id: string;
+        purchase_invoices:
+          | {
+              invoice_number: string;
+              purchaser_invoice_number?: string | null;
+            }
+          | {
+              invoice_number: string;
+              purchaser_invoice_number?: string | null;
+            }[]
+          | null;
+      };
+
+      const payments: StatementPaymentRow[] = [];
+      const paymentPageSize = 1000;
+      let paymentFrom = 0;
+
+      while (true) {
+        const paymentsResult = await supabase
+          .from("purchase_payments")
+          .select(
+            "payment_date, amount, status, purchase_invoice_id, purchase_invoices!inner(invoice_number, purchaser_invoice_number, purchaser_id)",
+          )
+          .eq("purchase_invoices.purchaser_id", purchaser.id)
+          .order("payment_date", { ascending: true })
+          .range(paymentFrom, paymentFrom + paymentPageSize - 1);
+
+        if (paymentsResult.error) throw paymentsResult.error;
+
+        const batch = (paymentsResult.data || []) as StatementPaymentRow[];
+        payments.push(...batch);
+        if (batch.length < paymentPageSize) break;
+        paymentFrom += paymentPageSize;
+      }
+
+      const activePayments = payments
+        .filter(
+          (payment) =>
+            payment.status !== "failed" &&
+            payment.status !== "refunded" &&
+            payment.payment_date,
+        )
+        .map((payment) => {
+          const inv = Array.isArray(payment.purchase_invoices)
+            ? payment.purchase_invoices[0]
+            : payment.purchase_invoices;
+          return {
+            payment_date: payment.payment_date,
+            amount: payment.amount,
+            status: payment.status,
+            invoices: {
+              invoice_number:
+                inv?.purchaser_invoice_number?.trim() ||
+                inv?.invoice_number ||
+                "",
+            },
+          };
+        });
+
+      const statementRows = buildStatementRows(invoices, activePayments);
+
+      if (statementRows.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "No data",
+          description: "No invoices/payments found for this purchaser.",
+        });
+        setGeneratingStatementFor(null);
+        return;
+      }
+
+      const { jsPDF } = await import("jspdf");
+      const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const tableWidth = pageWidth - margin * 2;
+      const rightEdge = pageWidth - margin;
+      const cellPad = 2;
+      const rowPadY = 2.5;
+      const bodyFontSize = 7;
+      const headerH = 8;
+
+      const columns: PdfColumnDef[] = [
+        { id: "date", label: "Date", widthFrac: 0.1, align: "left" },
+        { id: "particulars", label: "Particulars", widthFrac: 0.12, align: "left" },
+        { id: "invoice", label: "Invoice #", widthFrac: 0.34, align: "left" },
+        { id: "debit", label: "Debit", widthFrac: 0.14, align: "right" },
+        { id: "credit", label: "Credit", widthFrac: 0.14, align: "right" },
+        { id: "outstanding", label: "Outstanding", widthFrac: 0.16, align: "right" },
+      ];
+
+      const colLayout = buildPdfColumnLayout(columns, margin, tableWidth, cellPad);
+      const colById = Object.fromEntries(colLayout.map((c) => [c.id, c]));
+      const invoiceCol = colById.invoice;
+
+      const fmt = (n: number) =>
+        n.toLocaleString("en-IN", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(bodyFontSize);
+      const singleLineH = pdf.getTextDimensions("Xy").h;
+
+      const drawRight = (text: string, colId: string, yPos: number) => {
+        pdf.text(text, colById[colId].textX, yPos, {
+          align: "right",
+          baseline: "top",
+        });
+      };
+
+      const drawLeft = (text: string, colId: string, yPos: number) => {
+        pdf.text(text, colById[colId].textX, yPos, { baseline: "top" });
+      };
+
+      let y = margin;
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(14);
+      pdf.text("Statement of Account", margin, y);
+      y += 6;
+      pdf.setFontSize(10);
+      const purchaserNameLines = pdf.splitTextToSize(purchaser.name, tableWidth);
+      pdf.text(purchaserNameLines, margin, y);
+      y += purchaserNameLines.length * 4 + 1;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      pdf.text(
+        `Period: From inception to ${new Date().toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        })}`,
+        margin,
+        y,
+      );
+      y += 7;
+
+      const drawHeader = () => {
+        const headerTop = y;
+        const headerTextY = headerTop + rowPadY;
+        pdf.setDrawColor(180, 180, 180);
+        pdf.setLineWidth(0.25);
+        pdf.setFillColor(246, 248, 250);
+        pdf.rect(margin, headerTop, tableWidth, headerH, "F");
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8);
+
+        for (const col of colLayout) {
+          const labelX = col.textX;
+          if (col.align === "right") {
+            pdf.text(col.label, labelX, headerTextY, {
+              align: "right",
+              baseline: "top",
+            });
+          } else {
+            pdf.text(col.label, labelX, headerTextY, { baseline: "top" });
+          }
+          if (col.x > margin) {
+            pdf.line(col.x, headerTop, col.x, headerTop + headerH);
+          }
+        }
+
+        pdf.rect(margin, headerTop, tableWidth, headerH);
+        y = headerTop + headerH;
+      };
+
+      drawHeader();
+      let totalDebit = 0;
+      let totalCredit = 0;
+
+      for (const row of statementRows) {
+        totalDebit += row.debit;
+        totalCredit += row.credit;
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(bodyFontSize);
+
+        const invoiceLines = wrapInvoiceListForPdf(
+          pdf,
+          row.invoiceNumber,
+          invoiceCol.textMaxW,
+        );
+        const invoiceBlockH = measurePdfTextBlockHeight(
+          pdf,
+          invoiceLines,
+          singleLineH,
+        );
+        const contentH = Math.max(singleLineH, invoiceBlockH);
+        const dynamicRowH = rowPadY + contentH + rowPadY;
+
+        if (y + dynamicRowH > pageHeight - margin - 14) {
+          pdf.addPage();
+          y = margin + 4;
+          drawHeader();
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(bodyFontSize);
+        }
+
+        const rowTop = y;
+        const textTop = rowTop + rowPadY;
+        const dateStr = new Date(row.date).toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+
+        if (row.showDate) {
+          drawLeft(dateStr, "date", textTop);
+        }
+        drawLeft(row.particulars, "particulars", textTop);
+        pdf.text(invoiceLines.join("\n"), invoiceCol.textX, textTop, {
+          baseline: "top",
+          lineHeightFactor: 1.25,
+        });
+        drawRight(row.debit > 0 ? fmt(row.debit) : "-", "debit", textTop);
+        drawRight(row.credit > 0 ? fmt(row.credit) : "-", "credit", textTop);
+        drawRight(fmt(row.outstanding), "outstanding", textTop);
+
+        const rowBottom = rowTop + dynamicRowH;
+        pdf.setDrawColor(230, 230, 230);
+        pdf.line(margin, rowBottom, rightEdge, rowBottom);
+        y = rowBottom;
+      }
+
+      const closingOutstanding =
+        statementRows.length > 0
+          ? statementRows[statementRows.length - 1].outstanding
+          : totalDebit - totalCredit;
+
+      if (y > pageHeight - margin - 20) {
+        pdf.addPage();
+        y = margin + 4;
+        drawHeader();
+      }
+
+      y += rowPadY;
+      pdf.setDrawColor(80, 80, 80);
+      pdf.setLineWidth(0.4);
+      pdf.line(margin, y, rightEdge, y);
+      y += rowPadY + 1;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8);
+      const totalsTop = y;
+      drawLeft("Totals", "particulars", totalsTop);
+      drawRight(fmt(totalDebit), "debit", totalsTop);
+      drawRight(fmt(totalCredit), "credit", totalsTop);
+      drawRight(fmt(closingOutstanding), "outstanding", totalsTop);
+
+      pdf.save(
+        `statement-${purchaser.name.replace(/\s+/g, "-").toLowerCase()}-${getTimestamp()}.pdf`,
+      );
+      toast({
+        variant: "success",
+        title: "Statement generated",
+        description: `Statement of account exported for ${purchaser.name}.`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Export failed",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to export statement.",
+      });
+    } finally {
+      setGeneratingStatementFor(null);
+    }
   };
 
   const handleExportPurchaserCSV = async () => {
@@ -746,14 +1058,14 @@ export function PurchaseReportsTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pagination.paginatedItems.length === 0 ? (
+              {processedChallanRows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No purchase challans for this period.
                   </TableCell>
                 </TableRow>
               ) : (
-                pagination.paginatedItems.map((row) => (
+                processedChallanRows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="font-mono">{row.challan_number}</TableCell>
                     <TableCell>{row.purchaser_name}</TableCell>
@@ -768,14 +1080,6 @@ export function PurchaseReportsTable({
             </TableBody>
           </Table>
         </div>
-        <TablePagination
-          currentPage={pagination.currentPage}
-          totalPages={pagination.totalPages}
-          onPageChange={pagination.goToPage}
-          itemsPerPage={itemsPerPage}
-          onItemsPerPageChange={setItemsPerPage}
-          totalItems={processedChallanRows.length}
-        />
       </div>
     );
   }
@@ -843,9 +1147,12 @@ export function PurchaseReportsTable({
               >
                 Old Bal (₹) <SortIcon column="oldBal" />
               </TableHead>
+              <TableHead className="text-right px-2 sm:px-4 py-2 sm:py-3">
+                Statement
+              </TableHead>
             </TableRow>
             <TableRow>
-              <TableHead colSpan={7}>
+              <TableHead colSpan={8}>
                 <Input
                   placeholder="Filter purchaser..."
                   value={purchaserFilter}
@@ -856,15 +1163,15 @@ export function PurchaseReportsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pagination.paginatedItems.length === 0 ? (
+            {processedPurchaserRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   No purchase data for this period.
                 </TableCell>
               </TableRow>
             ) : (
               <>
-                {pagination.paginatedItems.map((row) => (
+                {processedPurchaserRows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="font-medium">{row.name}</TableCell>
                     <TableCell className="text-right">
@@ -882,6 +1189,21 @@ export function PurchaseReportsTable({
                     </TableCell>
                     <TableCell className="text-right">
                       ₹{row.oldBal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <IconTooltip label="Export statement of account">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleExportPurchaserStatement(row)}
+                          disabled={generatingStatementFor === row.id}
+                        >
+                          <FileDown className="h-3.5 w-3.5 mr-1.5" />
+                          {generatingStatementFor === row.id
+                            ? "Generating..."
+                            : "Statement"}
+                        </Button>
+                      </IconTooltip>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -901,20 +1223,13 @@ export function PurchaseReportsTable({
                     ₹{totals.outstanding.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </TableCell>
                   <TableCell />
+                  <TableCell />
                 </TableRow>
               </>
             )}
           </TableBody>
         </Table>
       </div>
-      <TablePagination
-        currentPage={pagination.currentPage}
-        totalPages={pagination.totalPages}
-        onPageChange={pagination.goToPage}
-        itemsPerPage={itemsPerPage}
-        onItemsPerPageChange={setItemsPerPage}
-        totalItems={processedPurchaserRows.length}
-      />
     </div>
   );
 }

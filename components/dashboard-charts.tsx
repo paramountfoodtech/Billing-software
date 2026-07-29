@@ -28,6 +28,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { KpiValue } from "@/components/kpi-value";
 
 interface DashboardChartsProps {
   invoices: Array<{
@@ -139,21 +140,24 @@ export function DashboardCharts({ invoices, payments }: DashboardChartsProps) {
     <div className="space-y-6">
       {/* KPI Cards */}
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader className="pb-2 sm:pb-3">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Pending Amount
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline justify-between">
-              <div className="text-xl sm:text-2xl font-bold text-orange-600">
+          <CardContent className="min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <KpiValue
+                display={`₹${pendingAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
+                className="text-orange-600"
+              >
                 ₹
                 {pendingAmount.toLocaleString("en-IN", {
                   maximumFractionDigits: 0,
                 })}
-              </div>
-              <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 text-orange-600" />
+              </KpiValue>
+              <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 text-orange-600 mt-1" />
             </div>
             <p className="text-xs text-muted-foreground mt-1 sm:mt-2">
               Not yet due -{" "}
@@ -169,21 +173,24 @@ export function DashboardCharts({ invoices, payments }: DashboardChartsProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader className="pb-2 sm:pb-3">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Outstanding Amount
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline justify-between">
-              <div className="text-xl sm:text-2xl font-bold text-red-600">
+          <CardContent className="min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <KpiValue
+                display={`₹${outstandingAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
+                className="text-red-600"
+              >
                 ₹
                 {outstandingAmount.toLocaleString("en-IN", {
                   maximumFractionDigits: 0,
                 })}
-              </div>
-              <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
+              </KpiValue>
+              <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 text-red-600 mt-1" />
             </div>
             <p className="text-xs text-muted-foreground mt-1 sm:mt-2">
               Overdue -{" "}
@@ -199,20 +206,20 @@ export function DashboardCharts({ invoices, payments }: DashboardChartsProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader className="pb-2 sm:pb-3">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Collection Rate
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline justify-between">
-              <div className="text-xl sm:text-2xl font-bold">
+          <CardContent className="min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <KpiValue display={`${collectionRate}%`}>
                 {collectionRate}%
-              </div>
-              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
+              </KpiValue>
+              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 text-green-600 mt-1" />
             </div>
-            <p className="text-xs text-muted-foreground mt-1 sm:mt-2">
+            <p className="text-xs text-muted-foreground mt-1 sm:mt-2 break-words">
               ₹{totalPaid.toLocaleString("en-IN", { maximumFractionDigits: 0 })}{" "}
               / ₹
               {totalInvoiced.toLocaleString("en-IN", {
@@ -222,23 +229,31 @@ export function DashboardCharts({ invoices, payments }: DashboardChartsProps) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader className="pb-2 sm:pb-3">
             <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Avg Invoice Value
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline justify-between">
-              <div className="text-xl sm:text-2xl font-bold">
+          <CardContent className="min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <KpiValue
+                display={`₹${
+                  invoices.length > 0
+                    ? (totalInvoiced / invoices.length).toLocaleString("en-IN", {
+                        maximumFractionDigits: 0,
+                      })
+                    : "0"
+                }`}
+              >
                 ₹
                 {invoices.length > 0
                   ? (totalInvoiced / invoices.length).toLocaleString("en-IN", {
                       maximumFractionDigits: 0,
                     })
                   : 0}
-              </div>
-              <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-slate-400" />
+              </KpiValue>
+              <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 shrink-0 text-slate-400 mt-1" />
             </div>
             <p className="text-xs text-muted-foreground mt-1 sm:mt-2">
               {invoices.length} invoices in this FY

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Eye,
   Trash2,
@@ -48,6 +49,12 @@ import { IconTooltip } from "@/components/icon-tooltip";
 import { TableRowActions } from "@/components/table-row-actions";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { canDelete, canEdit } from "@/lib/permissions";
+import {
+  createPurchaseInvoiceRateDiscountLookup,
+  formatPurchaseInvoiceRateDiscount,
+  getPurchaseInvoiceRateDiscountFromLookup,
+} from "@/lib/purchase-invoice-rate-discount";
+import type { PriceCategoryHistoryEntry } from "@/lib/utils";
 
 interface PurchaseInvoice {
   id: string;
@@ -61,11 +68,20 @@ interface PurchaseInvoice {
   total_amount: string;
   amount_paid: string;
   status: string;
-  description?: string | null;
   created_at: string;
   purchasers: { name: string; purchaser_code: string } | null;
   challans: { challan_number: string };
   profiles?: { full_name: string };
+}
+
+function getAverage(invoice: {
+  total_weight_kg: string | number;
+  total_birds?: number | null;
+}) {
+  const weight = Number(invoice.total_weight_kg || 0);
+  const birds = Number(invoice.total_birds || 0);
+  if (birds <= 0 || weight <= 0) return null;
+  return weight / birds;
 }
 
 function getChallanLabel(invoice: PurchaseInvoice) {
@@ -80,6 +96,8 @@ interface PurchaseInvoicesTableProps {
   userRole?: string;
   fromDate?: string;
   toDate?: string;
+  liveCategoryId?: string | null;
+  priceHistory?: PriceCategoryHistoryEntry[];
 }
 
 const statusConfig = {
@@ -98,12 +116,27 @@ export function PurchaseInvoicesTable({
   userRole,
   fromDate = "",
   toDate = "",
+  liveCategoryId = null,
+  priceHistory = [],
 }: PurchaseInvoicesTableProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const priceLookup = useMemo(
+    () => createPurchaseInvoiceRateDiscountLookup(priceHistory),
+    [priceHistory],
+  );
+  const getRateDiscount = (invoice: PurchaseInvoice) =>
+    getPurchaseInvoiceRateDiscountFromLookup(
+      invoice,
+      liveCategoryId,
+      priceLookup,
+    );
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState<"pdf" | "consolidated" | null>(
+    null,
+  );
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [itemsPerPage, setItemsPerPage] = useState(25);
@@ -182,6 +215,14 @@ export function PurchaseInvoicesTable({
             aVal = Number(a.total_birds || 0);
             bVal = Number(b.total_birds || 0);
             break;
+          case "average":
+            aVal = getAverage(a) ?? -1;
+            bVal = getAverage(b) ?? -1;
+            break;
+          case "rate_discount":
+            aVal = getRateDiscount(a) ?? Number.NEGATIVE_INFINITY;
+            bVal = getRateDiscount(b) ?? Number.NEGATIVE_INFINITY;
+            break;
           case "total_amount":
             aVal = Number(a.total_amount);
             bVal = Number(b.total_amount);
@@ -208,7 +249,7 @@ export function PurchaseInvoicesTable({
     }
 
     return filtered;
-  }, [invoices, filters, sortColumn, sortDirection]);
+  }, [invoices, filters, sortColumn, sortDirection, liveCategoryId, priceLookup]);
 
   const pagination = usePagination({
     items: processedInvoices,
@@ -288,17 +329,25 @@ export function PurchaseInvoicesTable({
   };
 
   const handleExport = () => {
-    const enriched = processedInvoices.map((inv) => ({
-      ...inv,
-      purchaser_name: inv.purchasers?.name ?? "N/A",
-      challan_number: getChallanLabel(inv),
-      due_amount: (
-        Number(inv.total_amount) - Number(inv.amount_paid)
-      ).toFixed(2),
-      status_label:
-        statusConfig[inv.status as keyof typeof statusConfig]?.label ||
-        inv.status,
-    }));
+    const enriched = processedInvoices.map((inv) => {
+      const average = getAverage(inv);
+      const rateDiscount = getRateDiscount(inv);
+      return {
+        ...inv,
+        purchaser_name: inv.purchasers?.name ?? "N/A",
+        challan_number: getChallanLabel(inv),
+        average_fmt: average != null ? average.toFixed(3) : "—",
+        discount_fmt: formatPurchaseInvoiceRateDiscount(rateDiscount, {
+          includeUnit: false,
+        }),
+        due_amount: (
+          Number(inv.total_amount) - Number(inv.amount_paid)
+        ).toFixed(2),
+        status_label:
+          statusConfig[inv.status as keyof typeof statusConfig]?.label ||
+          inv.status,
+      };
+    });
 
     const columns: ExportColumn[] = [
       {
@@ -324,6 +373,8 @@ export function PurchaseInvoicesTable({
         label: "Weight (KG)",
         formatter: (v) => Number(v).toFixed(3),
       },
+      { key: "average_fmt", label: "Average" },
+      { key: "discount_fmt", label: "Discount (/KG)" },
       {
         key: "total_amount",
         label: "Total Amount",
@@ -347,56 +398,72 @@ export function PurchaseInvoicesTable({
   };
 
   const handleExportPDF = async () => {
-    const enriched = processedInvoices.map((inv) => ({
-      purchaser_invoice_number: inv.purchaser_invoice_number || "—",
-      challan_number: getChallanLabel(inv),
-      purchaser_name: inv.purchasers?.name ?? "N/A",
-      issue_date_fmt: formatIndianDate(inv.issue_date, {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }),
-      weight_fmt: `${Number(inv.total_weight_kg).toFixed(3)} KG`,
-      birds_fmt: String(Number(inv.total_birds || 0)),
-      total_fmt: `Rs.${Number(inv.total_amount).toFixed(2)}`,
-      paid_fmt: `Rs.${Number(inv.amount_paid).toFixed(2)}`,
-      due_fmt: `Rs.${(Number(inv.total_amount) - Number(inv.amount_paid)).toFixed(2)}`,
-      status_label:
-        statusConfig[inv.status as keyof typeof statusConfig]?.label ||
-        inv.status,
-    }));
+    setIsExporting("pdf");
+    try {
+      const enriched = processedInvoices.map((inv) => {
+        const average = getAverage(inv);
+        const rateDiscount = getRateDiscount(inv);
+        return {
+          purchaser_invoice_number: inv.purchaser_invoice_number || "—",
+          challan_number: getChallanLabel(inv),
+          purchaser_name: inv.purchasers?.name ?? "N/A",
+          issue_date_fmt: formatIndianDate(inv.issue_date, {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }),
+          weight_fmt: `${Number(inv.total_weight_kg).toFixed(3)} KG`,
+          birds_fmt: String(Number(inv.total_birds || 0)),
+          average_fmt: average != null ? average.toFixed(3) : "—",
+          discount_fmt: formatPurchaseInvoiceRateDiscount(rateDiscount, {
+            includeUnit: false,
+          }),
+          total_fmt: `Rs.${Number(inv.total_amount).toFixed(2)}`,
+          paid_fmt: `Rs.${Number(inv.amount_paid).toFixed(2)}`,
+          due_fmt: `Rs.${(Number(inv.total_amount) - Number(inv.amount_paid)).toFixed(2)}`,
+          status_label:
+            statusConfig[inv.status as keyof typeof statusConfig]?.label ||
+            inv.status,
+        };
+      });
 
-    const pdfColumns: ExportColumn[] = [
-      { key: "issue_date_fmt", label: "Date", widthFrac: 0.1 },
-      { key: "purchaser_invoice_number", label: "Purchaser Invoice #", widthFrac: 0.12 },
-      { key: "challan_number", label: "Purchase challan", widthFrac: 0.1 },
-      { key: "purchaser_name", label: "Purchaser", widthFrac: 0.16 },
-      { key: "birds_fmt", label: "Birds", widthFrac: 0.07 },
-      { key: "weight_fmt", label: "Weight", widthFrac: 0.09 },
-      { key: "total_fmt", label: "Total", widthFrac: 0.1, align: "right" },
-      { key: "paid_fmt", label: "Paid", widthFrac: 0.1, align: "right" },
-      { key: "due_fmt", label: "Due", widthFrac: 0.1, align: "right" },
-      { key: "status_label", label: "Status", widthFrac: 0.12 },
-    ];
+      const pdfColumns: ExportColumn[] = [
+        { key: "issue_date_fmt", label: "Date", widthFrac: 0.08 },
+        { key: "purchaser_invoice_number", label: "Purchaser Invoice #", widthFrac: 0.1 },
+        { key: "challan_number", label: "Purchase challan", widthFrac: 0.08 },
+        { key: "purchaser_name", label: "Purchaser", widthFrac: 0.12 },
+        { key: "birds_fmt", label: "Birds", widthFrac: 0.06 },
+        { key: "weight_fmt", label: "Weight", widthFrac: 0.08 },
+        { key: "average_fmt", label: "Average", widthFrac: 0.07 },
+        { key: "discount_fmt", label: "Discount (/KG)", widthFrac: 0.09 },
+        { key: "total_fmt", label: "Total", widthFrac: 0.08, align: "right" },
+        { key: "paid_fmt", label: "Paid", widthFrac: 0.08, align: "right" },
+        { key: "due_fmt", label: "Due", widthFrac: 0.08, align: "right" },
+        { key: "status_label", label: "Status", widthFrac: 0.09 },
+      ];
 
-    const rangeLabel =
-      fromDate || toDate ? ` (${fromDate || "..."} to ${toDate || "..."})` : "";
-    await exportToPDF(
-      enriched,
-      pdfColumns,
-      `Purchase Invoices${rangeLabel}`,
-      `purchase-invoices-${getTimestamp()}.pdf`,
-    );
-    toast({
-      variant: "success",
-      title: "Exported",
-      description: `${enriched.length} invoice(s) exported to PDF successfully.`,
-    });
+      const rangeLabel =
+        fromDate || toDate ? ` (${fromDate || "..."} to ${toDate || "..."})` : "";
+      await exportToPDF(
+        enriched,
+        pdfColumns,
+        `Purchase Invoices${rangeLabel}`,
+        `purchase-invoices-${getTimestamp()}.pdf`,
+      );
+      toast({
+        variant: "success",
+        title: "Exported",
+        description: `${enriched.length} invoice(s) exported to PDF successfully.`,
+      });
+    } finally {
+      setIsExporting(null);
+    }
   };
 
   const handleExportConsolidatedPDF = async () => {
     if (processedInvoices.length === 0) return;
 
+    setIsExporting("consolidated");
     toast({
       title: "Generating PDF",
       description: "Please wait while we generate the consolidated PDF...",
@@ -407,6 +474,8 @@ export function PurchaseInvoicesTable({
         invoiceIds: processedInvoices.map((inv) => inv.id),
         fromDate,
         toDate,
+        liveCategoryId,
+        priceHistory,
       });
 
       if (count === 0) {
@@ -433,6 +502,8 @@ export function PurchaseInvoicesTable({
             ? error.message
             : "Failed to generate consolidated PDF.",
       });
+    } finally {
+      setIsExporting(null);
     }
   };
 
@@ -458,10 +529,16 @@ export function PurchaseInvoicesTable({
                 onClick={handleExportPDF}
                 size="sm"
                 variant="outline"
-                disabled={processedInvoices.length === 0}
+                disabled={processedInvoices.length === 0 || !!isExporting}
               >
-                <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline ml-2">PDF</span>
+                {isExporting === "pdf" ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <FileText className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline ml-2">
+                  {isExporting === "pdf" ? "Exporting..." : "PDF"}
+                </span>
               </Button>
             </IconTooltip>
             <IconTooltip label="Export consolidated PDF">
@@ -469,10 +546,16 @@ export function PurchaseInvoicesTable({
                 onClick={handleExportConsolidatedPDF}
                 size="sm"
                 variant="outline"
-                disabled={processedInvoices.length === 0}
+                disabled={processedInvoices.length === 0 || !!isExporting}
               >
-                <Files className="h-4 w-4" />
-                <span className="hidden sm:inline ml-2">Consolidated</span>
+                {isExporting === "consolidated" ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <Files className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline ml-2">
+                  {isExporting === "consolidated" ? "Exporting..." : "Consolidated"}
+                </span>
               </Button>
             </IconTooltip>
           </div>
@@ -520,6 +603,20 @@ export function PurchaseInvoicesTable({
               >
                 Weight (KG)
                 <SortIcon column="total_weight_kg" />
+              </TableHead>
+              <TableHead
+                className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                onClick={() => handleSort("average")}
+              >
+                Average
+                <SortIcon column="average" />
+              </TableHead>
+              <TableHead
+                className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                onClick={() => handleSort("rate_discount")}
+              >
+                Discount (/KG)
+                <SortIcon column="rate_discount" />
               </TableHead>
               <TableHead
                 className="hidden lg:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
@@ -588,6 +685,8 @@ export function PurchaseInvoicesTable({
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
+              <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3" />
               <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
@@ -607,7 +706,7 @@ export function PurchaseInvoicesTable({
             {pagination.paginatedItems.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={11}
+                  colSpan={13}
                   className="text-center py-8 text-muted-foreground"
                 >
                   No purchase invoices found.
@@ -620,6 +719,8 @@ export function PurchaseInvoicesTable({
                   statusConfig.recorded;
                 const due =
                   Number(invoice.total_amount) - Number(invoice.amount_paid);
+                const average = getAverage(invoice);
+                const rateDiscount = getRateDiscount(invoice);
                 return (
                   <TableRow key={invoice.id}>
                     <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3">
@@ -639,6 +740,14 @@ export function PurchaseInvoicesTable({
                     </TableCell>
                     <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
                       {Number(invoice.total_weight_kg).toFixed(3)}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                      {average != null ? average.toFixed(3) : "—"}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
+                      {formatPurchaseInvoiceRateDiscount(rateDiscount, {
+                        includeUnit: false,
+                      })}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3">
                       ₹

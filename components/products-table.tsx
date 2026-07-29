@@ -8,8 +8,6 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useState, useMemo } from "react"
-import { usePagination } from "@/hooks/use-pagination"
-import { TablePagination } from "@/components/table-pagination"
 import {
   DndContext,
   closestCenter,
@@ -168,9 +166,6 @@ export function ProductsTable({ products, userRole }: ProductsTableProps) {
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
-  // Pagination state
-  const [itemsPerPage, setItemsPerPage] = useState(25)
-
   // Filter state
   const [filters, setFilters] = useState({
     name: '',
@@ -237,11 +232,6 @@ export function ProductsTable({ products, userRole }: ProductsTableProps) {
 
     return filtered
   }, [orderedProducts, filters, sortColumn, sortDirection])
-
-  const pagination = usePagination({
-    items: processedProducts,
-    itemsPerPage,
-  })
 
   const SortIcon = ({ column }: { column: string }) => {
     if (sortColumn !== column) return <ArrowUpDown className="ml-2 h-4 w-4 inline opacity-40" />
@@ -397,10 +387,10 @@ export function ProductsTable({ products, userRole }: ProductsTableProps) {
             </TableHeader>
             <TableBody>
               <SortableContext
-                items={pagination.paginatedItems.map((prod) => prod.id)}
+                items={processedProducts.map((prod) => prod.id)}
                 strategy={verticalListSortingStrategy}
               >
-                {pagination.paginatedItems.map((product) => (
+                {processedProducts.map((product) => (
                   <SortableProductRow
                     key={product.id}
                     product={product}
@@ -416,15 +406,6 @@ export function ProductsTable({ products, userRole }: ProductsTableProps) {
           </Table>
         </DndContext>
       </div>
-
-      <TablePagination
-        currentPage={pagination.currentPage}
-        totalPages={pagination.totalPages}
-        totalItems={pagination.totalItems}
-        itemsPerPage={itemsPerPage}
-        onPageChange={pagination.goToPage}
-        onItemsPerPageChange={setItemsPerPage}
-      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

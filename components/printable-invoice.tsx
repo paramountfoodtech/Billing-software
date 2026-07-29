@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatIndianDate } from "@/lib/date-time";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { InvoiceShareActions } from "@/components/invoice-share-actions";
 
 interface InvoiceTemplate {
   company_name: string;
@@ -153,19 +154,30 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
 
   return (
     <>
-      <div className="no-print mb-3 flex items-center justify-between gap-2">
+      <div className="no-print mb-3 flex flex-wrap items-center justify-between gap-2">
         <Button asChild variant="outline">
           <a href="/dashboard/invoices">Back</a>
         </Button>
-        <IconTooltip label="Print Invoice">
-          <Button onClick={handlePrint} disabled={isPrinting}>
-            <Printer className="h-4 w-4 mr-2" />
-            Print Invoice
-          </Button>
-        </IconTooltip>
+        <div className="flex flex-wrap items-center gap-2">
+          <InvoiceShareActions
+            invoiceType="sales"
+            invoiceId={invoice.id}
+            invoiceNumber={invoice.invoice_number}
+            recipientName={invoice.clients.name}
+            recipientEmail={invoice.clients.email}
+            recipientPhone={invoice.clients.phone}
+            companyName={activeTemplate.company_name}
+          />
+          <IconTooltip label="Print Invoice">
+            <Button onClick={handlePrint} disabled={isPrinting}>
+              <Printer className="h-4 w-4 mr-2" />
+              Print Invoice
+            </Button>
+          </IconTooltip>
+        </div>
       </div>
 
-      <Card className="print-area">
+      <Card id="invoice-print-area" className="print-area">
         <CardContent className="p-5 md:p-6 text-sm">
           {/* Header */}
           <div className="flex justify-between items-start mb-5">

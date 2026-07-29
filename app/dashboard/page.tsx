@@ -33,6 +33,7 @@ import { DashboardMonthlyHeader } from "@/components/dashboard-monthly-header";
 import { Suspense } from "react";
 import { PageLoadingFallback } from "@/components/page-loading-fallback";
 import { MaterialDashboardWidgets } from "@/components/material-dashboard-widgets";
+import { KpiValue } from "@/components/kpi-value";
 
 // Prevent caching to ensure fresh data on every request
 export const revalidate = 0;
@@ -98,89 +99,97 @@ function FinancialKpiCards({
   kpis: ReturnType<typeof computeFinancialKpis>;
   periodHint: string;
 }) {
+  const sale = `₹${formatINR(kpis.totalSale)}`;
+  const purchase = `₹${formatINR(kpis.totalPurchase)}`;
+  const expenses = `₹${formatINR(kpis.totalExpenses)}`;
+  const gross = `₹${formatINR(kpis.grossAmount)}`;
+  const net = `₹${formatINR(kpis.netAmount)}`;
+
   return (
     <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 mb-6">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-xs sm:text-sm font-medium">
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+          <CardTitle className="text-xs sm:text-sm font-medium truncate">
             Total Sale
           </CardTitle>
-          <TrendingUp className="h-4 w-4 text-blue-600" />
+          <TrendingUp className="h-4 w-4 shrink-0 text-blue-600" />
         </CardHeader>
-        <CardContent>
-          <div className="text-xl sm:text-2xl font-bold text-blue-700">
-            ₹{formatINR(kpis.totalSale)}
-          </div>
+        <CardContent className="min-w-0">
+          <KpiValue display={sale} className="text-blue-700">
+            {sale}
+          </KpiValue>
           <p className="text-xs text-muted-foreground mt-1">
             {kpis.activeSalesCount} sales invoices {periodHint}
           </p>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-xs sm:text-sm font-medium">
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+          <CardTitle className="text-xs sm:text-sm font-medium truncate">
             Total Purchase
           </CardTitle>
-          <ShoppingCart className="h-4 w-4 text-orange-600" />
+          <ShoppingCart className="h-4 w-4 shrink-0 text-orange-600" />
         </CardHeader>
-        <CardContent>
-          <div className="text-xl sm:text-2xl font-bold text-orange-700">
-            ₹{formatINR(kpis.totalPurchase)}
-          </div>
+        <CardContent className="min-w-0">
+          <KpiValue display={purchase} className="text-orange-700">
+            {purchase}
+          </KpiValue>
           <p className="text-xs text-muted-foreground mt-1">
             Purchase challan purchases {periodHint}
           </p>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-xs sm:text-sm font-medium">
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+          <CardTitle className="text-xs sm:text-sm font-medium truncate">
             Total Expenses
           </CardTitle>
-          <Receipt className="h-4 w-4 text-amber-600" />
+          <Receipt className="h-4 w-4 shrink-0 text-amber-600" />
         </CardHeader>
-        <CardContent>
-          <div className="text-xl sm:text-2xl font-bold text-amber-700">
-            ₹{formatINR(kpis.totalExpenses)}
-          </div>
+        <CardContent className="min-w-0">
+          <KpiValue display={expenses} className="text-amber-700">
+            {expenses}
+          </KpiValue>
           <p className="text-xs text-muted-foreground mt-1">
             Salary &amp; expense entries {periodHint}
           </p>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-xs sm:text-sm font-medium">
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+          <CardTitle className="text-xs sm:text-sm font-medium truncate">
             Gross Amount
           </CardTitle>
-          <Scale className="h-4 w-4 text-purple-600" />
+          <Scale className="h-4 w-4 shrink-0 text-purple-600" />
         </CardHeader>
-        <CardContent>
-          <div
-            className={`text-xl sm:text-2xl font-bold ${kpis.grossAmount >= 0 ? "text-purple-700" : "text-red-600"}`}
+        <CardContent className="min-w-0">
+          <KpiValue
+            display={gross}
+            className={kpis.grossAmount >= 0 ? "text-purple-700" : "text-red-600"}
           >
-            ₹{formatINR(kpis.grossAmount)}
-          </div>
+            {gross}
+          </KpiValue>
           <p className="text-xs text-muted-foreground mt-1">Sale − Purchase</p>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-xs sm:text-sm font-medium">
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+          <CardTitle className="text-xs sm:text-sm font-medium truncate">
             Net Amount
           </CardTitle>
-          <Wallet className="h-4 w-4 text-green-600" />
+          <Wallet className="h-4 w-4 shrink-0 text-green-600" />
         </CardHeader>
-        <CardContent>
-          <div
-            className={`text-xl sm:text-2xl font-bold ${kpis.netAmount >= 0 ? "text-green-700" : "text-red-600"}`}
+        <CardContent className="min-w-0">
+          <KpiValue
+            display={net}
+            className={kpis.netAmount >= 0 ? "text-green-700" : "text-red-600"}
           >
-            ₹{formatINR(kpis.netAmount)}
-          </div>
+            {net}
+          </KpiValue>
           <p className="text-xs text-muted-foreground mt-1">Gross − Expenses</p>
         </CardContent>
       </Card>
@@ -456,49 +465,49 @@ export default async function DashboardPage({
 
         {/* Row 2: Collections & clients */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
+          <Card className="min-w-0 overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium truncate">
                 Total Revenue
               </CardTitle>
-              <DollarSign className="h-4 w-4 text-green-600" />
+              <DollarSign className="h-4 w-4 shrink-0 text-green-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">
+            <CardContent className="min-w-0">
+              <KpiValue display={`₹${formatINR(totalRevenue)}`}>
                 ₹{formatINR(totalRevenue)}
-              </div>
+              </KpiValue>
               <p className="text-xs text-muted-foreground mt-1">
                 FY {fyRange.fy} payments received
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
+          <Card className="min-w-0 overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium truncate">
                 Outstanding
               </CardTitle>
-              <AlertCircle className="h-4 w-4 text-orange-600" />
+              <AlertCircle className="h-4 w-4 shrink-0 text-orange-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">
-                ₹{totalOutstanding.toFixed(2)}
-              </div>
+            <CardContent className="min-w-0">
+              <KpiValue display={`₹${formatINR(totalOutstanding)}`}>
+                ₹{formatINR(totalOutstanding)}
+              </KpiValue>
               <p className="text-xs text-muted-foreground mt-1">
                 Pending payment collection
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
+          <Card className="min-w-0 overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium truncate">
                 Active Clients
               </CardTitle>
-              <Users className="h-4 w-4 text-purple-600" />
+              <Users className="h-4 w-4 shrink-0 text-purple-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">{totalClients}</div>
+            <CardContent className="min-w-0">
+              <KpiValue display={String(totalClients)}>{totalClients}</KpiValue>
               <p className="text-xs text-muted-foreground mt-1">
                 Total clients in system
               </p>

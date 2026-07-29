@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Spinner } from "@/components/ui/spinner";
+import { FormBusyOverlay } from "@/components/form-busy-overlay";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -52,7 +53,6 @@ interface PurchaseInvoiceInitial {
   issue_date: string;
   purchaser_id: string | null;
   challan_id?: string | null;
-  description?: string | null;
   total_weight_kg: string | number;
   total_birds?: number | null;
   price_per_kg: string | number;
@@ -120,9 +120,6 @@ export function PurchaseInvoiceForm({
     initialInvoice?.challan_id || initialChallan?.id || "",
   );
   const [originalChallanId] = useState(initialInvoice?.challan_id || "");
-  const [description, setDescription] = useState(
-    initialInvoice?.description || "",
-  );
   const [totalWeightInput, setTotalWeightInput] = useState(
     initialInvoice
       ? String(initialInvoice.total_weight_kg)
@@ -278,6 +275,8 @@ export function PurchaseInvoiceForm({
 
   const totalWeight = Number(totalWeightInput) || 0;
   const totalBirds = Math.max(0, Math.round(Number(totalBirdsInput) || 0));
+  const average =
+    totalBirds > 0 && totalWeight > 0 ? totalWeight / totalBirds : null;
   const selectedChallan = challanId
     ? challans.find((c) => c.id === challanId)
     : undefined;
@@ -327,14 +326,6 @@ export function PurchaseInvoiceForm({
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
-
-  const lineDescription =
-    description.trim() ||
-    (challanId
-      ? `Purchase weight (Purchase challan ${
-          challans.find((c) => c.id === challanId)?.challan_number || ""
-        })`
-      : "Purchase invoice");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -488,7 +479,6 @@ export function PurchaseInvoiceForm({
           .from("purchase_invoices")
           .update({
             purchaser_invoice_number: trimmedPurchaserInvoiceNumber,
-            description: lineDescription,
             challan_id: challanId || null,
             purchaser_id: purchaserId,
             issue_date: issueDate,
@@ -560,7 +550,6 @@ export function PurchaseInvoiceForm({
             invoice_number: invoiceNumber.trim(),
             purchaser_invoice_number: trimmedPurchaserInvoiceNumber,
             invoice_type: "challan",
-            description: lineDescription,
             challan_id: challanId || null,
             purchaser_id: purchaserId,
             issue_date: issueDate,
@@ -646,9 +635,17 @@ export function PurchaseInvoiceForm({
   };
 
   return (
-    <Card>
+    <Card className="relative overflow-hidden">
+      <FormBusyOverlay
+        active={isLoading}
+        label={isEditMode ? "Updating purchase invoice…" : "Creating purchase invoice…"}
+      />
       <CardContent className="pt-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form
+          onSubmit={handleSubmit}
+          className={`space-y-6 ${isLoading ? "pointer-events-none select-none" : ""}`}
+          aria-busy={isLoading}
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="issue_date">Issue Date</Label>
@@ -754,13 +751,13 @@ export function PurchaseInvoiceForm({
             </div>
 
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="challan_description">Description (optional)</Label>
-              <Input
-                id="challan_description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Override line description on invoice"
-              />
+              <Label>Average (KG / bird)</Label>
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium tabular-nums">
+                {average != null ? average.toFixed(3) : "—"}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Total weight ÷ total birds
+              </p>
             </div>
           </div>
 
@@ -945,6 +942,7 @@ export function PurchaseInvoiceForm({
             <Button
               type="button"
               variant="outline"
+              disabled={isLoading}
               onClick={() =>
                 router.push(
                   isEditMode && initialInvoice
@@ -965,7 +963,13 @@ export function PurchaseInvoiceForm({
               }
             >
               {isLoading && <Spinner className="mr-2 h-4 w-4" />}
-              {isEditMode ? "Update Invoice" : "Create Invoice"}
+              {isLoading
+                ? isEditMode
+                  ? "Updating..."
+                  : "Creating..."
+                : isEditMode
+                  ? "Update Invoice"
+                  : "Create Invoice"}
             </Button>
           </div>
         </form>

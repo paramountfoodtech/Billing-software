@@ -11,8 +11,6 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { ArrowUpDown, ArrowUp, ArrowDown, Download, FileText, FileDown } from "lucide-react"
-import { usePagination } from "@/hooks/use-pagination"
-import { TablePagination } from "@/components/table-pagination"
 import { Button } from "@/components/ui/button"
 import { IconTooltip } from "@/components/icon-tooltip"
 import { useToast } from "@/hooks/use-toast"
@@ -56,9 +54,6 @@ export function ReportsTable({
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
-
-  // Pagination state
-  const [itemsPerPage, setItemsPerPage] = useState(100)
 
   // Filter state
   const [filters, setFilters] = useState({ hotel: "" })
@@ -149,8 +144,6 @@ export function ReportsTable({
 
     return filtered
   }, [rows, filters, sortColumn, sortDirection, daysInMonth])
-
-  const pagination = usePagination({ items: processedRows, itemsPerPage })
 
   const totals = useMemo(
     () =>
@@ -671,7 +664,7 @@ export function ReportsTable({
           </TableHeader>
 
           <TableBody>
-            {pagination.paginatedItems.length === 0 ? (
+            {processedRows.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={10}
@@ -683,7 +676,7 @@ export function ReportsTable({
                 </TableCell>
               </TableRow>
             ) : (
-              pagination.paginatedItems.map((row) => (
+              processedRows.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="sticky left-0 z-10 bg-white border-r font-medium px-2 sm:px-4 py-2 sm:py-3 min-w-[180px] w-[180px] whitespace-nowrap">
                     {row.name}
@@ -736,7 +729,6 @@ export function ReportsTable({
               ))
             )}
 
-            {/* Totals row — based on all filtered rows (not just current page) */}
             {processedRows.length > 0 && (
               <TableRow className="border-t-2 font-bold bg-muted">
                 <TableCell className="sticky left-0 z-30 bg-muted border-r px-2 sm:px-4 py-2 sm:py-3 min-w-[180px] w-[180px] whitespace-nowrap">
@@ -774,15 +766,6 @@ export function ReportsTable({
           </TableBody>
         </Table>
       </div>
-
-      <TablePagination
-        currentPage={pagination.currentPage}
-        totalPages={pagination.totalPages}
-        totalItems={pagination.totalItems}
-        itemsPerPage={itemsPerPage}
-        onPageChange={pagination.goToPage}
-        onItemsPerPageChange={setItemsPerPage}
-      />
     </div>
   )
 }

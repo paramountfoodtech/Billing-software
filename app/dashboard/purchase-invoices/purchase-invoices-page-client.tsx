@@ -8,6 +8,7 @@ import {
   getFinancialYear,
   getFinancialYearDateRange,
 } from "@/components/financial-year-selector";
+import type { PriceCategoryHistoryEntry } from "@/lib/utils";
 
 interface Purchaser {
   id: string;
@@ -36,12 +37,16 @@ interface PurchaseInvoicesPageClientProps {
   purchasers: Purchaser[];
   invoices: PurchaseInvoice[];
   userRole?: string;
+  liveCategoryId?: string | null;
+  priceHistory?: PriceCategoryHistoryEntry[];
 }
 
 export function PurchaseInvoicesPageClient({
   purchasers,
   invoices,
   userRole,
+  liveCategoryId = null,
+  priceHistory = [],
 }: PurchaseInvoicesPageClientProps) {
   const [selectedPurchaserId, setSelectedPurchaserId] = useState<string | null>(
     null,
@@ -75,6 +80,8 @@ export function PurchaseInvoicesPageClient({
         userRole={userRole}
         fromDate={fromDate}
         toDate={toDate}
+        liveCategoryId={liveCategoryId}
+        priceHistory={priceHistory}
         toolbarLeft={
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-muted-foreground">FY:</span>

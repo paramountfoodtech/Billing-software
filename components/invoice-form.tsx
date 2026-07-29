@@ -44,6 +44,8 @@ import {
   logEntryHistory,
 } from "@/lib/entry-history";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { Spinner } from "@/components/ui/spinner";
+import { FormBusyOverlay } from "@/components/form-busy-overlay";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -1744,7 +1746,24 @@ export function InvoiceForm({
 
   return (
     <>
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="relative">
+    <FormBusyOverlay
+      active={isLoading}
+      label={
+        savingAs === "draft"
+          ? "Saving blank/cancelled invoice…"
+          : isEditingDraft
+            ? "Completing invoice…"
+            : isEditMode
+              ? "Updating invoice…"
+              : "Creating invoice…"
+      }
+    />
+    <form
+      onSubmit={handleSubmit}
+      className={`space-y-6 ${isLoading ? "pointer-events-none select-none" : ""}`}
+      aria-busy={isLoading}
+    >
       <Card>
         <CardHeader>
           <CardTitle>Invoice Details</CardTitle>
@@ -2453,6 +2472,9 @@ export function InvoiceForm({
             (clientPerBirdEnabled && globalBirdCount <= 0)
           }
         >
+          {isLoading && savingAs === "recorded" && (
+            <Spinner className="mr-2 h-4 w-4" />
+          )}
           {savingAs === "recorded"
             ? isEditingDraft
               ? "Completing..."
@@ -2478,6 +2500,9 @@ export function InvoiceForm({
             }
             onClick={() => void saveInvoice("draft")}
           >
+            {isLoading && savingAs === "draft" && (
+              <Spinner className="mr-2 h-4 w-4" />
+            )}
             {savingAs === "draft"
               ? "Saving..."
               : "Blank/Cancelled"}
@@ -2493,6 +2518,7 @@ export function InvoiceForm({
         </Button>
       </div>
     </form>
+    </div>
 
     <AlertDialog
       open={refreshPricesDialogOpen}

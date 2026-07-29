@@ -7,6 +7,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatIndianDate } from "@/lib/date-time";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { InvoiceShareActions } from "@/components/invoice-share-actions";
+import {
+  formatPurchaseInvoiceRateDiscount,
+  getPurchaseInvoiceRateDiscount,
+} from "@/lib/purchase-invoice-rate-discount";
+import type { PriceCategoryHistoryEntry } from "@/lib/utils";
 
 interface InvoiceTemplate {
   company_name: string;
@@ -31,7 +37,6 @@ interface PurchaseInvoice {
   amount_paid: string;
   status: string;
   notes: string | null;
-  description?: string | null;
   purchasers?: {
     name: string;
     purchaser_code: string;
@@ -46,6 +51,7 @@ interface PurchaseInvoice {
     challan_number: string;
     challan_date: string;
     num_boxes: number;
+    total_birds?: number | null;
     challan_boxes?: { box_number: number; weight_kg: string; num_birds?: number }[];
   } | null;
 }
@@ -53,30 +59,39 @@ interface PurchaseInvoice {
 interface PrintablePurchaseInvoiceProps {
   invoice: PurchaseInvoice;
   template?: InvoiceTemplate;
+  liveCategoryId?: string | null;
+  priceHistory?: PriceCategoryHistoryEntry[];
 }
 
 export function PrintablePurchaseInvoice({
   invoice,
   template,
+  liveCategoryId,
+  priceHistory = [],
 }: PrintablePurchaseInvoiceProps) {
   const [isPrinting, setIsPrinting] = useState(false);
   const balance = Number(invoice.total_amount) - Number(invoice.amount_paid);
-  const discountAmount = Number(invoice.discount_amount || 0);
+  const flatDiscountAmount = Number(invoice.discount_amount || 0);
+  const rateDiscount = getPurchaseInvoiceRateDiscount(
+    invoice,
+    liveCategoryId,
+    priceHistory,
+  );
+  const totalWeight = Number(invoice.total_weight_kg);
   const subtotal =
-    Number(invoice.total_weight_kg) * Number(invoice.price_per_kg) ||
-    Number(invoice.total_amount) + discountAmount;
+    totalWeight * Number(invoice.price_per_kg) ||
+    Number(invoice.total_amount) + flatDiscountAmount;
   const hasChallan = Boolean(invoice.challans?.challan_number);
-  const lineDescription =
-    invoice.description?.trim() ||
-    (hasChallan
-      ? `Purchase weight (Purchase challan ${invoice.challans!.challan_number})`
-      : "Purchase invoice");
   const boxes = invoice.challans?.challan_boxes || [];
   const totalBirds =
     Number(invoice.total_birds || 0) ||
     Number(invoice.challans?.total_birds || 0) ||
     boxes.reduce((sum, box) => sum + Number(box.num_birds || 0), 0);
-  const showWeightColumns = Number(invoice.total_weight_kg) > 0;
+  const showWeightColumns = totalWeight > 0;
+  const average =
+    totalBirds > 0 && totalWeight > 0
+      ? (totalWeight / totalBirds).toFixed(3)
+      : "—";
 
   const defaultTemplate: InvoiceTemplate = {
     company_name: "Your Company Name",
@@ -131,19 +146,32 @@ export function PrintablePurchaseInvoice({
 
   return (
     <>
-      <div className="no-print mb-3 flex items-center justify-between gap-2">
+      <div className="no-print mb-3 flex flex-wrap items-center justify-between gap-2">
         <Button asChild variant="outline">
           <Link href="/dashboard/purchase-invoices">Back</Link>
         </Button>
-        <IconTooltip label="Print Invoice">
-          <Button onClick={handlePrint} disabled={isPrinting}>
-            <Printer className="h-4 w-4 mr-2" />
-            Print Invoice
-          </Button>
-        </IconTooltip>
+        <div className="flex flex-wrap items-center gap-2">
+          <InvoiceShareActions
+            invoiceType="purchase"
+            invoiceId={invoice.id}
+            invoiceNumber={
+              invoice.purchaser_invoice_number?.trim() || invoice.invoice_number
+            }
+            recipientName={invoice.purchasers?.name || "Purchaser"}
+            recipientEmail={invoice.purchasers?.email}
+            recipientPhone={invoice.purchasers?.phone}
+            companyName={activeTemplate.company_name}
+          />
+          <IconTooltip label="Print Invoice">
+            <Button onClick={handlePrint} disabled={isPrinting}>
+              <Printer className="h-4 w-4 mr-2" />
+              Print Invoice
+            </Button>
+          </IconTooltip>
+        </div>
       </div>
 
-      <Card className="print-area">
+      <Card id="invoice-print-area" className="print-area">
         <CardContent className="p-5 md:p-6 text-sm">
           <div className="flex justify-between items-start mb-5">
             <div>
@@ -233,24 +261,26 @@ export function PrintablePurchaseInvoice({
           <table className="w-full mb-5">
             <thead className="border-b-2 border-gray-300">
               <tr>
-                <th className="text-left py-2">Description</th>
+                <th className="text-left py-2">Average</th>
                 <th className="text-right py-2">Qty (KG)</th>
                 <th className="text-right py-2">Rate</th>
+                <th className="text-right py-2">Discount</th>
                 <th className="text-right py-2">Amount</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-b border-gray-200">
-                <td className="py-2">{lineDescription}</td>
+                <td className="py-2">{average}</td>
                 <td className="text-right">
-                  {showWeightColumns
-                    ? Number(invoice.total_weight_kg).toFixed(3)
-                    : "—"}
+                  {showWeightColumns ? totalWeight.toFixed(3) : "—"}
                 </td>
                 <td className="text-right">
                   {showWeightColumns
                     ? `₹${Number(invoice.price_per_kg).toFixed(2)}`
                     : "—"}
+                </td>
+                <td className="text-right">
+                  {formatPurchaseInvoiceRateDiscount(rateDiscount)}
                 </td>
                 <td className="text-right">₹{subtotal.toFixed(2)}</td>
               </tr>
@@ -260,8 +290,9 @@ export function PrintablePurchaseInvoice({
                 <tr className="border-t border-gray-300">
                   <td className="py-2 font-semibold">Total weight (kgs):</td>
                   <td className="text-right font-semibold">
-                    {Number(invoice.total_weight_kg).toFixed(3)}
+                    {totalWeight.toFixed(3)}
                   </td>
+                  <td></td>
                   <td></td>
                   <td></td>
                 </tr>
@@ -272,6 +303,7 @@ export function PrintablePurchaseInvoice({
                   <td className="text-right font-semibold">
                     {invoice.challans!.num_boxes}
                   </td>
+                  <td></td>
                   <td></td>
                   <td></td>
                 </tr>
@@ -322,10 +354,10 @@ export function PrintablePurchaseInvoice({
                 <span>Subtotal:</span>
                 <span>₹{subtotal.toFixed(2)}</span>
               </div>
-              {discountAmount > 0 && (
+              {flatDiscountAmount > 0 && (
                 <div className="flex justify-between py-1 text-green-600">
                   <span>Discount:</span>
-                  <span>-₹{discountAmount.toFixed(2)}</span>
+                  <span>-₹{flatDiscountAmount.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between py-2 font-bold text-lg border-t-2 border-gray-300">

@@ -32,14 +32,11 @@ function resolveAppBaseUrl(request: Request): string {
 // Protect it with an authorization token
 export async function GET(request: Request) {
   try {
-    // Verify authorization
+    // Verify authorization — never fall back to a public or default secret
     const authHeader = request.headers.get("authorization");
-    const cronSecret =
-      process.env.CRON_SECRET ||
-      process.env.NEXT_PUBLIC_CRON_SECRET ||
-      "your-secret-key";
+    const cronSecret = process.env.CRON_SECRET;
 
-    if (authHeader !== `Bearer ${cronSecret}`) {
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

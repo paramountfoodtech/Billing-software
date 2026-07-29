@@ -30,6 +30,7 @@ import {
   CircleDollarSign,
   Factory,
   Boxes,
+  ArrowLeftRight,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -171,6 +172,12 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             icon: BarChart3,
             roles: ["super_admin", "admin"],
           },
+          {
+            href: "/dashboard/trade-summary",
+            label: "Buy & Sell",
+            icon: ArrowLeftRight,
+            roles: ["super_admin", "admin"],
+          },
         ],
       },
       {
@@ -205,6 +212,12 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             href: "/dashboard/purchase-reports",
             label: "Purchase Reports",
             icon: BarChart3,
+            roles: ["super_admin", "admin"],
+          },
+          {
+            href: "/dashboard/trade-summary",
+            label: "Buy & Sell",
+            icon: ArrowLeftRight,
             roles: ["super_admin", "admin"],
           },
         ],
@@ -367,7 +380,9 @@ export function DashboardNav({ profile }: DashboardNavProps) {
         <nav
           className="flex-1 p-4 space-y-4 overflow-y-auto overflow-x-hidden"
         >
-          {navGroups.map((group, groupIndex) => (
+          {navGroups.map((group, groupIndex) => {
+            const groupHrefs = group.items.map((item) => item.href);
+            return (
             <div key={group.id} className="space-y-1">
               {showGroupLabels ? (
                 <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
@@ -380,10 +395,19 @@ export function DashboardNav({ profile }: DashboardNavProps) {
               )}
               {group.items.map((item) => {
                 const Icon = item.icon;
+                const isExact = pathname === item.href;
+                const isPrefixMatch =
+                  item.href !== "/dashboard" &&
+                  pathname.startsWith(`${item.href}/`);
+                // Prefer a more specific sibling (e.g. /expenses/reports over /expenses)
+                const hasMoreSpecificMatch = groupHrefs.some(
+                  (other) =>
+                    other !== item.href &&
+                    other.startsWith(`${item.href}/`) &&
+                    (pathname === other || pathname.startsWith(`${other}/`)),
+                );
                 const isActive =
-                  pathname === item.href ||
-                  (item.href !== "/dashboard" &&
-                    pathname.startsWith(item.href));
+                  isExact || (isPrefixMatch && !hasMoreSpecificMatch);
                 const link = (
                   <Link
                     href={item.href}
@@ -413,7 +437,8 @@ export function DashboardNav({ profile }: DashboardNavProps) {
                 return <div key={item.href}>{link}</div>;
               })}
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-slate-200 flex-shrink-0">

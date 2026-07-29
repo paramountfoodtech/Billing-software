@@ -24,8 +24,6 @@ import { createClient } from "@/lib/supabase/client";
 import { formatIndianDate } from "@/lib/date-time";
 import { useRouter } from "next/navigation";
 import { useState, useMemo } from "react";
-import { usePagination } from "@/hooks/use-pagination";
-import { TablePagination } from "@/components/table-pagination";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +37,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { exportToCSV, ExportColumn, getTimestamp } from "@/lib/export-utils";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -59,6 +58,7 @@ interface Client {
   value_per_bird?: number | null;
   due_days?: number | null;
   due_days_type?: string | null;
+  linked_purchaser_id?: string | null;
   profiles?: {
     full_name: string;
   };
@@ -79,9 +79,6 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
   // Sorting state
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-
-  // Pagination state
-  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -170,11 +167,6 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
 
     return filtered;
   }, [clients, filters, sortColumn, sortDirection]);
-
-  const pagination = usePagination({
-    items: processedClients,
-    itemsPerPage,
-  });
 
   const SortIcon = ({ column }: { column: string }) => {
     if (sortColumn !== column)
@@ -349,16 +341,30 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pagination.paginatedItems.length === 0 ? (
+            {processedClients.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
                   No clients found for the selected filters.
                 </TableCell>
               </TableRow>
-            ) : pagination.paginatedItems.map((client) => (
+            ) : processedClients.map((client) => (
               <TableRow key={client.id} className="text-xs sm:text-sm">
                 <TableCell className="font-medium px-2 sm:px-4 py-2 sm:py-3 max-w-[120px] sm:max-w-none truncate">
-                  {client.name}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="truncate">{client.name}</span>
+                    {client.linked_purchaser_id && (
+                      <IconTooltip label="Also a purchaser — view buy & sell">
+                        <Link
+                          href={`/dashboard/trade-summary?clientId=${client.id}`}
+                          className="shrink-0"
+                        >
+                          <Badge variant="secondary" className="text-[10px]">
+                            Also purchaser
+                          </Badge>
+                        </Link>
+                      </IconTooltip>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell px-2 sm:px-4 py-2 sm:py-3">
                   <div className="flex flex-col gap-1">
@@ -444,15 +450,6 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
           </TableBody>
         </Table>
       </div>
-
-      <TablePagination
-        currentPage={pagination.currentPage}
-        totalPages={pagination.totalPages}
-        totalItems={pagination.totalItems}
-        itemsPerPage={itemsPerPage}
-        onPageChange={pagination.goToPage}
-        onItemsPerPageChange={setItemsPerPage}
-      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
