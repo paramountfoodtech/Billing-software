@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
 import { Trash2 } from "lucide-react";
 import { IconTooltip } from "@/components/icon-tooltip";
+import { canEditChallan } from "@/lib/permissions";
 
 function useBoxGridColumns() {
   const [cols, setCols] = useState(1);
@@ -72,12 +73,14 @@ interface ChallanFormProps {
   purchasers: Purchaser[];
   challan?: Challan;
   suggestedNumber?: string;
+  userRole?: string | null;
 }
 
 export function ChallanForm({
   purchasers,
   challan,
   suggestedNumber,
+  userRole,
 }: ChallanFormProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -124,7 +127,8 @@ export function ChallanForm({
     notes: challan?.notes || "",
   });
 
-  const isEditable = !challan || challan.status === "draft";
+  const isEditable =
+    !challan || canEditChallan(userRole, challan.status);
   const allBoxesHaveWeights = useMemo(
     () =>
       boxes.length > 0 &&
@@ -362,6 +366,7 @@ export function ChallanForm({
     }
 
     setIsLoading(true);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     const supabase = createClient();
 
     try {
@@ -372,13 +377,21 @@ export function ChallanForm({
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("organization_id")
+        .select("organization_id, role")
         .eq("id", user.id)
         .single();
 
       if (!profile?.organization_id) {
         throw new Error("User must belong to an organization");
       }
+
+      if (challan && !canEditChallan(profile.role, challan.status)) {
+        throw new Error("You do not have permission to edit this purchase challan.");
+      }
+
+      // Keep invoiced challans linked; do not demote status on edit.
+      const nextStatus =
+        challan?.status === "invoiced" ? "invoiced" : status;
 
       const challanPayload = {
         challan_number: formData.challan_number.trim(),
@@ -387,7 +400,7 @@ export function ChallanForm({
         num_boxes: boxes.length,
         total_weight_kg: totalWeight,
         total_birds: totalBirds,
-        status,
+        status: nextStatus,
         notes: formData.notes || null,
         updated_at: new Date().toISOString(),
       };
@@ -411,7 +424,12 @@ export function ChallanForm({
           action: "updated",
           userId: user.id,
           userName,
-          summary: status === "final" ? "Finalized purchase challan" : "Saved as draft",
+          summary:
+            nextStatus === "invoiced"
+              ? "Updated invoiced purchase challan"
+              : status === "final"
+                ? "Finalized purchase challan"
+                : "Saved as draft",
         });
       } else {
         const { data: created, error } = await supabase
@@ -845,17 +863,23 @@ export function ChallanForm({
             <div className="flex flex-wrap gap-3">
               <Button type="submit" disabled={isLoading || !canFinalize}>
                 {isLoading && <Spinner className="mr-2 h-4 w-4" />}
-                {isLoading ? "Saving..." : "Save & Finalize"}
+                {isLoading
+                  ? "Saving..."
+                  : challan?.status === "invoiced"
+                    ? "Update Challan"
+                    : "Save & Finalize"}
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={isLoading}
-                onClick={() => saveChallan("draft")}
-              >
-                {isLoading && <Spinner className="mr-2 h-4 w-4" />}
-                {isLoading ? "Saving..." : "Save as Draft"}
-              </Button>
+              {challan?.status !== "invoiced" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={isLoading}
+                  onClick={() => saveChallan("draft")}
+                >
+                  {isLoading && <Spinner className="mr-2 h-4 w-4" />}
+                  {isLoading ? "Saving..." : "Save as Draft"}
+                </Button>
+              )}
               {!canFinalize && (
                 <p className="w-full text-xs text-muted-foreground">
                   {boxes.length === 0

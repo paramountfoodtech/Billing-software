@@ -59,36 +59,75 @@ export default async function PurchaseInvoicesPage() {
 
   const userRole = profile?.role
 
-  const challanIds = [
-    ...new Set(
-      invoices
-        .map((inv) => inv.challan_id as string | null)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ]
-  const challanMap = new Map<string, { challan_number: string }>()
+  const invoiceIds = invoices.map((inv) => inv.id as string)
+  const challansByInvoiceId = new Map<string, string[]>()
 
-  if (challanIds.length > 0) {
-    const challans = await fetchAllPages(async (from, to) => {
+  if (invoiceIds.length > 0) {
+    const linkedChallans = await fetchAllPages(async (from, to) => {
       const { data, error } = await supabase
         .from("challans")
-        .select("id, challan_number")
-        .in("id", challanIds)
+        .select("id, challan_number, purchase_invoice_id")
+        .in("purchase_invoice_id", invoiceIds)
+        .order("challan_number", { ascending: true })
         .range(from, to)
       return { data, error }
     })
 
-    for (const challan of challans) {
-      challanMap.set(challan.id, { challan_number: challan.challan_number })
+    for (const challan of linkedChallans) {
+      const invoiceId = challan.purchase_invoice_id as string
+      if (!invoiceId) continue
+      const list = challansByInvoiceId.get(invoiceId) || []
+      list.push(challan.challan_number)
+      challansByInvoiceId.set(invoiceId, list)
+    }
+
+    // Legacy fallback: invoices that only have challan_id set
+    const legacyIds = [
+      ...new Set(
+        invoices
+          .filter(
+            (inv) =>
+              inv.challan_id &&
+              !(challansByInvoiceId.get(inv.id as string)?.length),
+          )
+          .map((inv) => inv.challan_id as string),
+      ),
+    ]
+
+    if (legacyIds.length > 0) {
+      const legacyChallans = await fetchAllPages(async (from, to) => {
+        const { data, error } = await supabase
+          .from("challans")
+          .select("id, challan_number")
+          .in("id", legacyIds)
+          .range(from, to)
+        return { data, error }
+      })
+      const byId = new Map(
+        legacyChallans.map((c) => [c.id, c.challan_number]),
+      )
+      for (const inv of invoices) {
+        if (
+          inv.challan_id &&
+          !(challansByInvoiceId.get(inv.id as string)?.length)
+        ) {
+          const number = byId.get(inv.challan_id as string)
+          if (number) challansByInvoiceId.set(inv.id as string, [number])
+        }
+      }
     }
   }
 
-  const enriched = invoices.map((inv) => ({
-    ...inv,
-    challans: inv.challan_id
-      ? challanMap.get(inv.challan_id as string) || { challan_number: "—" }
-      : { challan_number: "—" },
-  }))
+  const enriched = invoices.map((inv) => {
+    const numbers = challansByInvoiceId.get(inv.id as string) || []
+    return {
+      ...inv,
+      challans: {
+        challan_number:
+          numbers.length > 0 ? numbers.join(", ") : "—",
+      },
+    }
+  })
 
   return (
     <DashboardPageWrapper title="Purchase Invoices">

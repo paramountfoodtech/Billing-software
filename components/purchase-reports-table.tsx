@@ -210,8 +210,7 @@ export function PurchaseReportsTable({
         amount_paid,
         status,
         description,
-        purchasers(name, purchaser_code),
-        challans!purchase_invoices_challan_id_fkey(challan_number)
+        purchasers(name, purchaser_code)
       `,
       )
       .eq("organization_id", profile.organization_id)
@@ -226,7 +225,37 @@ export function PurchaseReportsTable({
 
     const { data, error } = await query;
     if (error) throw error;
-    return data || [];
+
+    const invoices = data || [];
+    const invoiceIds = invoices.map((inv: { id: string }) => inv.id);
+    const challanLabelByInvoice = new Map<string, string>();
+
+    if (invoiceIds.length > 0) {
+      const { data: linked } = await supabase
+        .from("challans")
+        .select("purchase_invoice_id, challan_number")
+        .in("purchase_invoice_id", invoiceIds)
+        .order("challan_number", { ascending: true });
+
+      for (const row of linked || []) {
+        const invoiceId = row.purchase_invoice_id as string;
+        if (!invoiceId) continue;
+        const existing = challanLabelByInvoice.get(invoiceId);
+        challanLabelByInvoice.set(
+          invoiceId,
+          existing
+            ? `${existing}, ${row.challan_number}`
+            : row.challan_number,
+        );
+      }
+    }
+
+    return invoices.map((inv: { id: string }) => ({
+      ...inv,
+      challans: {
+        challan_number: challanLabelByInvoice.get(inv.id) || "",
+      },
+    }));
   };
 
   const fetchRelatedRows = async () => {

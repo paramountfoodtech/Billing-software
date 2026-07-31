@@ -51,8 +51,21 @@ export function canAccessOperationsReports(role?: string | null): boolean {
   return isAdminOrAbove(role);
 }
 
-export function canEditChallan(challan: { status: string }): boolean {
-  return challan.status === "draft";
+/**
+ * Challan edit access:
+ * - Draft: Super Admin, Admin, or Accountant
+ * - Final / invoiced: Super Admin only
+ */
+export function canEditChallan(
+  role?: string | null,
+  status?: string | null,
+): boolean {
+  if (status === "draft") {
+    return (
+      role === "super_admin" || role === "admin" || role === "accountant"
+    );
+  }
+  return isSuperAdmin(role);
 }
 
 export function canDeleteChallan(challan: {

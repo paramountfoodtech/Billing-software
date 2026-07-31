@@ -224,6 +224,7 @@ export function PurchasePaymentForm({
     }
 
     setIsLoading(true);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     const {
       data: { user },

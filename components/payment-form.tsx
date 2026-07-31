@@ -228,6 +228,7 @@ export function PaymentForm({
     }
 
     setIsLoading(true);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     // Get current user
     const {

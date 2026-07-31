@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import { ChallanForm } from "@/components/challan-form"
-import { canEdit } from "@/lib/permissions"
+import { canEditChallan } from "@/lib/permissions"
 
 export default async function EditChallanPage({
   params,
@@ -22,8 +22,6 @@ export default async function EditChallanPage({
     .eq("id", user.id)
     .single()
 
-  if (!canEdit(profile?.role)) redirect("/dashboard")
-
   const { data: challan } = await supabase
     .from("challans")
     .select("*, challan_boxes(box_number, weight_kg, num_birds)")
@@ -32,7 +30,7 @@ export default async function EditChallanPage({
 
   if (!challan) notFound()
 
-  if (challan.status !== "draft") {
+  if (!canEditChallan(profile?.role, challan.status)) {
     redirect("/dashboard/challans")
   }
 
@@ -45,10 +43,18 @@ export default async function EditChallanPage({
     <div className="p-6 lg:p-8 max-w-3xl">
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">Edit purchase challan</h1>
-        <p className="text-muted-foreground mt-1">Update draft purchase challan details</p>
+        <p className="text-muted-foreground mt-1">
+          {challan.status === "draft"
+            ? "Update draft purchase challan details"
+            : "Update purchase challan details"}
+        </p>
       </div>
 
-      <ChallanForm purchasers={purchasers || []} challan={challan} />
+      <ChallanForm
+        purchasers={purchasers || []}
+        challan={challan}
+        userRole={profile?.role}
+      />
     </div>
   )
 }

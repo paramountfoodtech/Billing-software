@@ -12,12 +12,12 @@ export function FormBusyOverlay({
 
   return (
     <div
-      className="absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-background/70 backdrop-blur-[1px]"
+      className="sticky top-4 z-50 flex justify-center pointer-events-none"
       aria-busy="true"
       aria-live="polite"
       role="status"
     >
-      <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 shadow-md">
+      <div className="flex items-center gap-3 rounded-xl border bg-card px-5 py-3 shadow-lg pointer-events-auto">
         <Spinner className="h-5 w-5" />
         <span className="text-sm font-medium text-foreground">{label}</span>
       </div>

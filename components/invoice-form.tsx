@@ -1316,6 +1316,8 @@ export function InvoiceForm({
     setIsLoading(true);
     setSavingAs(status);
     setError(null);
+    // Yield to the browser so React can paint the spinner before any async work starts.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     const invoiceNumberToSave =
       sanitizeInvoiceNumberInput(formData.invoice_number) ||

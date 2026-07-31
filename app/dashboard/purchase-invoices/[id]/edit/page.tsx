@@ -47,6 +47,7 @@ export default async function EditPurchaseInvoicePage({
   const [
     purchasersResult,
     challansResult,
+    linkedChallansResult,
     categoriesResult,
     priceHistoryResult,
   ] = await Promise.all([
@@ -71,12 +72,26 @@ export default async function EditPurchaseInvoicePage({
       `,
       )
       .eq("organization_id", organizationId)
-      .or(
-        invoice.challan_id
-          ? `status.eq.final,id.eq.${invoice.challan_id}`
-          : "status.eq.final",
-      )
+      .eq("status", "final")
       .order("challan_date", { ascending: false }),
+    supabase
+      .from("challans")
+      .select(
+        `
+        id,
+        challan_number,
+        purchaser_id,
+        total_weight_kg,
+        total_birds,
+        challan_date,
+        status,
+        purchase_invoice_id,
+        purchasers(name)
+      `,
+      )
+      .eq("organization_id", organizationId)
+      .eq("purchase_invoice_id", id)
+      .order("challan_number", { ascending: true }),
     supabase
       .from("price_categories")
       .select("id, name")
@@ -93,11 +108,49 @@ export default async function EditPurchaseInvoicePage({
       (c) => c.name?.toLowerCase() === "live",
     ) ?? null;
 
-  const challans = (challansResult.data || []).filter(
+  const linkedChallans = linkedChallansResult.data || [];
+  const linkedIds = new Set(linkedChallans.map((c) => c.id));
+
+  // Fallback for legacy rows that only have purchase_invoices.challan_id
+  if (
+    invoice.challan_id &&
+    !linkedIds.has(invoice.challan_id as string)
+  ) {
+    const { data: legacyChallan } = await supabase
+      .from("challans")
+      .select(
+        `
+        id,
+        challan_number,
+        purchaser_id,
+        total_weight_kg,
+        total_birds,
+        challan_date,
+        status,
+        purchase_invoice_id,
+        purchasers(name)
+      `,
+      )
+      .eq("id", invoice.challan_id)
+      .maybeSingle();
+    if (legacyChallan) {
+      linkedChallans.push(legacyChallan);
+      linkedIds.add(legacyChallan.id);
+    }
+  }
+
+  const challanById = new Map<string, (typeof linkedChallans)[number]>();
+  for (const c of [...(challansResult.data || []), ...linkedChallans]) {
+    challanById.set(c.id, c);
+  }
+
+  const challans = [...challanById.values()].filter(
     (c) =>
-      c.id === invoice.challan_id ||
+      linkedIds.has(c.id) ||
       (c.status === "final" && !c.purchase_invoice_id),
   );
+
+  const initialChallanIds = linkedChallans.map((c) => c.id);
 
   return (
     <div className="p-6 lg:p-8 max-w-3xl">
@@ -112,11 +165,12 @@ export default async function EditPurchaseInvoicePage({
 
       <PurchaseInvoiceForm
         purchasers={purchasersResult.data || []}
-        challans={challans}
+        challans={challans as any}
         suggestedInvoiceNumber={invoice.invoice_number}
         liveCategoryId={liveCategory?.id}
         priceHistory={priceHistoryResult.data || []}
         initialInvoice={invoice}
+        initialChallanIds={initialChallanIds}
       />
     </div>
   );

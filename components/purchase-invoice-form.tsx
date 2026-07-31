@@ -10,8 +10,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { FormBusyOverlay } from "@/components/form-busy-overlay";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -20,7 +27,13 @@ import {
 } from "@/lib/entry-history";
 import { getIndianToday, formatIndianDate } from "@/lib/date-time";
 import {
+  formatChallanNumbers,
+  sumChallanBirds,
+  sumChallanWeightKg,
+} from "@/lib/purchase-invoice-challans";
+import {
   getPriceForCategoryOnDate,
+  cn,
   type PriceCategoryHistoryEntry,
 } from "@/lib/utils";
 import {
@@ -43,6 +56,7 @@ interface ChallanOption {
   total_birds?: number | null;
   challan_date?: string | null;
   status: string;
+  purchase_invoice_id?: string | null;
   purchasers?: { name: string };
 }
 
@@ -67,7 +81,10 @@ interface PurchaseInvoiceFormProps {
   purchasers: Purchaser[];
   challans: ChallanOption[];
   suggestedInvoiceNumber: string;
+  /** Preselect from ?challan_id= */
   initialChallanId?: string;
+  /** Linked challans when editing (via purchase_invoice_id). */
+  initialChallanIds?: string[];
   liveCategoryId?: string;
   priceHistory?: PriceCategoryHistoryEntry[];
   initialInvoice?: PurchaseInvoiceInitial;
@@ -78,6 +95,7 @@ export function PurchaseInvoiceForm({
   challans,
   suggestedInvoiceNumber,
   initialChallanId,
+  initialChallanIds,
   liveCategoryId,
   priceHistory = [],
   initialInvoice,
@@ -93,9 +111,23 @@ export function PurchaseInvoiceForm({
   const [isPurchaserInvoiceNumberDuplicate, setIsPurchaserInvoiceNumberDuplicate] =
     useState(false);
 
-  const initialChallan =
-    challans.find((c) => c.id === (initialInvoice?.challan_id || initialChallanId)) ??
-    null;
+  const seedChallanIds = useMemo(() => {
+    if (initialChallanIds && initialChallanIds.length > 0) {
+      return [...new Set(initialChallanIds)];
+    }
+    const single = initialInvoice?.challan_id || initialChallanId;
+    return single ? [single] : [];
+  }, [initialChallanIds, initialInvoice?.challan_id, initialChallanId]);
+
+  const seedChallans = useMemo(
+    () =>
+      seedChallanIds
+        .map((id) => challans.find((c) => c.id === id))
+        .filter((c): c is ChallanOption => Boolean(c)),
+    [seedChallanIds, challans],
+  );
+
+  const firstSeedChallan = seedChallans[0] ?? null;
 
   const amountPaid = Number(initialInvoice?.amount_paid || 0);
 
@@ -107,31 +139,31 @@ export function PurchaseInvoiceForm({
   );
   const [issueDate, setIssueDate] = useState(
     initialInvoice?.issue_date ||
-      initialChallan?.challan_date ||
+      firstSeedChallan?.challan_date ||
       getIndianToday(),
   );
   const [purchaserId, setPurchaserId] = useState(
     initialInvoice?.purchaser_id ||
-      initialChallan?.purchaser_id ||
+      firstSeedChallan?.purchaser_id ||
       purchasers.find((p) => p.is_default)?.id ||
       "",
   );
-  const [challanId, setChallanId] = useState(
-    initialInvoice?.challan_id || initialChallan?.id || "",
+  const [selectedChallanIds, setSelectedChallanIds] = useState<string[]>(
+    seedChallanIds,
   );
-  const [originalChallanId] = useState(initialInvoice?.challan_id || "");
+  const [originalChallanIds] = useState<string[]>(seedChallanIds);
   const [totalWeightInput, setTotalWeightInput] = useState(
     initialInvoice
       ? String(initialInvoice.total_weight_kg)
-      : initialChallan
-        ? String(initialChallan.total_weight_kg)
+      : seedChallans.length > 0
+        ? String(sumChallanWeightKg(seedChallans))
         : "",
   );
   const [totalBirdsInput, setTotalBirdsInput] = useState(
     initialInvoice
       ? String(initialInvoice.total_birds || 0)
-      : initialChallan
-        ? String(initialChallan.total_birds || 0)
+      : seedChallans.length > 0
+        ? String(sumChallanBirds(seedChallans))
         : "",
   );
   const [pricePerKg, setPricePerKg] = useState(
@@ -154,6 +186,8 @@ export function PurchaseInvoiceForm({
   const [pricingMode, setPricingMode] = useState<"per_kg" | "total">(
     initialInvoice ? "total" : "per_kg",
   );
+  const [isChallanPickerOpen, setIsChallanPickerOpen] = useState(false);
+  const [challanSearch, setChallanSearch] = useState("");
 
   useEffect(() => {
     let isActive = true;
@@ -218,31 +252,52 @@ export function PurchaseInvoiceForm({
   }, [purchaserInvoiceNumber, organizationId, supabase, initialInvoice?.id]);
 
   const availableChallans = useMemo(() => {
+    const selectedOrOriginal = new Set([
+      ...selectedChallanIds,
+      ...originalChallanIds,
+    ]);
     return challans.filter((c) => {
-      if (c.id === challanId || c.id === originalChallanId) return true;
+      if (selectedOrOriginal.has(c.id)) return true;
       if (c.status !== "final") return false;
+      if (c.purchase_invoice_id) return false;
       if (purchaserId && c.purchaser_id !== purchaserId) return false;
       if (!c.challan_date || c.challan_date !== issueDate) return false;
       return true;
     });
-  }, [challans, purchaserId, issueDate, challanId, originalChallanId]);
+  }, [
+    challans,
+    purchaserId,
+    issueDate,
+    selectedChallanIds,
+    originalChallanIds,
+  ]);
 
-  const challanOptions = [
-    { value: "none", label: "None (no challan)" },
-    ...availableChallans.map((c) => {
-      const weight = `${Number(c.total_weight_kg).toFixed(3)} KG`;
-      const birds = `${Number(c.total_birds || 0)} birds`;
-      const date = c.challan_date
-        ? formatIndianDate(c.challan_date)
-        : "";
-      const parts = [c.challan_number, weight, birds];
-      if (date) parts.push(date);
-      return {
-        value: c.id,
-        label: parts.join(" — "),
-      };
-    }),
-  ];
+  const selectedChallans = useMemo(
+    () =>
+      selectedChallanIds
+        .map((id) => challans.find((c) => c.id === id))
+        .filter((c): c is ChallanOption => Boolean(c)),
+    [selectedChallanIds, challans],
+  );
+
+  const filteredAvailableChallans = useMemo(() => {
+    const keyword = challanSearch.trim().toLowerCase();
+    if (!keyword) return availableChallans;
+    return availableChallans.filter((c) => {
+      const haystack = [
+        c.challan_number,
+        String(c.total_weight_kg),
+        String(c.total_birds || 0),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(keyword);
+    });
+  }, [availableChallans, challanSearch]);
+
+  const hasLinkedChallans = selectedChallanIds.length > 0;
+  const primaryChallanId = selectedChallanIds[0] || null;
+  const lockedFromQuery = Boolean(initialChallanId);
 
   const purchaserOptions = purchasers.map((p) => ({
     value: p.id,
@@ -252,34 +307,42 @@ export function PurchaseInvoiceForm({
   const skipInitialChallanSync = useRef(isEditMode);
 
   useEffect(() => {
-    if (!challanId) return;
     if (skipInitialChallanSync.current) {
       skipInitialChallanSync.current = false;
       return;
     }
-    const selected = challans.find((c) => c.id === challanId);
-    if (!selected) return;
-    setPurchaserId(selected.purchaser_id);
-    setTotalWeightInput(String(selected.total_weight_kg));
-    setTotalBirdsInput(String(selected.total_birds || 0));
-  }, [challanId, challans]);
+    if (selectedChallans.length === 0) return;
+    setPurchaserId(selectedChallans[0].purchaser_id);
+    setTotalWeightInput(String(sumChallanWeightKg(selectedChallans)));
+    setTotalBirdsInput(String(sumChallanBirds(selectedChallans)));
+  }, [selectedChallans]);
 
-  // Clear linked challan when issue date changes and it no longer matches
+  // Drop challans that no longer match the issue date (create mode only)
   useEffect(() => {
-    if (!challanId || initialChallanId || isEditMode) return;
-    const selected = challans.find((c) => c.id === challanId);
-    if (!selected || selected.challan_date !== issueDate) {
-      setChallanId("");
-    }
-  }, [issueDate, challanId, challans, initialChallanId, isEditMode]);
+    if (lockedFromQuery || isEditMode) return;
+    setSelectedChallanIds((prev) => {
+      const next = prev.filter((id) => {
+        const c = challans.find((x) => x.id === id);
+        return c && c.challan_date === issueDate;
+      });
+      return next.length === prev.length ? prev : next;
+    });
+  }, [issueDate, challans, lockedFromQuery, isEditMode]);
+
+  const toggleChallan = (challanId: string, checked: boolean) => {
+    setSelectedChallanIds((prev) => {
+      if (checked) {
+        if (prev.includes(challanId)) return prev;
+        return [...prev, challanId];
+      }
+      return prev.filter((id) => id !== challanId);
+    });
+  };
 
   const totalWeight = Number(totalWeightInput) || 0;
   const totalBirds = Math.max(0, Math.round(Number(totalBirdsInput) || 0));
   const average =
     totalBirds > 0 && totalWeight > 0 ? totalWeight / totalBirds : null;
-  const selectedChallan = challanId
-    ? challans.find((c) => c.id === challanId)
-    : undefined;
   const liveRate =
     liveCategoryId && issueDate
       ? getPriceForCategoryOnDate(liveCategoryId, issueDate, priceHistory)
@@ -413,6 +476,7 @@ export function PurchaseInvoiceForm({
     }
 
     setIsLoading(true);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     try {
       const {
@@ -459,9 +523,10 @@ export function PurchaseInvoiceForm({
         );
       }
 
-      const selectedChallan = challanId
-        ? challans.find((c) => c.id === challanId)
-        : undefined;
+      const challanLabel = formatChallanNumbers(
+        selectedChallans.map((c) => c.challan_number),
+        "",
+      );
 
       const nextStatus =
         isEditMode && amountPaid > 0
@@ -479,7 +544,7 @@ export function PurchaseInvoiceForm({
           .from("purchase_invoices")
           .update({
             purchaser_invoice_number: trimmedPurchaserInvoiceNumber,
-            challan_id: challanId || null,
+            challan_id: primaryChallanId,
             purchaser_id: purchaserId,
             issue_date: issueDate,
             total_weight_kg: totalWeight,
@@ -503,8 +568,12 @@ export function PurchaseInvoiceForm({
           throw invoiceError;
         }
 
-        // Unlock previously linked challan if changed/removed
-        if (originalChallanId && originalChallanId !== challanId) {
+        const originalSet = new Set(originalChallanIds);
+        const nextSet = new Set(selectedChallanIds);
+        const toUnlock = originalChallanIds.filter((id) => !nextSet.has(id));
+        const toLock = selectedChallanIds.filter((id) => !originalSet.has(id));
+
+        if (toUnlock.length > 0) {
           const { error: unlockError } = await supabase
             .from("challans")
             .update({
@@ -512,13 +581,12 @@ export function PurchaseInvoiceForm({
               purchase_invoice_id: null,
               updated_at: new Date().toISOString(),
             })
-            .eq("id", originalChallanId);
+            .in("id", toUnlock);
 
           if (unlockError) throw unlockError;
         }
 
-        // Lock newly linked challan
-        if (challanId && challanId !== originalChallanId) {
+        if (toLock.length > 0) {
           const { error: challanError } = await supabase
             .from("challans")
             .update({
@@ -526,7 +594,7 @@ export function PurchaseInvoiceForm({
               purchase_invoice_id: initialInvoice.id,
               updated_at: new Date().toISOString(),
             })
-            .eq("id", challanId);
+            .in("id", toLock);
 
           if (challanError) throw challanError;
         }
@@ -539,8 +607,8 @@ export function PurchaseInvoiceForm({
           action: "updated",
           userId: user.id,
           userName,
-          summary: selectedChallan
-            ? `Updated (purchase challan ${selectedChallan.challan_number})`
+          summary: challanLabel
+            ? `Updated (purchase challans ${challanLabel})`
             : "Updated purchase invoice",
         });
       } else {
@@ -550,7 +618,7 @@ export function PurchaseInvoiceForm({
             invoice_number: invoiceNumber.trim(),
             purchaser_invoice_number: trimmedPurchaserInvoiceNumber,
             invoice_type: "challan",
-            challan_id: challanId || null,
+            challan_id: primaryChallanId,
             purchaser_id: purchaserId,
             issue_date: issueDate,
             total_weight_kg: totalWeight,
@@ -579,7 +647,7 @@ export function PurchaseInvoiceForm({
 
         invoiceId = invoice?.id;
 
-        if (challanId) {
+        if (selectedChallanIds.length > 0 && invoiceId) {
           const { error: challanError } = await supabase
             .from("challans")
             .update({
@@ -587,7 +655,7 @@ export function PurchaseInvoiceForm({
               purchase_invoice_id: invoiceId,
               updated_at: new Date().toISOString(),
             })
-            .eq("id", challanId);
+            .in("id", selectedChallanIds);
 
           if (challanError) throw challanError;
         }
@@ -601,8 +669,8 @@ export function PurchaseInvoiceForm({
             action: "created",
             userId: user.id,
             userName,
-            summary: selectedChallan
-              ? `From purchase challan ${selectedChallan.challan_number}`
+            summary: challanLabel
+              ? `From purchase challans ${challanLabel}`
               : "Purchase invoice (no challan)",
           });
         }
@@ -692,31 +760,138 @@ export function PurchaseInvoiceForm({
               <SearchableSelect
                 options={purchaserOptions}
                 value={purchaserId}
-                onValueChange={setPurchaserId}
+                onValueChange={(value) => {
+                  setPurchaserId(value);
+                  if (!lockedFromQuery) {
+                    setSelectedChallanIds([]);
+                  }
+                }}
                 placeholder="Select purchaser"
-                disabled={Boolean(initialChallanId) || Boolean(challanId)}
+                disabled={lockedFromQuery || hasLinkedChallans}
               />
             </div>
 
             <div className="space-y-2 sm:col-span-2">
-              <Label>Purchase challan (optional)</Label>
-              <SearchableSelect
-                options={challanOptions}
-                value={challanId || "none"}
-                onValueChange={(value) =>
-                  setChallanId(value === "none" ? "" : value)
-                }
-                placeholder={
-                  purchaserId
-                    ? "Select purchase challan (optional)"
-                    : "Select purchaser first"
-                }
-                disabled={Boolean(initialChallanId) || !purchaserId}
-              />
+              <Label>Purchase challans (optional)</Label>
+              {!purchaserId ? (
+                <p className="text-sm text-muted-foreground rounded-md border px-3 py-2">
+                  Select a purchaser first to link challans.
+                </p>
+              ) : (
+                <Popover
+                  open={isChallanPickerOpen}
+                  onOpenChange={(open) => {
+                    setIsChallanPickerOpen(open);
+                    if (!open) setChallanSearch("");
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={isChallanPickerOpen}
+                      disabled={availableChallans.length === 0}
+                      className="w-full justify-between font-normal h-auto min-h-10 py-2"
+                    >
+                      <span className="truncate text-left">
+                        {hasLinkedChallans
+                          ? `${selectedChallanIds.length} challan${
+                              selectedChallanIds.length === 1 ? "" : "s"
+                            } selected — ${formatChallanNumbers(
+                              selectedChallans.map((c) => c.challan_number),
+                            )}`
+                          : availableChallans.length === 0
+                            ? `No final challans on ${formatIndianDate(issueDate)}`
+                            : "Select purchase challans"}
+                      </span>
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[var(--radix-popover-trigger-width)] p-0"
+                    align="start"
+                  >
+                    <div className="border-b p-2">
+                      <Input
+                        value={challanSearch}
+                        onChange={(e) => setChallanSearch(e.target.value)}
+                        placeholder="Search challan number..."
+                        className="h-8"
+                      />
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-1">
+                      {filteredAvailableChallans.length === 0 ? (
+                        <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                          No challans found.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-0.5">
+                          {filteredAvailableChallans.map((c) => {
+                            const checked = selectedChallanIds.includes(c.id);
+                            const weight = `${Number(c.total_weight_kg).toFixed(3)} KG`;
+                            const birds = `${Number(c.total_birds || 0)} birds`;
+                            return (
+                              <label
+                                key={c.id}
+                                className={cn(
+                                  "flex items-start gap-2.5 rounded-md px-2.5 py-2 cursor-pointer hover:bg-muted/50",
+                                  checked && "bg-muted/40",
+                                )}
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(value) =>
+                                    toggleChallan(c.id, value === true)
+                                  }
+                                  disabled={
+                                    lockedFromQuery && c.id === initialChallanId
+                                  }
+                                  className="mt-0.5"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="font-medium font-mono text-sm truncate block">
+                                    {c.challan_number}
+                                  </span>
+                                  <span className="block text-xs text-muted-foreground truncate">
+                                    {weight} · {birds}
+                                  </span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {hasLinkedChallans && (
+                      <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+                        <p className="text-xs text-muted-foreground truncate">
+                          {selectedChallanIds.length} selected
+                        </p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            if (lockedFromQuery && initialChallanId) {
+                              setSelectedChallanIds([initialChallanId]);
+                            } else {
+                              setSelectedChallanIds([]);
+                            }
+                          }}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              )}
               <p className="text-xs text-muted-foreground">
-                Optional. Only final challans for the selected issue date are
-                listed. Link one to auto-fill weight, or create without a
-                challan.
+                Optional. Open the dropdown to select one or more final challans
+                for the issue date. Weight and birds are summed from linked
+                challans.
               </p>
             </div>
 
@@ -730,8 +905,8 @@ export function PurchaseInvoiceForm({
                 value={totalBirdsInput}
                 onChange={(e) => setTotalBirdsInput(e.target.value)}
                 placeholder="0"
-                readOnly={Boolean(challanId)}
-                className={challanId ? "bg-muted" : undefined}
+                readOnly={hasLinkedChallans}
+                className={hasLinkedChallans ? "bg-muted" : undefined}
               />
             </div>
 
@@ -745,8 +920,8 @@ export function PurchaseInvoiceForm({
                 value={totalWeightInput}
                 onChange={(e) => setTotalWeightInput(e.target.value)}
                 placeholder="0.000"
-                readOnly={Boolean(challanId)}
-                className={challanId ? "bg-muted" : undefined}
+                readOnly={hasLinkedChallans}
+                className={hasLinkedChallans ? "bg-muted" : undefined}
               />
             </div>
 

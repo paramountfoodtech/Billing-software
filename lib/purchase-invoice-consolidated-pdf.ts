@@ -48,8 +48,15 @@ type PurchaseInvoiceForExport = {
       box_number: number;
       weight_kg: string | number;
       num_birds?: number | null;
+      challan_number?: string;
     }[];
   } | null;
+  linked_challans?: Array<{
+    challan_number: string;
+    challan_date: string;
+    num_boxes?: number | null;
+    total_birds?: number | null;
+  }>;
 };
 
 const DEFAULT_TEMPLATE: InvoiceTemplate = {
@@ -141,13 +148,6 @@ export async function fetchPurchaseInvoicesForExport(invoiceIds: string[]) {
         city,
         state,
         zip_code
-      ),
-      challans!purchase_invoices_challan_id_fkey(
-        challan_number,
-        challan_date,
-        num_boxes,
-        total_birds,
-        challan_boxes(box_number, weight_kg, num_birds)
       )
     `;
 
@@ -171,6 +171,89 @@ export async function fetchPurchaseInvoicesForExport(invoiceIds: string[]) {
       all.push(...batch);
       if (batch.length < pageSize) break;
       from += pageSize;
+    }
+  }
+
+  const linkedByInvoice = new Map<
+    string,
+    Array<{
+      challan_number: string;
+      challan_date: string;
+      num_boxes?: number | null;
+      total_birds?: number | null;
+      challan_boxes?: {
+        box_number: number;
+        weight_kg: string | number;
+        num_birds?: number | null;
+      }[];
+    }>
+  >();
+
+  for (let i = 0; i < invoiceIds.length; i += chunkSize) {
+    const chunk = invoiceIds.slice(i, i + chunkSize);
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from("challans")
+        .select(
+          `
+          purchase_invoice_id,
+          challan_number,
+          challan_date,
+          num_boxes,
+          total_birds,
+          challan_boxes(box_number, weight_kg, num_birds)
+        `,
+        )
+        .in("purchase_invoice_id", chunk)
+        .order("challan_number", { ascending: true })
+        .range(from, from + pageSize - 1);
+
+      if (error) throw error;
+      const batch = data || [];
+      for (const row of batch) {
+        const invoiceId = row.purchase_invoice_id as string;
+        if (!invoiceId) continue;
+        const list = linkedByInvoice.get(invoiceId) || [];
+        list.push({
+          challan_number: row.challan_number,
+          challan_date: row.challan_date,
+          num_boxes: row.num_boxes,
+          total_birds: row.total_birds,
+          challan_boxes: row.challan_boxes || [],
+        });
+        linkedByInvoice.set(invoiceId, list);
+      }
+      if (batch.length < pageSize) break;
+      from += pageSize;
+    }
+  }
+
+  for (const invoice of all) {
+    const linked = linkedByInvoice.get(invoice.id) || [];
+    invoice.linked_challans = linked.map((c) => ({
+      challan_number: c.challan_number,
+      challan_date: c.challan_date,
+      num_boxes: c.num_boxes,
+      total_birds: c.total_birds,
+    }));
+    if (linked.length > 0) {
+      invoice.challans = {
+        challan_number: linked.map((c) => c.challan_number).join(", "),
+        challan_date: linked[0].challan_date,
+        num_boxes: linked.reduce((sum, c) => sum + Number(c.num_boxes || 0), 0),
+        total_birds: linked.reduce(
+          (sum, c) => sum + Number(c.total_birds || 0),
+          0,
+        ),
+        challan_boxes: linked.flatMap((c) =>
+          (c.challan_boxes || []).map((box) => ({
+            ...box,
+            challan_number: c.challan_number,
+          })),
+        ),
+      };
     }
   }
 
@@ -389,24 +472,27 @@ export async function exportConsolidatedPurchaseInvoicesPDF(options: {
     );
     rightY += spacing.lineGap;
     if (hasChallan) {
-      pdf.text(
-        `Purchase challan: ${invoice.challans!.challan_number}`,
-        rightX,
-        rightY,
-        { align: "right" },
-      );
+      const challanLabel =
+        (invoice.linked_challans || [])
+          .map((c) => c.challan_number)
+          .join(", ") || invoice.challans!.challan_number;
+      pdf.text(`Purchase challan: ${challanLabel}`, rightX, rightY, {
+        align: "right",
+      });
       rightY += spacing.lineGap;
-      pdf.text(
-        `Challan date: ${formatIndianDate(invoice.challans!.challan_date, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })}`,
-        rightX,
-        rightY,
-        { align: "right" },
-      );
-      rightY += spacing.lineGap;
+      if ((invoice.linked_challans || []).length <= 1) {
+        pdf.text(
+          `Challan date: ${formatIndianDate(invoice.challans!.challan_date, {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}`,
+          rightX,
+          rightY,
+          { align: "right" },
+        );
+        rightY += spacing.lineGap;
+      }
     }
     const rightBlockBottomY = rightY + 1;
     y = Math.max(leftBlockBottomY, rightBlockBottomY) + spacing.sectionGap;

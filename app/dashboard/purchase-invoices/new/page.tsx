@@ -100,13 +100,13 @@ export default async function NewPurchaseInvoicePage({
           Create Purchase Invoice
         </h1>
         <p className="text-muted-foreground mt-1">
-          Create a purchase invoice, with or without linking a purchase challan
+          Create a purchase invoice, with or without linking purchase challans
         </p>
       </div>
 
       <PurchaseInvoiceForm
         purchasers={purchasersResult.data || []}
-        challans={challansResult.data || []}
+        challans={(challansResult.data || []) as any}
         suggestedInvoiceNumber={suggestedInvoiceNumber}
         initialChallanId={challanId}
         liveCategoryId={liveCategory?.id}

@@ -273,9 +273,14 @@ export function PurchaseInvoicesTable({
 
     const { data: invoice } = await supabase
       .from("purchase_invoices")
-      .select("challan_id")
+      .select("id")
       .eq("id", invoiceToDelete)
       .maybeSingle();
+
+    const { data: linkedChallans } = await supabase
+      .from("challans")
+      .select("id")
+      .eq("purchase_invoice_id", invoiceToDelete);
 
     const { error } = await supabase
       .from("purchase_invoices")
@@ -289,7 +294,8 @@ export function PurchaseInvoicesTable({
         description: "Failed to delete purchase invoice.",
       });
     } else {
-      if (invoice?.challan_id) {
+      const challanIds = (linkedChallans || []).map((c) => c.id);
+      if (challanIds.length > 0) {
         const { error: challanError } = await supabase
           .from("challans")
           .update({
@@ -297,23 +303,29 @@ export function PurchaseInvoicesTable({
             purchase_invoice_id: null,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", invoice.challan_id);
+          .in("id", challanIds);
 
         if (challanError) {
           toast({
             variant: "destructive",
             title: "Invoice deleted, purchase challan unlock failed",
             description:
-              "The purchase invoice was deleted, but the linked purchase challan could not be unlocked for deletion.",
+              "The purchase invoice was deleted, but linked purchase challans could not be unlocked for deletion.",
           });
         } else {
           toast({
             variant: "success",
             title: "Invoice deleted",
             description:
-              "The purchase invoice was deleted and its linked purchase challan can now be deleted.",
+              "The purchase invoice was deleted and its linked purchase challans can now be deleted.",
           });
         }
+      } else if (invoice) {
+        toast({
+          variant: "success",
+          title: "Invoice deleted",
+          description: "The purchase invoice has been deleted successfully.",
+        });
       } else {
         toast({
           variant: "success",

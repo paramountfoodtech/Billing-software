@@ -164,6 +164,7 @@ export function ClientForm({
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     const supabase = createClient();
 

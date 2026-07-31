@@ -52,8 +52,20 @@ interface PurchaseInvoice {
     challan_date: string;
     num_boxes: number;
     total_birds?: number | null;
-    challan_boxes?: { box_number: number; weight_kg: string; num_birds?: number }[];
+    challan_boxes?: {
+      box_number: number;
+      weight_kg: string;
+      num_birds?: number;
+      challan_number?: string;
+    }[];
   } | null;
+  linked_challans?: Array<{
+    challan_number: string;
+    challan_date: string;
+    num_boxes?: number | null;
+    total_birds?: number | null;
+    total_weight_kg?: string | number | null;
+  }>;
 }
 
 interface PrintablePurchaseInvoiceProps {
@@ -81,12 +93,19 @@ export function PrintablePurchaseInvoice({
   const subtotal =
     totalWeight * Number(invoice.price_per_kg) ||
     Number(invoice.total_amount) + flatDiscountAmount;
-  const hasChallan = Boolean(invoice.challans?.challan_number);
+  const linkedChallans = invoice.linked_challans || [];
+  const hasChallan =
+    linkedChallans.length > 0 || Boolean(invoice.challans?.challan_number);
   const boxes = invoice.challans?.challan_boxes || [];
+  const showChallanColumn = linkedChallans.length > 1;
   const totalBirds =
     Number(invoice.total_birds || 0) ||
+    linkedChallans.reduce((sum, c) => sum + Number(c.total_birds || 0), 0) ||
     Number(invoice.challans?.total_birds || 0) ||
     boxes.reduce((sum, box) => sum + Number(box.num_birds || 0), 0);
+  const totalBoxes =
+    linkedChallans.reduce((sum, c) => sum + Number(c.num_boxes || 0), 0) ||
+    Number(invoice.challans?.num_boxes || 0);
   const showWeightColumns = totalWeight > 0;
   const average =
     totalBirds > 0 && totalWeight > 0
@@ -211,16 +230,26 @@ export function PrintablePurchaseInvoice({
                 {hasChallan && (
                   <>
                     <p className="text-gray-600">
-                      Purchase challan: {invoice.challans!.challan_number}
+                      Purchase challan
+                      {linkedChallans.length > 1 ? "s" : ""}:{" "}
+                      {linkedChallans.length > 0
+                        ? linkedChallans.map((c) => c.challan_number).join(", ")
+                        : invoice.challans!.challan_number}
                     </p>
-                    <p className="text-gray-600">
-                      Purchase challan date:{" "}
-                      {formatIndianDate(invoice.challans!.challan_date, {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </p>
+                    {linkedChallans.length <= 1 && (
+                      <p className="text-gray-600">
+                        Purchase challan date:{" "}
+                        {formatIndianDate(
+                          linkedChallans[0]?.challan_date ||
+                            invoice.challans!.challan_date,
+                          {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          },
+                        )}
+                      </p>
+                    )}
                   </>
                 )}
               </div>
@@ -297,12 +326,10 @@ export function PrintablePurchaseInvoice({
                   <td></td>
                 </tr>
               )}
-              {hasChallan && (invoice.challans?.num_boxes ?? 0) > 0 && (
+              {hasChallan && totalBoxes > 0 && (
                 <tr>
                   <td className="py-2 font-semibold">Boxes:</td>
-                  <td className="text-right font-semibold">
-                    {invoice.challans!.num_boxes}
-                  </td>
+                  <td className="text-right font-semibold">{totalBoxes}</td>
                   <td></td>
                   <td></td>
                   <td></td>
@@ -317,14 +344,25 @@ export function PrintablePurchaseInvoice({
               <table className="w-full text-xs">
                 <thead className="border-b border-gray-300">
                   <tr>
+                    {showChallanColumn && (
+                      <th className="text-left py-1.5">Challan</th>
+                    )}
                     <th className="text-left py-1.5">Box #</th>
                     <th className="text-right py-1.5">Weight (KG)</th>
                     <th className="text-right py-1.5">Birds</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {boxes.map((box) => (
-                    <tr key={box.box_number} className="border-b border-gray-100">
+                  {boxes.map((box, index) => (
+                    <tr
+                      key={`${box.challan_number || "challan"}-${box.box_number}-${index}`}
+                      className="border-b border-gray-100"
+                    >
+                      {showChallanColumn && (
+                        <td className="py-1.5 font-mono">
+                          {box.challan_number || "—"}
+                        </td>
+                      )}
                       <td className="py-1.5">{box.box_number}</td>
                       <td className="text-right py-1.5">
                         {Number(box.weight_kg).toFixed(3)}
@@ -337,6 +375,7 @@ export function PrintablePurchaseInvoice({
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-gray-200 font-semibold">
+                    {showChallanColumn && <td className="py-1.5" />}
                     <td className="py-1.5">Total</td>
                     <td className="text-right py-1.5">
                       {Number(invoice.total_weight_kg).toFixed(3)}

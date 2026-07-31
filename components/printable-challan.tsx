@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatIndianDate } from "@/lib/date-time";
 import { IconTooltip } from "@/components/icon-tooltip";
-import { canEdit, canEditChallan } from "@/lib/permissions";
+import { canEditChallan } from "@/lib/permissions";
 
 interface InvoiceTemplate {
   company_name: string;
@@ -126,7 +126,7 @@ export function PrintableChallan({
           <Link href="/dashboard/challans">Back</Link>
         </Button>
         <div className="flex items-center gap-2">
-          {canEdit(userRole) && canEditChallan(challan) && (
+          {canEditChallan(userRole, challan.status) && (
             <IconTooltip label="Edit">
               <Button asChild variant="outline">
                 <Link href={`/dashboard/challans/${challan.id}/edit`}>

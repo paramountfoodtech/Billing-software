@@ -48,7 +48,6 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   canDelete,
   canDeleteChallan,
-  canEdit,
   canEditChallan,
 } from "@/lib/permissions";
 
@@ -80,7 +79,6 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 export function ChallansTable({ challans, userRole }: ChallansTableProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const allowEdit = canEdit(userRole);
   const allowDelete = canDelete(userRole);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -432,7 +430,7 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
                                 </Link>
                               </DropdownMenuItem>
                             )}
-                          {allowEdit && canEditChallan(challan) && (
+                          {canEditChallan(userRole, challan.status) && (
                             <DropdownMenuItem asChild>
                               <Link
                                 href={`/dashboard/challans/${challan.id}/edit`}

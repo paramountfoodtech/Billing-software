@@ -135,6 +135,7 @@ export function PurchaserForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     const supabase = createClient();
     const {
