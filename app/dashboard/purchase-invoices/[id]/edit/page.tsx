@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
 import { PurchaseInvoiceForm } from "@/components/purchase-invoice-form";
-import { canEdit } from "@/lib/permissions";
+import { canEditPurchaseInvoice } from "@/lib/permissions";
 
 export default async function EditPurchaseInvoicePage({
   params,
@@ -23,7 +23,7 @@ export default async function EditPurchaseInvoicePage({
     .eq("id", user.id)
     .single();
 
-  if (!profile?.organization_id || !canEdit(profile.role)) {
+  if (!profile?.organization_id) {
     notFound();
   }
 
@@ -36,12 +36,11 @@ export default async function EditPurchaseInvoicePage({
     .eq("organization_id", organizationId)
     .maybeSingle();
 
-  if (!invoice || invoice.status === "cancelled") {
+  if (
+    !invoice ||
+    !canEditPurchaseInvoice(profile.role, invoice.status, invoice.amount_paid)
+  ) {
     notFound();
-  }
-
-  if (Number(invoice.amount_paid) > 0.01) {
-    redirect(`/dashboard/purchase-invoices/${id}`);
   }
 
   const [

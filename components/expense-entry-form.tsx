@@ -22,6 +22,7 @@ import {
   calculateExpenseAmounts,
   type ExpenseDiscountType,
 } from "@/lib/expense-calculations";
+import { canEdit } from "@/lib/permissions";
 
 export interface ExpenseCategoryOption {
   id: string;
@@ -30,9 +31,27 @@ export interface ExpenseCategoryOption {
   is_active?: boolean;
 }
 
+export interface ExpenseEntryInitial {
+  id: string;
+  entry_number: string;
+  vendor_invoice_number: string | null;
+  category_id: string;
+  issue_date: string;
+  description: string;
+  units: string | number;
+  unit_cost: string | number;
+  gst_amount: string | number;
+  discount_type: ExpenseDiscountType;
+  discount_value: string | number;
+  salary_month: string | null;
+  notes: string | null;
+  status: string;
+}
+
 interface ExpenseEntryFormProps {
   categories: ExpenseCategoryOption[];
   suggestedEntryNumber: string;
+  initialEntry?: ExpenseEntryInitial;
 }
 
 const discountTypeOptions = [
@@ -44,38 +63,69 @@ const discountTypeOptions = [
 export function ExpenseEntryForm({
   categories,
   suggestedEntryNumber,
+  initialEntry,
 }: ExpenseEntryFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const isEditMode = Boolean(initialEntry);
 
   const defaultCategory =
-    categories.find((c) => c.slug === "salary") || categories[0];
+    categories.find((c) => c.id === initialEntry?.category_id) ||
+    categories.find((c) => c.slug === "salary") ||
+    categories[0];
 
-  const [entryNumber] = useState(suggestedEntryNumber);
-  const [vendorInvoiceNumber, setVendorInvoiceNumber] = useState("");
-  const [categoryId, setCategoryId] = useState(defaultCategory?.id || "");
-  const [issueDate, setIssueDate] = useState(getIndianToday());
-  const [description, setDescription] = useState("");
-  const [entryMonth, setEntryMonth] = useState(getIndianCurrentMonth());
-  const [units, setUnits] = useState("1");
-  const [unitCost, setUnitCost] = useState("");
-  const [gstAmount, setGstAmount] = useState("");
-  const [discountType, setDiscountType] =
-    useState<ExpenseDiscountType>("none");
-  const [discountValue, setDiscountValue] = useState("");
-  const [notes, setNotes] = useState("");
+  const [entryNumber] = useState(
+    initialEntry?.entry_number || suggestedEntryNumber,
+  );
+  const [vendorInvoiceNumber, setVendorInvoiceNumber] = useState(
+    initialEntry?.vendor_invoice_number || "",
+  );
+  const [categoryId, setCategoryId] = useState(
+    initialEntry?.category_id || defaultCategory?.id || "",
+  );
+  const [issueDate, setIssueDate] = useState(
+    initialEntry?.issue_date || getIndianToday(),
+  );
+  const [description, setDescription] = useState(
+    initialEntry?.description || "",
+  );
+  const [entryMonth, setEntryMonth] = useState(
+    initialEntry?.salary_month || getIndianCurrentMonth(),
+  );
+  const [units, setUnits] = useState(
+    initialEntry ? String(Number(initialEntry.units) || 1) : "1",
+  );
+  const [unitCost, setUnitCost] = useState(
+    initialEntry ? String(Number(initialEntry.unit_cost) || "") : "",
+  );
+  const [gstAmount, setGstAmount] = useState(
+    initialEntry && Number(initialEntry.gst_amount) > 0
+      ? String(Number(initialEntry.gst_amount))
+      : "",
+  );
+  const [discountType, setDiscountType] = useState<ExpenseDiscountType>(
+    initialEntry?.discount_type || "none",
+  );
+  const [discountValue, setDiscountValue] = useState(
+    initialEntry && Number(initialEntry.discount_value) > 0
+      ? String(Number(initialEntry.discount_value))
+      : "",
+  );
+  const [notes, setNotes] = useState(initialEntry?.notes || "");
 
   const today = getIndianToday();
   const currentMonth = getIndianCurrentMonth();
 
-  const activeCategories = categories.filter((c) => c.is_active !== false);
-  const categoryOptions = activeCategories.map((c) => ({
+  const selectableCategories = categories.filter(
+    (c) => c.is_active !== false || c.id === categoryId,
+  );
+  const categoryOptions = selectableCategories.map((c) => ({
     value: c.id,
     label: c.name,
   }));
 
-  const selectedCategory = activeCategories.find((c) => c.id === categoryId);
+  const selectedCategory = selectableCategories.find((c) => c.id === categoryId);
 
   useEffect(() => {
     if (!categoryId && defaultCategory) {
@@ -181,7 +231,7 @@ export function ExpenseEntryForm({
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("organization_id")
+        .select("organization_id, role")
         .eq("id", user.id)
         .single();
 
@@ -189,54 +239,82 @@ export function ExpenseEntryForm({
         throw new Error("User must belong to an organization");
       }
 
-      const { data: entry, error } = await supabase
-        .from("expense_entries")
-        .insert({
-          entry_number: entryNumber.trim(),
-          vendor_invoice_number: vendorInvoiceNumber.trim() || null,
-          category_id: categoryId,
-          issue_date: issueDate,
-          description: description.trim(),
-          units: Number(units) || 0,
-          unit_cost: Number(unitCost) || 0,
-          gst_amount: Number(gstAmount) || 0,
-          discount_type: discountType,
-          discount_value: Number(discountValue) || 0,
-          discount_amount: amounts.discountAmount,
-          subtotal_amount: amounts.subtotal,
-          total_amount: amounts.totalAmount,
-          salary_month: entryMonth,
-          status: "recorded",
-          amount_paid: 0,
-          notes: notes.trim() || null,
-          organization_id: profile.organization_id,
-          created_by: user.id,
-        })
-        .select("id")
-        .single();
+      if (isEditMode && !canEdit(profile.role)) {
+        throw new Error("Only Super Admin can edit expense entries");
+      }
 
-      if (error) throw error;
+      const payload = {
+        vendor_invoice_number: vendorInvoiceNumber.trim() || null,
+        category_id: categoryId,
+        issue_date: issueDate,
+        description: description.trim(),
+        units: Number(units) || 0,
+        unit_cost: Number(unitCost) || 0,
+        gst_amount: Number(gstAmount) || 0,
+        discount_type: discountType,
+        discount_value: Number(discountValue) || 0,
+        discount_amount: amounts.discountAmount,
+        subtotal_amount: amounts.subtotal,
+        total_amount: amounts.totalAmount,
+        salary_month: entryMonth,
+        notes: notes.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
 
-      if (entry?.id) {
+      let entryId = initialEntry?.id;
+
+      if (isEditMode && initialEntry) {
+        const { error } = await supabase
+          .from("expense_entries")
+          .update(payload)
+          .eq("id", initialEntry.id)
+          .eq("organization_id", profile.organization_id);
+
+        if (error) throw error;
+      } else {
+        const { data: entry, error } = await supabase
+          .from("expense_entries")
+          .insert({
+            ...payload,
+            entry_number: entryNumber.trim(),
+            status: "recorded",
+            amount_paid: 0,
+            organization_id: profile.organization_id,
+            created_by: user.id,
+          })
+          .select("id")
+          .single();
+
+        if (error) throw error;
+        entryId = entry?.id;
+      }
+
+      if (entryId) {
         const userName = await getProfileDisplayName(supabase, user.id);
         await logEntryHistory(supabase, {
           organizationId: profile.organization_id,
           entityType: "expense_entry",
-          entityId: entry.id,
-          action: "created",
+          entityId: entryId,
+          action: isEditMode ? "updated" : "created",
           userId: user.id,
           userName,
-          summary: `${selectedCategory?.name || "Expense"}: ${description.trim()}`,
+          summary: isEditMode
+            ? `Updated ${selectedCategory?.name || "expense"}: ${description.trim()}`
+            : `${selectedCategory?.name || "Expense"}: ${description.trim()}`,
         });
       }
 
       toast({
         variant: "success",
-        title: "Expense recorded",
-        description: `Entry ${entryNumber} created successfully.`,
+        title: isEditMode ? "Expense updated" : "Expense recorded",
+        description: isEditMode
+          ? `Entry ${entryNumber} updated successfully.`
+          : `Entry ${entryNumber} created successfully.`,
       });
 
-      router.push("/dashboard/expenses");
+      router.push(
+        entryId ? `/dashboard/expenses/${entryId}` : "/dashboard/expenses",
+      );
       router.refresh();
     } catch (error: unknown) {
       toast({
@@ -247,7 +325,9 @@ export function ExpenseEntryForm({
             ? error.message.includes("unique")
               ? "This entry number already exists."
               : error.message
-            : "Failed to create expense entry.",
+            : isEditMode
+              ? "Failed to update expense entry."
+              : "Failed to create expense entry.",
       });
     } finally {
       setIsLoading(false);
@@ -447,11 +527,19 @@ export function ExpenseEntryForm({
 
           <div className="flex flex-wrap gap-3 justify-end">
             <Button type="button" variant="outline" asChild>
-              <Link href="/dashboard/expenses">Cancel</Link>
+              <Link
+                href={
+                  isEditMode && initialEntry
+                    ? `/dashboard/expenses/${initialEntry.id}`
+                    : "/dashboard/expenses"
+                }
+              >
+                Cancel
+              </Link>
             </Button>
             <Button type="submit" disabled={isLoading}>
               {isLoading && <Spinner className="mr-2 h-4 w-4" />}
-              Create Entry
+              {isEditMode ? "Save Changes" : "Create Entry"}
             </Button>
           </div>
         </form>

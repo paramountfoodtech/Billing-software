@@ -30,7 +30,18 @@ export default async function EditChallanPage({
 
   if (!challan) notFound()
 
-  if (!canEditChallan(profile?.role, challan.status)) {
+  let invoiceAmountPaid: number | null = null
+  if (challan.purchase_invoice_id) {
+    const { data: invoice } = await supabase
+      .from("purchase_invoices")
+      .select("amount_paid")
+      .eq("id", challan.purchase_invoice_id)
+      .maybeSingle()
+    invoiceAmountPaid =
+      invoice?.amount_paid != null ? Number(invoice.amount_paid) : null
+  }
+
+  if (!canEditChallan(profile?.role, challan.status, invoiceAmountPaid)) {
     redirect("/dashboard/challans")
   }
 
@@ -54,6 +65,7 @@ export default async function EditChallanPage({
         purchasers={purchasers || []}
         challan={challan}
         userRole={profile?.role}
+        invoiceAmountPaid={invoiceAmountPaid}
       />
     </div>
   )

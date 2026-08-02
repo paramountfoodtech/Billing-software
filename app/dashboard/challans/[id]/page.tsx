@@ -34,17 +34,29 @@ export default async function ChallanDetailPage({
     redirect(`/dashboard/purchase-invoices/${challan.purchase_invoice_id}`)
   }
 
-  const { data: boxes } = await supabase
-    .from("challan_boxes")
-    .select("box_number, weight_kg, num_birds")
-    .eq("challan_id", id)
-    .order("box_number", { ascending: true })
+  const [{ data: boxes }, { data: profile }] = await Promise.all([
+    supabase
+      .from("challan_boxes")
+      .select("box_number, weight_kg, num_birds")
+      .eq("challan_id", id)
+      .order("box_number", { ascending: true }),
+    supabase
+      .from("profiles")
+      .select("organization_id, role")
+      .eq("id", user.id)
+      .single(),
+  ])
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("organization_id, role")
-    .eq("id", user.id)
-    .single()
+  let invoiceAmountPaid: number | null = null
+  if (challan.purchase_invoice_id) {
+    const { data: invoice } = await supabase
+      .from("purchase_invoices")
+      .select("amount_paid")
+      .eq("id", challan.purchase_invoice_id)
+      .maybeSingle()
+    invoiceAmountPaid =
+      invoice?.amount_paid != null ? Number(invoice.amount_paid) : null
+  }
 
   let template = null
   if (profile?.organization_id) {
@@ -75,6 +87,7 @@ export default async function ChallanDetailPage({
         challan={challanForPrint}
         template={template}
         userRole={profile?.role}
+        invoiceAmountPaid={invoiceAmountPaid}
       />
     </div>
   )

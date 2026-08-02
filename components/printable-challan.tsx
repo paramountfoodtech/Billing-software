@@ -45,6 +45,7 @@ interface PrintableChallanProps {
   challan: Challan;
   template?: InvoiceTemplate;
   userRole?: string;
+  invoiceAmountPaid?: string | number | null;
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
@@ -57,6 +58,7 @@ export function PrintableChallan({
   challan,
   template,
   userRole,
+  invoiceAmountPaid = null,
 }: PrintableChallanProps) {
   const [isPrinting, setIsPrinting] = useState(false);
   const boxes = challan.challan_boxes || [];
@@ -126,7 +128,7 @@ export function PrintableChallan({
           <Link href="/dashboard/challans">Back</Link>
         </Button>
         <div className="flex items-center gap-2">
-          {canEditChallan(userRole, challan.status) && (
+          {canEditChallan(userRole, challan.status, invoiceAmountPaid) && (
             <IconTooltip label="Edit">
               <Button asChild variant="outline">
                 <Link href={`/dashboard/challans/${challan.id}/edit`}>

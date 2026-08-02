@@ -63,6 +63,7 @@ interface Challan {
   created_at: string;
   purchasers: { name: string; purchaser_code: string };
   profiles?: { full_name: string };
+  purchase_invoices?: { amount_paid: string | number } | null;
 }
 
 interface ChallansTableProps {
@@ -430,7 +431,11 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
                                 </Link>
                               </DropdownMenuItem>
                             )}
-                          {canEditChallan(userRole, challan.status) && (
+                          {canEditChallan(
+                            userRole,
+                            challan.status,
+                            challan.purchase_invoices?.amount_paid,
+                          ) && (
                             <DropdownMenuItem asChild>
                               <Link
                                 href={`/dashboard/challans/${challan.id}/edit`}

@@ -1201,9 +1201,11 @@ export function InvoicesTable({
                                 View
                               </Link>
                             </DropdownMenuItem>
-                            {canEditInvoice(userRole, invoice.status) &&
-                              (invoice.status === "draft" ||
-                                invoice.status === "recorded") && (
+                            {canEditInvoice(
+                              userRole,
+                              invoice.status,
+                              invoice.amount_paid,
+                            ) && (
                                 <DropdownMenuItem asChild>
                                   <Link
                                     href={`/dashboard/invoices/${invoice.id}/edit`}

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { formatIndianDate } from "@/lib/date-time";
-import { canAccessExpenses } from "@/lib/permissions";
+import { canAccessExpenses, canEdit } from "@/lib/permissions";
 
 export default async function ExpenseDetailPage({
   params,
@@ -52,18 +52,25 @@ export default async function ExpenseDetailPage({
 
   return (
     <div className="p-6 lg:p-8 max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <Button variant="outline" asChild>
           <Link href="/dashboard/expenses">Back to Expenses</Link>
         </Button>
-        <EntryHistoryButton
-          entityType="expense_entry"
-          entityId={id}
-          createdAt={entry.created_at}
-          createdByName={
-            (entry.profiles as { full_name: string } | null)?.full_name
-          }
-        />
+        <div className="flex items-center gap-2">
+          {canEdit(profile?.role) && entry.status !== "cancelled" && (
+            <Button asChild>
+              <Link href={`/dashboard/expenses/${id}/edit`}>Edit</Link>
+            </Button>
+          )}
+          <EntryHistoryButton
+            entityType="expense_entry"
+            entityId={id}
+            createdAt={entry.created_at}
+            createdByName={
+              (entry.profiles as { full_name: string } | null)?.full_name
+            }
+          />
+        </div>
       </div>
 
       <Card>

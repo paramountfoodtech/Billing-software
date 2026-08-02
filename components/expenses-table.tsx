@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Eye,
+  Pencil,
   Trash2,
   Download,
   ArrowUpDown,
@@ -42,7 +43,7 @@ import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
 import { TableRowActions } from "@/components/table-row-actions";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { canDelete } from "@/lib/permissions";
+import { canDelete, canEdit } from "@/lib/permissions";
 
 export interface ExpenseEntryRow {
   id: string;
@@ -270,6 +271,7 @@ export function ExpensesTable({
     );
   };
 
+  const allowEdit = canEdit(userRole);
   const allowDelete = canDelete(userRole);
 
   return (
@@ -446,6 +448,14 @@ export function ExpensesTable({
                               View
                             </Link>
                           </DropdownMenuItem>
+                          {allowEdit && entry.status !== "cancelled" && (
+                            <DropdownMenuItem asChild>
+                              <Link href={`/dashboard/expenses/${entry.id}/edit`}>
+                                <Pencil />
+                                Edit
+                              </Link>
+                            </DropdownMenuItem>
+                          )}
                           {allowDelete && (
                             <DropdownMenuItem
                               variant="destructive"

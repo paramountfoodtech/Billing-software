@@ -21,19 +21,53 @@ export function canEdit(role?: string | null): boolean {
   return isSuperAdmin(role);
 }
 
+/** Any payment recorded on an invoice locks related edits. */
+export function hasRecordedPayment(
+  amountPaid?: string | number | null,
+): boolean {
+  return Number(amountPaid || 0) > 0.01;
+}
+
+function canEditDraftOrAbove(role?: string | null): boolean {
+  return (
+    role === "super_admin" || role === "admin" || role === "accountant"
+  );
+}
+
 /**
- * Invoice edit access:
- * - Blank/Cancelled (draft) invoices can be completed by any role that creates invoices
- * - All other statuses: Super Admin only
+ * Sales invoice edit access:
+ * - Draft (Blank/Cancelled): Super Admin, Admin, or Accountant
+ * - Otherwise: Super Admin only
+ * - If any payment is recorded: nobody (including Super Admin)
  */
 export function canEditInvoice(
   role?: string | null,
   status?: string | null,
+  amountPaid?: string | number | null,
 ): boolean {
+  if (status === "cancelled") return false;
+  if (hasRecordedPayment(amountPaid)) return false;
   if (status === "draft") {
-    return (
-      role === "super_admin" || role === "admin" || role === "accountant"
-    );
+    return canEditDraftOrAbove(role);
+  }
+  return isSuperAdmin(role);
+}
+
+/**
+ * Purchase invoice edit access:
+ * - Draft: Super Admin, Admin, or Accountant
+ * - Otherwise: Super Admin only
+ * - If any payment is recorded: nobody (including Super Admin)
+ */
+export function canEditPurchaseInvoice(
+  role?: string | null,
+  status?: string | null,
+  amountPaid?: string | number | null,
+): boolean {
+  if (status === "cancelled") return false;
+  if (hasRecordedPayment(amountPaid)) return false;
+  if (status === "draft") {
+    return canEditDraftOrAbove(role);
   }
   return isSuperAdmin(role);
 }
@@ -52,18 +86,19 @@ export function canAccessOperationsReports(role?: string | null): boolean {
 }
 
 /**
- * Challan edit access:
+ * Purchase challan edit access:
  * - Draft: Super Admin, Admin, or Accountant
  * - Final / invoiced: Super Admin only
+ * - If linked purchase invoice has payment recorded: nobody (including Super Admin)
  */
 export function canEditChallan(
   role?: string | null,
   status?: string | null,
+  invoiceAmountPaid?: string | number | null,
 ): boolean {
+  if (hasRecordedPayment(invoiceAmountPaid)) return false;
   if (status === "draft") {
-    return (
-      role === "super_admin" || role === "admin" || role === "accountant"
-    );
+    return canEditDraftOrAbove(role);
   }
   return isSuperAdmin(role);
 }

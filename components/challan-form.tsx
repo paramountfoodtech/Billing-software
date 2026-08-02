@@ -21,7 +21,7 @@ import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
 import { Trash2 } from "lucide-react";
 import { IconTooltip } from "@/components/icon-tooltip";
-import { canEditChallan } from "@/lib/permissions";
+import { canEditChallan, hasRecordedPayment } from "@/lib/permissions";
 
 function useBoxGridColumns() {
   const [cols, setCols] = useState(1);
@@ -74,6 +74,8 @@ interface ChallanFormProps {
   challan?: Challan;
   suggestedNumber?: string;
   userRole?: string | null;
+  /** Amount paid on linked purchase invoice — locks edit when > 0. */
+  invoiceAmountPaid?: string | number | null;
 }
 
 export function ChallanForm({
@@ -81,6 +83,7 @@ export function ChallanForm({
   challan,
   suggestedNumber,
   userRole,
+  invoiceAmountPaid = null,
 }: ChallanFormProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -128,7 +131,7 @@ export function ChallanForm({
   });
 
   const isEditable =
-    !challan || canEditChallan(userRole, challan.status);
+    !challan || canEditChallan(userRole, challan.status, invoiceAmountPaid);
   const allBoxesHaveWeights = useMemo(
     () =>
       boxes.length > 0 &&
@@ -385,8 +388,15 @@ export function ChallanForm({
         throw new Error("User must belong to an organization");
       }
 
-      if (challan && !canEditChallan(profile.role, challan.status)) {
-        throw new Error("You do not have permission to edit this purchase challan.");
+      if (
+        challan &&
+        !canEditChallan(profile.role, challan.status, invoiceAmountPaid)
+      ) {
+        throw new Error(
+          hasRecordedPayment(invoiceAmountPaid)
+            ? "This purchase challan is linked to an invoice with payments and cannot be edited."
+            : "You do not have permission to edit this purchase challan.",
+        );
       }
 
       // Keep invoiced challans linked; do not demote status on edit.

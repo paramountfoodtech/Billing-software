@@ -40,6 +40,10 @@ import {
   isPurchaserInvoiceNumberDuplicate as checkPurchaserInvoiceNumberDuplicate,
   isPurchaserInvoiceNumberUniqueViolation,
 } from "@/lib/purchase-invoice-number";
+import {
+  canEditPurchaseInvoice,
+  hasRecordedPayment,
+} from "@/lib/permissions";
 
 interface Purchaser {
   id: string;
@@ -494,13 +498,19 @@ export function PurchaseInvoiceForm({
         throw new Error("User must belong to an organization");
       }
 
-      if (isEditMode && profile.role !== "super_admin") {
-        throw new Error("Only Super Admin can edit purchase invoices.");
-      }
-
-      if (isEditMode && amountPaid > 0.01) {
+      if (
+        isEditMode &&
+        initialInvoice &&
+        !canEditPurchaseInvoice(
+          profile.role,
+          initialInvoice.status,
+          amountPaid,
+        )
+      ) {
         throw new Error(
-          "This purchase invoice has payments recorded and cannot be edited.",
+          hasRecordedPayment(amountPaid)
+            ? "This purchase invoice has payments recorded and cannot be edited."
+            : "You do not have permission to edit this purchase invoice.",
         );
       }
 

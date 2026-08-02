@@ -85,6 +85,10 @@ import {
   resolveNextInvoiceNumberForClient,
   sanitizeInvoiceNumberInput,
 } from "@/lib/invoice-number";
+import {
+  canEditInvoice,
+  hasRecordedPayment,
+} from "@/lib/permissions";
 
 interface Client {
   id: string;
@@ -154,6 +158,7 @@ interface InvoiceFormProps {
     reference_number?: string | null;
     notes: string | null;
     status?: string | null;
+    amount_paid?: number | string | null;
     subtotal?: number | null;
     tax_amount?: number | null;
     discount_amount?: number | null;
@@ -1411,12 +1416,28 @@ export function InvoiceForm({
       // Get user's organization
       const { data: profile } = await supabase
         .from("profiles")
-        .select("organization_id")
+        .select("organization_id, role")
         .eq("id", user.id)
         .single();
 
       if (!profile?.organization_id) {
         throw new Error("User must belong to an organization");
+      }
+
+      if (
+        isEditMode &&
+        initialInvoice &&
+        !canEditInvoice(
+          profile.role,
+          initialInvoice.status,
+          initialInvoice.amount_paid,
+        )
+      ) {
+        throw new Error(
+          hasRecordedPayment(initialInvoice.amount_paid)
+            ? "This invoice has payments recorded and cannot be edited."
+            : "You do not have permission to edit this invoice.",
+        );
       }
 
       let invoiceId = initialInvoice?.id;

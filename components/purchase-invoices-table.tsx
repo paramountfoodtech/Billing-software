@@ -48,7 +48,7 @@ import { EntryHistoryButton } from "@/components/entry-history-button";
 import { IconTooltip } from "@/components/icon-tooltip";
 import { TableRowActions } from "@/components/table-row-actions";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { canDelete, canEdit } from "@/lib/permissions";
+import { canDelete, canEditPurchaseInvoice } from "@/lib/permissions";
 import {
   createPurchaseInvoiceRateDiscountLookup,
   formatPurchaseInvoiceRateDiscount,
@@ -806,9 +806,11 @@ export function PurchaseInvoicesTable({
                               View
                             </Link>
                           </DropdownMenuItem>
-                          {canEdit(userRole) &&
-                            invoice.status !== "cancelled" &&
-                            Number(invoice.amount_paid) <= 0.01 && (
+                          {canEditPurchaseInvoice(
+                            userRole,
+                            invoice.status,
+                            invoice.amount_paid,
+                          ) && (
                               <DropdownMenuItem asChild>
                                 <Link
                                   href={`/dashboard/purchase-invoices/${invoice.id}/edit`}

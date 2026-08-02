@@ -47,7 +47,7 @@ export default async function EditInvoicePage({
     notFound();
   }
 
-  if (!canEditInvoice(profile.role, invoice.status)) {
+  if (!canEditInvoice(profile.role, invoice.status, invoice.amount_paid)) {
     notFound();
   }
 
@@ -131,6 +131,7 @@ export default async function EditInvoicePage({
           due_days_type: invoice.due_days_type,
           notes: invoice.notes,
           status: invoice.status,
+          amount_paid: Number(invoice.amount_paid || 0),
           subtotal: Number(invoice.subtotal),
           tax_amount: Number(invoice.tax_amount),
           discount_amount: Number(invoice.discount_amount),
