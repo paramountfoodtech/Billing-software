@@ -48,7 +48,7 @@ export default async function NewExpensePage() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">New Expense Entry</h1>
         <p className="text-muted-foreground mt-1">
-          Record salary or other expenses with units, GST, and discounts
+          Record expenses with units, GST, and discounts
         </p>
       </div>
 

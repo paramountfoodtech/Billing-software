@@ -406,11 +406,6 @@ export function ExpenseCategoriesManagement({
                           (system)
                         </span>
                       )}
-                      {category.slug === "salary" && (
-                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
-                          Default
-                        </span>
-                      )}
                     </p>
                   </div>
                 )}
@@ -428,7 +423,7 @@ export function ExpenseCategoriesManagement({
                       onCheckedChange={(checked) =>
                         handleToggleActive(category.id, checked)
                       }
-                      disabled={loading || category.slug === "salary"}
+                      disabled={loading}
                     />
                   </div>
                 )}

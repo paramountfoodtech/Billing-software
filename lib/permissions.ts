@@ -56,8 +56,8 @@ export function canEditInvoice(
 /**
  * Purchase invoice edit access:
  * - Draft: Super Admin, Admin, or Accountant
- * - Otherwise: Super Admin only
- * - If any payment is recorded: nobody (including Super Admin)
+ * - Otherwise (including paid / partially paid): Super Admin only
+ * - Cancelled: nobody
  */
 export function canEditPurchaseInvoice(
   role?: string | null,
@@ -65,7 +65,9 @@ export function canEditPurchaseInvoice(
   amountPaid?: string | number | null,
 ): boolean {
   if (status === "cancelled") return false;
-  if (hasRecordedPayment(amountPaid)) return false;
+  if (hasRecordedPayment(amountPaid)) {
+    return isSuperAdmin(role);
+  }
   if (status === "draft") {
     return canEditDraftOrAbove(role);
   }
@@ -112,4 +114,18 @@ export function canDeleteChallan(challan: {
   }
 
   return challan.status === "invoiced" && !challan.purchase_invoice_id;
+}
+
+export function canAccessPayroll(role?: string | null): boolean {
+  return isAdminOrAbove(role);
+}
+
+/** Payroll attendance tab — Admin, Super Admin, or Accountant. */
+export function canAccessAttendance(role?: string | null): boolean {
+  return isAdminOrAbove(role) || role === "accountant";
+}
+
+/** Only Super Admin can unlock finalized attendance */
+export function canUnlockAttendance(role?: string | null): boolean {
+  return isSuperAdmin(role);
 }

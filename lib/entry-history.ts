@@ -17,6 +17,10 @@ export type EntryEntityType =
   | "expense_category"
   | "material_stock"
   | "material_processing"
+  | "employee"
+  | "hr_attendance"
+  | "hr_salary"
+  | "hr_salary_advance"
 
 export type EntryHistoryAction = "created" | "updated"
 

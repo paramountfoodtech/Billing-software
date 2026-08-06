@@ -53,7 +53,7 @@ export default async function EditExpensePage({
           Edit Expense Entry
         </h1>
         <p className="text-muted-foreground mt-1">
-          Update salary or other expense details
+          Update expense details
         </p>
       </div>
 

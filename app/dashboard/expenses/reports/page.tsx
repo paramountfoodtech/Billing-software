@@ -1,16 +1,24 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPages } from "@/lib/supabase/fetch-all";
 import { redirect } from "next/navigation";
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper";
 import { ExpenseReportsPageClient } from "@/components/expense-reports-page-client";
-import type { ExpenseReportCategoryRow } from "@/components/expense-reports-table";
+import {
+  buildExpenseCategoryRows,
+  dedupeExpenseEntriesById,
+  resolveReportMonthYear,
+  type ExpenseEntryForReport,
+} from "@/lib/expense-report-aggregation";
 
 export const revalidate = 0;
 
 const ENTRY_SELECT = `
   id,
   total_amount,
-  salary_month,
+  entry_month,
   issue_date,
+  description,
+  notes,
   expense_categories(id, name, slug)
 `;
 
@@ -28,94 +36,101 @@ export default async function ExpenseReportsPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organization_id")
     .eq("id", user.id)
     .single();
 
-  if (!profile || (profile.role !== "super_admin" && profile.role !== "admin")) {
+  if (
+    !profile?.organization_id ||
+    (profile.role !== "super_admin" && profile.role !== "admin")
+  ) {
     redirect("/dashboard");
   }
 
+  const organizationId = profile.organization_id;
   const params = await searchParams;
-  const today = new Date();
-  const reportYear = params.year ? parseInt(params.year) : today.getFullYear();
-  const reportMonth = params.month ? parseInt(params.month) : today.getMonth() + 1;
+  const {
+    reportYear,
+    reportMonth,
+    reportMonthKey,
+    monthStart,
+    monthEnd,
+    monthLabel,
+  } = resolveReportMonthYear(params);
 
-  const reportMonthKey = `${reportYear}-${String(reportMonth).padStart(2, "0")}`;
-  const monthStart = `${reportMonthKey}-01`;
-  const daysInMonth = new Date(reportYear, reportMonth, 0).getDate();
-  const monthEnd = `${reportMonthKey}-${String(daysInMonth).padStart(2, "0")}`;
+  // Prefer entry_month; fall back to issue_date for legacy rows.
+  // Paid salaries come from payroll (hr_salary), not expense_entries.
+  const [byEntryMonth, legacyByIssueDate, paidSalaries, linkedExpenseIds] =
+    await Promise.all([
+      fetchAllPages<ExpenseEntryForReport>(async (from, to) => {
+        const { data, error } = await supabase
+          .from("expense_entries")
+          .select(ENTRY_SELECT)
+          .eq("organization_id", organizationId)
+          .eq("entry_month", reportMonthKey)
+          .neq("status", "cancelled")
+          .order("id", { ascending: true })
+          .range(from, to);
+        return { data: data as ExpenseEntryForReport[] | null, error };
+      }),
+      fetchAllPages<ExpenseEntryForReport>(async (from, to) => {
+        const { data, error } = await supabase
+          .from("expense_entries")
+          .select(ENTRY_SELECT)
+          .eq("organization_id", organizationId)
+          .is("entry_month", null)
+          .gte("issue_date", monthStart)
+          .lte("issue_date", monthEnd)
+          .neq("status", "cancelled")
+          .order("id", { ascending: true })
+          .range(from, to);
+        return { data: data as ExpenseEntryForReport[] | null, error };
+      }),
+      fetchAllPages<{ net_payable: string | number }>(async (from, to) => {
+        const { data, error } = await supabase
+          .from("hr_salary")
+          .select("net_payable")
+          .eq("organization_id", organizationId)
+          .eq("salary_month", reportMonthKey)
+          .eq("payment_status", "paid")
+          .order("id", { ascending: true })
+          .range(from, to);
+        return { data, error };
+      }),
+      fetchAllPages<{ expense_entry_id: string }>(async (from, to) => {
+        const { data, error } = await supabase
+          .from("hr_salary")
+          .select("expense_entry_id")
+          .eq("organization_id", organizationId)
+          .not("expense_entry_id", "is", null)
+          .order("id", { ascending: true })
+          .range(from, to);
+        return { data, error };
+      }),
+    ]);
 
-  const monthLabel = new Date(reportYear, reportMonth - 1, 1).toLocaleDateString(
-    "en-IN",
-    { month: "long", year: "numeric" },
-  );
-
-  // Prefer the month selected on the expense entry; fall back to issue_date for legacy rows
-  const [byEntryMonthResult, legacyByIssueDateResult] = await Promise.all([
-    supabase
-      .from("expense_entries")
-      .select(ENTRY_SELECT)
-      .eq("salary_month", reportMonthKey)
-      .neq("status", "cancelled"),
-    supabase
-      .from("expense_entries")
-      .select(ENTRY_SELECT)
-      .is("salary_month", null)
-      .gte("issue_date", monthStart)
-      .lte("issue_date", monthEnd)
-      .neq("status", "cancelled"),
+  const entries = dedupeExpenseEntriesById([
+    ...byEntryMonth,
+    ...legacyByIssueDate,
   ]);
-
-  const entriesById = new Map<string, any>();
-  for (const entry of [
-    ...(byEntryMonthResult.data || []),
-    ...(legacyByIssueDateResult.data || []),
-  ]) {
-    entriesById.set(entry.id, entry);
-  }
-  const entries = Array.from(entriesById.values());
-
-  const categoryMap = new Map<string, ExpenseReportCategoryRow>();
-
-  for (const entry of entries) {
-    const catRaw = entry.expense_categories;
-    const cat = (Array.isArray(catRaw) ? catRaw[0] : catRaw) as {
-      id: string;
-      name: string;
-      slug: string | null;
-    } | null;
-    if (!cat) continue;
-
-    const amount = Number(entry.total_amount);
-    const existing = categoryMap.get(cat.id);
-    if (existing) {
-      existing.entryCount += 1;
-      existing.totalAmount += amount;
-    } else {
-      categoryMap.set(cat.id, {
-        categoryId: cat.id,
-        categoryName: cat.name,
-        slug: cat.slug,
-        entryCount: 1,
-        totalAmount: amount,
-      });
-    }
-  }
-
-  const categoryRows = Array.from(categoryMap.values()).sort(
-    (a, b) => b.totalAmount - a.totalAmount,
+  const linkedExpenseEntryIds = new Set(
+    linkedExpenseIds.map((row) => row.expense_entry_id),
   );
-  const grandTotal = categoryRows.reduce((sum, r) => sum + r.totalAmount, 0);
+
+  const { categoryRows, grandTotal } = buildExpenseCategoryRows(
+    entries,
+    paidSalaries,
+    linkedExpenseEntryIds,
+  );
 
   return (
     <DashboardPageWrapper title="Expense Reports">
       <ExpenseReportsPageClient
-          reportYear={reportYear}
-          reportMonth={reportMonth}
-          monthLabel={monthLabel}
-          categoryRows={categoryRows}
-          grandTotal={grandTotal}
+        reportYear={reportYear}
+        reportMonth={reportMonth}
+        monthLabel={monthLabel}
+        categoryRows={categoryRows}
+        grandTotal={grandTotal}
       />
     </DashboardPageWrapper>
   );

@@ -542,7 +542,7 @@ export function PurchaseInvoiceForm({
         isEditMode && amountPaid > 0
           ? finalTotal - amountPaid <= 0.01
             ? "paid"
-            : "partial"
+            : "partially_paid"
           : isEditMode
             ? initialInvoice?.status || "recorded"
             : "recorded";

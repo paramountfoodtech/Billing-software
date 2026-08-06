@@ -30,8 +30,9 @@ export function ExpenseReportsPageClient({
             <span className="font-semibold text-foreground">{monthLabel}</span>
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Based on the month selected when recording each Salary &amp; Expenses
-            entry
+            Includes expense entries for the selected month, plus paid payroll
+            salaries. Salaries are not listed under Expenses — only paid ones
+            appear here.
           </p>
         </div>
         <MonthYearPicker

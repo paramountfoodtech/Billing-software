@@ -56,7 +56,7 @@ export interface ExpenseEntryRow {
   gst_amount: string;
   discount_amount: string;
   total_amount: string;
-  salary_month: string | null;
+  entry_month: string | null;
   status: string;
   created_at: string;
   expense_categories: { name: string; slug: string | null } | null;
@@ -161,9 +161,9 @@ export function ExpensesTable({
             aVal = Number(a.total_amount);
             bVal = Number(b.total_amount);
             break;
-          case "salary_month":
-            aVal = a.salary_month || "";
-            bVal = b.salary_month || "";
+          case "entry_month":
+            aVal = a.entry_month || "";
+            bVal = b.entry_month || "";
             break;
           default:
             return 0;
@@ -242,7 +242,7 @@ export function ExpensesTable({
             day: "2-digit",
           }),
       },
-      { key: "salary_month", label: "Month" },
+      { key: "entry_month", label: "Month" },
       {
         key: "units",
         label: "Units",
@@ -266,7 +266,7 @@ export function ExpensesTable({
     void exportToPDF(
       enriched,
       columns,
-      "Salary & Expenses",
+      "Expenses",
       `expenses${dateSuffix}.pdf`,
     );
   };
@@ -323,9 +323,9 @@ export function ExpensesTable({
                 <button
                   type="button"
                   className="font-semibold"
-                  onClick={() => handleSort("salary_month")}
+                  onClick={() => handleSort("entry_month")}
                 >
-                  Month <SortIcon column="salary_month" />
+                  Month <SortIcon column="entry_month" />
                 </button>
               </TableHead>
               <TableHead className="text-right">
@@ -420,8 +420,8 @@ export function ExpensesTable({
                       })}
                     </TableCell>
                     <TableCell>
-                      {entry.salary_month
-                        ? new Date(`${entry.salary_month}-01`).toLocaleDateString(
+                      {entry.entry_month
+                        ? new Date(`${entry.entry_month}-01`).toLocaleDateString(
                             "en-IN",
                             { month: "short", year: "numeric" },
                           )

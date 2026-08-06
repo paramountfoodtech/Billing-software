@@ -4,7 +4,7 @@
  */
 
 export function suggestNextNumber(
-  prefix: "CH" | "PI" | "EXP",
+  prefix: "CH" | "PI" | "EXP" | "EMP" | "SAL",
   existingNumbers: string[],
 ): string {
   const year = new Date().getFullYear()

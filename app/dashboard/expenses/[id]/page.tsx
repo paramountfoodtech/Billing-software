@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { EntryHistoryButton } from "@/components/entry-history-button";
 import { formatIndianDate } from "@/lib/date-time";
-import { canAccessExpenses, canEdit } from "@/lib/permissions";
+import { canAccessExpenses } from "@/lib/permissions";
 
 export default async function ExpenseDetailPage({
   params,
@@ -57,11 +57,9 @@ export default async function ExpenseDetailPage({
           <Link href="/dashboard/expenses">Back to Expenses</Link>
         </Button>
         <div className="flex items-center gap-2">
-          {canEdit(profile?.role) && entry.status !== "cancelled" && (
-            <Button asChild>
-              <Link href={`/dashboard/expenses/${id}/edit`}>Edit</Link>
-            </Button>
-          )}
+          <Button asChild>
+            <Link href="/dashboard/expenses/new">Create New Expense</Link>
+          </Button>
           <EntryHistoryButton
             entityType="expense_entry"
             entityId={id}
@@ -98,11 +96,11 @@ export default async function ExpenseDetailPage({
                 })}
               </p>
             </div>
-            {entry.salary_month && (
+            {entry.entry_month && (
               <div>
                 <p className="text-muted-foreground">Month</p>
                 <p className="font-medium">
-                  {new Date(`${entry.salary_month}-01`).toLocaleDateString(
+                  {new Date(`${entry.entry_month}-01`).toLocaleDateString(
                     "en-IN",
                     { month: "long", year: "numeric" },
                   )}

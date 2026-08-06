@@ -31,6 +31,7 @@ import {
   Factory,
   Boxes,
   ArrowLeftRight,
+  UserCog,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -228,7 +229,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
         items: [
           {
             href: "/dashboard/expenses",
-            label: "Salary & Expenses",
+            label: "Expenses",
             icon: CircleDollarSign,
             roles: ["super_admin", "admin"],
           },
@@ -237,6 +238,12 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             label: "Expense Reports",
             icon: BarChart3,
             roles: ["super_admin", "admin"],
+          },
+          {
+            href: "/dashboard/expenses/payroll",
+            label: "Payroll",
+            icon: UserCog,
+            roles: ["super_admin", "admin", "accountant"],
           },
         ],
       },

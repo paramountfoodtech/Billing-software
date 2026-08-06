@@ -39,7 +39,7 @@ export default async function ExpensesPage() {
     .order("created_at", { ascending: false });
 
   return (
-    <DashboardPageWrapper title="Salary & Expenses">
+    <DashboardPageWrapper title="Expenses">
       <div className="w-full p-4 sm:p-6 lg:p-8 space-y-4">
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3">
           <Button variant="outline" asChild className="w-full sm:w-auto">

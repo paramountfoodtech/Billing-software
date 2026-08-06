@@ -23,7 +23,3 @@ export function calculateExpenseAmounts(input: {
     totalAmount,
   };
 }
-
-export function isSalaryCategory(slug?: string | null) {
-  return slug === "salary";
-}

@@ -43,7 +43,7 @@ export interface ExpenseEntryInitial {
   gst_amount: string | number;
   discount_type: ExpenseDiscountType;
   discount_value: string | number;
-  salary_month: string | null;
+  entry_month: string | null;
   notes: string | null;
   status: string;
 }
@@ -72,7 +72,7 @@ export function ExpenseEntryForm({
 
   const defaultCategory =
     categories.find((c) => c.id === initialEntry?.category_id) ||
-    categories.find((c) => c.slug === "salary") ||
+    categories.find((c) => c.slug === "general") ||
     categories[0];
 
   const [entryNumber] = useState(
@@ -90,9 +90,13 @@ export function ExpenseEntryForm({
   const [description, setDescription] = useState(
     initialEntry?.description || "",
   );
-  const [entryMonth, setEntryMonth] = useState(
-    initialEntry?.salary_month || getIndianCurrentMonth(),
-  );
+  const [entryMonth, setEntryMonth] = useState(() => {
+    if (initialEntry?.entry_month) return initialEntry.entry_month;
+    const dateForMonth = initialEntry?.issue_date || getIndianToday();
+    return dateForMonth.slice(0, 7) || getIndianCurrentMonth();
+  });
+  /** Once the user edits Month, stop auto-syncing it from Issue Date. */
+  const [entryMonthTouched, setEntryMonthTouched] = useState(isEditMode);
   const [units, setUnits] = useState(
     initialEntry ? String(Number(initialEntry.units) || 1) : "1",
   );
@@ -153,15 +157,6 @@ export function ExpenseEntryForm({
         variant: "destructive",
         title: "Missing category",
         description: "Please select an expense category.",
-      });
-      return;
-    }
-
-    if (!description.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Missing description",
-        description: "Please enter a description.",
       });
       return;
     }
@@ -256,7 +251,7 @@ export function ExpenseEntryForm({
         discount_amount: amounts.discountAmount,
         subtotal_amount: amounts.subtotal,
         total_amount: amounts.totalAmount,
-        salary_month: entryMonth,
+        entry_month: entryMonth,
         notes: notes.trim() || null,
         updated_at: new Date().toISOString(),
       };
@@ -388,7 +383,16 @@ export function ExpenseEntryForm({
                 max={today}
                 onChange={(e) => {
                   const next = e.target.value;
-                  setIssueDate(next > today ? today : next);
+                  const clamped = next > today ? today : next;
+                  setIssueDate(clamped);
+                  if (!entryMonthTouched && clamped) {
+                    const monthFromDate = clamped.slice(0, 7);
+                    setEntryMonth(
+                      monthFromDate > currentMonth
+                        ? currentMonth
+                        : monthFromDate,
+                    );
+                  }
                 }}
                 required
               />
@@ -405,6 +409,7 @@ export function ExpenseEntryForm({
                 max={currentMonth}
                 onChange={(e) => {
                   const next = e.target.value;
+                  setEntryMonthTouched(true);
                   setEntryMonth(next > currentMonth ? currentMonth : next);
                 }}
                 required
@@ -412,15 +417,13 @@ export function ExpenseEntryForm({
             </div>
 
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="description">
-                Description <span className="text-red-500">*</span>
-              </Label>
+              <Label htmlFor="description">Description</Label>
               <Input
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Enter description for this entry"
-                required
+                disabled
               />
             </div>
           </div>
@@ -462,6 +465,7 @@ export function ExpenseEntryForm({
                 value={gstAmount}
                 onChange={(e) => setGstAmount(e.target.value)}
                 placeholder="0.00"
+                disabled
               />
             </div>
             <div className="space-y-2">
@@ -473,6 +477,7 @@ export function ExpenseEntryForm({
                   setDiscountType(value as ExpenseDiscountType)
                 }
                 placeholder="Discount type"
+                disabled
               />
             </div>
             {discountType !== "none" && (
@@ -487,6 +492,7 @@ export function ExpenseEntryForm({
                   step="0.01"
                   value={discountValue}
                   onChange={(e) => setDiscountValue(e.target.value)}
+                  disabled
                 />
               </div>
             )}

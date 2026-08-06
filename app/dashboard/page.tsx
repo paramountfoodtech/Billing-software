@@ -34,6 +34,11 @@ import { Suspense } from "react";
 import { PageLoadingFallback } from "@/components/page-loading-fallback";
 import { MaterialDashboardWidgets } from "@/components/material-dashboard-widgets";
 import { KpiValue } from "@/components/kpi-value";
+import {
+  buildExpenseAmountsForKpi,
+  dedupeExpenseEntriesById,
+  resolveReportMonthYear,
+} from "@/lib/expense-report-aggregation";
 
 // Prevent caching to ensure fresh data on every request
 export const revalidate = 0;
@@ -153,7 +158,7 @@ function FinancialKpiCards({
             {expenses}
           </KpiValue>
           <p className="text-xs text-muted-foreground mt-1">
-            Salary &amp; expense entries {periodHint}
+            Expense entries {periodHint}
           </p>
         </CardContent>
       </Card>
@@ -213,37 +218,43 @@ export default async function DashboardPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, organization_id")
     .eq("id", user.id)
     .single();
 
   if (profile?.role === "accountant") redirect("/dashboard/prices");
 
   const fyRange = getCurrentFinancialYearRange();
+  const {
+    reportYear,
+    reportMonth,
+    reportMonthKey: monthKey,
+    monthStart,
+    monthEnd,
+    monthLabel,
+  } = resolveReportMonthYear(params);
+  const fyStartMonth = fyRange.start.slice(0, 7);
+  const fyEndMonth = fyRange.end.slice(0, 7);
   const today = new Date();
-  const reportYear = params.year ? parseInt(params.year, 10) : today.getFullYear();
-  const reportMonth = params.month
-    ? parseInt(params.month, 10)
-    : today.getMonth() + 1;
-  const monthStart = `${reportYear}-${String(reportMonth).padStart(2, "0")}-01`;
-  const daysInMonth = new Date(reportYear, reportMonth, 0).getDate();
-  const monthEnd = `${reportYear}-${String(reportMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
-  const monthLabel = new Date(reportYear, reportMonth - 1, 1).toLocaleDateString(
-    "en-IN",
-    { month: "long", year: "numeric" },
-  );
+
+  const expenseEntrySelect =
+    "id, total_amount, status, entry_month, issue_date, notes, description, expense_categories(slug)";
 
   const [
     clientsCountResult,
     fyInvoices,
     fyPayments,
     fyPurchaseInvoices,
-    fyExpenseEntries,
+    fyExpensesByMonth,
+    fyExpensesLegacy,
     monthInvoices,
     monthPurchaseInvoices,
-    monthExpenseEntries,
+    monthExpensesByMonth,
+    monthExpensesLegacy,
     allClientsResult,
     allInvoices,
+    paidSalaries,
+    linkedExpenseIds,
   ] = await Promise.all([
     supabase.from("clients").select("id", { count: "exact", head: true }),
     fetchAllPages(async (from, to) => {
@@ -278,14 +289,34 @@ export default async function DashboardPage({
       return { data, error };
     }),
     fetchAllPages(async (from, to) => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("expense_entries")
-        .select("total_amount, status, salary_month")
+        .select(expenseEntrySelect)
+        .gte("entry_month", fyStartMonth)
+        .lte("entry_month", fyEndMonth)
+        .neq("status", "cancelled")
+        .order("id", { ascending: true })
+        .range(from, to);
+      if (profile?.organization_id) {
+        query = query.eq("organization_id", profile.organization_id);
+      }
+      const { data, error } = await query;
+      return { data, error };
+    }),
+    fetchAllPages(async (from, to) => {
+      let query = supabase
+        .from("expense_entries")
+        .select(expenseEntrySelect)
+        .is("entry_month", null)
         .gte("issue_date", fyRange.start)
         .lte("issue_date", fyRange.end)
         .neq("status", "cancelled")
-        .order("issue_date", { ascending: true })
+        .order("id", { ascending: true })
         .range(from, to);
+      if (profile?.organization_id) {
+        query = query.eq("organization_id", profile.organization_id);
+      }
+      const { data, error } = await query;
       return { data, error };
     }),
     fetchAllPages(async (from, to) => {
@@ -310,14 +341,33 @@ export default async function DashboardPage({
       return { data, error };
     }),
     fetchAllPages(async (from, to) => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("expense_entries")
-        .select("total_amount, status")
+        .select(expenseEntrySelect)
+        .eq("entry_month", monthKey)
+        .neq("status", "cancelled")
+        .order("id", { ascending: true })
+        .range(from, to);
+      if (profile?.organization_id) {
+        query = query.eq("organization_id", profile.organization_id);
+      }
+      const { data, error } = await query;
+      return { data, error };
+    }),
+    fetchAllPages(async (from, to) => {
+      let query = supabase
+        .from("expense_entries")
+        .select(expenseEntrySelect)
+        .is("entry_month", null)
         .gte("issue_date", monthStart)
         .lte("issue_date", monthEnd)
         .neq("status", "cancelled")
-        .order("issue_date", { ascending: true })
+        .order("id", { ascending: true })
         .range(from, to);
+      if (profile?.organization_id) {
+        query = query.eq("organization_id", profile.organization_id);
+      }
+      const { data, error } = await query;
       return { data, error };
     }),
     supabase.from("clients").select("id, name").order("name", { ascending: true }),
@@ -329,21 +379,77 @@ export default async function DashboardPage({
         .range(from, to);
       return { data, error };
     }),
+    profile?.organization_id
+      ? fetchAllPages<{ net_payable: string | number; salary_month: string }>(
+          async (from, to) => {
+            const { data, error } = await supabase
+              .from("hr_salary")
+              .select("net_payable, salary_month")
+              .eq("organization_id", profile.organization_id)
+              .eq("payment_status", "paid")
+              .gte("salary_month", fyStartMonth)
+              .lte("salary_month", fyEndMonth)
+              .order("id", { ascending: true })
+              .range(from, to);
+            return { data, error };
+          },
+        )
+      : Promise.resolve(
+          [] as { net_payable: string | number; salary_month: string }[],
+        ),
+    profile?.organization_id
+      ? fetchAllPages<{ expense_entry_id: string }>(async (from, to) => {
+          const { data, error } = await supabase
+            .from("hr_salary")
+            .select("expense_entry_id")
+            .eq("organization_id", profile.organization_id)
+            .not("expense_entry_id", "is", null)
+            .order("id", { ascending: true })
+            .range(from, to);
+          return { data, error };
+        })
+      : Promise.resolve([] as { expense_entry_id: string }[]),
   ]);
 
   const totalClients = clientsCountResult.count || 0;
 
   const msInDay = 1000 * 60 * 60 * 24;
 
+  const linkedExpenseEntryIds = new Set(
+    linkedExpenseIds.map((row) => row.expense_entry_id),
+  );
+  const fyExpenseEntries = dedupeExpenseEntriesById([
+    ...fyExpensesByMonth,
+    ...fyExpensesLegacy,
+  ]);
+  const monthExpenseEntries = dedupeExpenseEntriesById([
+    ...monthExpensesByMonth,
+    ...monthExpensesLegacy,
+  ]);
+  const monthPaidSalaries = paidSalaries.filter(
+    (row) => row.salary_month === monthKey,
+  );
+
+  const fyExpensesForKpi = buildExpenseAmountsForKpi(
+    fyExpenseEntries,
+    paidSalaries,
+    linkedExpenseEntryIds,
+  );
+  const monthExpensesForKpi = buildExpenseAmountsForKpi(
+    monthExpenseEntries,
+    monthPaidSalaries,
+    linkedExpenseEntryIds,
+  );
+
   const fyKpis = computeFinancialKpis({
     invoices: fyInvoices,
     purchases: fyPurchaseInvoices,
-    expenses: fyExpenseEntries,
+    expenses: fyExpensesForKpi,
   });
   const monthKpis = computeFinancialKpis({
     invoices: monthInvoices,
     purchases: monthPurchaseInvoices,
-    expenses: monthExpenseEntries,
+    expenses: monthExpensesForKpi,
   });
 
   // Core KPIs
