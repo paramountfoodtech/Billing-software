@@ -212,6 +212,10 @@ export function InvoiceForm({
   const supabase = createClient();
   const [isLoading, setIsLoading] = useState(false);
   const [savingAs, setSavingAs] = useState<"draft" | "recorded" | null>(null);
+  // Sync lock: setIsLoading is async, so double-clicks can start two saves before
+  // the button disables. With auto-sequence retries that becomes a second invoice
+  // with the same items under the next number.
+  const isSavingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [isInvoiceNumberDuplicate, setIsInvoiceNumberDuplicate] = useState(false);
@@ -1318,11 +1322,20 @@ export function InvoiceForm({
   const isEditingDraft = isEditMode && initialInvoice?.status === "draft";
 
   const saveInvoice = async (status: "draft" | "recorded") => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+
     setIsLoading(true);
     setSavingAs(status);
     setError(null);
     // Yield to the browser so React can paint the spinner before any async work starts.
     await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const releaseSaveLock = () => {
+      isSavingRef.current = false;
+      setIsLoading(false);
+      setSavingAs(null);
+    };
 
     const invoiceNumberToSave =
       sanitizeInvoiceNumberInput(formData.invoice_number) ||
@@ -1334,8 +1347,7 @@ export function InvoiceForm({
       setError(
         "This invoice number already exists. Please enter a unique invoice number.",
       );
-      setIsLoading(false);
-      setSavingAs(null);
+      releaseSaveLock();
       return;
     }
 
@@ -1344,23 +1356,20 @@ export function InvoiceForm({
         getInvoiceNumberFormatError(invoiceNumberToSave);
       if (invoiceNumberFormatIssue) {
         setError(invoiceNumberFormatIssue);
-        setIsLoading(false);
-        setSavingAs(null);
+        releaseSaveLock();
         return;
       }
     }
 
     if (!formData.client_id) {
       setError("Please select a client.");
-      setIsLoading(false);
-      setSavingAs(null);
+      releaseSaveLock();
       return;
     }
 
     if (!invoiceNumberToSave) {
       setError("Invoice number is required.");
-      setIsLoading(false);
-      setSavingAs(null);
+      releaseSaveLock();
       return;
     }
 
@@ -1370,8 +1379,7 @@ export function InvoiceForm({
     } = await supabase.auth.getUser();
     if (!user) {
       setError("You must be logged in");
-      setIsLoading(false);
-      setSavingAs(null);
+      releaseSaveLock();
       return;
     }
 
@@ -1382,8 +1390,7 @@ export function InvoiceForm({
           setError(
             "Total birds is required when per-bird pricing is enabled. Please enter a bird count greater than 0.",
           );
-          setIsLoading(false);
-          setSavingAs(null);
+          releaseSaveLock();
           return;
         }
       }
@@ -1391,8 +1398,7 @@ export function InvoiceForm({
       const issueDateUpperBound = getIndianToday();
       if (formData.issue_date > issueDateUpperBound) {
         setError("Issue date cannot be in the future.");
-        setIsLoading(false);
-        setSavingAs(null);
+        releaseSaveLock();
         return;
       }
 
@@ -1408,8 +1414,7 @@ export function InvoiceForm({
         setError(
           "Please add at least one product with a valid quantity (greater than 0)",
         );
-        setIsLoading(false);
-        setSavingAs(null);
+        releaseSaveLock();
         return;
       }
 
@@ -1453,8 +1458,7 @@ export function InvoiceForm({
             getInvoiceNumberFormatError(invoiceNumber) ||
               "Please enter a valid invoice number.",
           );
-          setIsLoading(false);
-          setSavingAs(null);
+          releaseSaveLock();
           return;
         }
 
@@ -1474,15 +1478,13 @@ export function InvoiceForm({
               availableError.message ||
                 "Could not resolve the next available invoice number.",
             );
-            setIsLoading(false);
-            setSavingAs(null);
+            releaseSaveLock();
             return;
           }
 
           if (!availableNumber) {
             setError("Could not resolve the next available invoice number.");
-            setIsLoading(false);
-            setSavingAs(null);
+            releaseSaveLock();
             return;
           }
 
@@ -1510,8 +1512,7 @@ export function InvoiceForm({
             setError(
               `Invoice number "${invoiceNumber}" already exists. Please use a different invoice number.`,
             );
-            setIsLoading(false);
-            setSavingAs(null);
+            releaseSaveLock();
             return;
           }
         }
@@ -1607,8 +1608,7 @@ export function InvoiceForm({
 
         if (!invoiceNumber) {
           setError("Invoice number is required.");
-          setIsLoading(false);
-          setSavingAs(null);
+          releaseSaveLock();
           return;
         }
 
@@ -1617,8 +1617,7 @@ export function InvoiceForm({
             getInvoiceNumberFormatError(invoiceNumber) ||
               "Please enter a valid invoice number.",
           );
-          setIsLoading(false);
-          setSavingAs(null);
+          releaseSaveLock();
           return;
         }
 
@@ -1641,8 +1640,7 @@ export function InvoiceForm({
             setError(
               `Invoice number "${invoiceNumber}" already exists. Please use a different invoice number.`,
             );
-            setIsLoading(false);
-            setSavingAs(null);
+            releaseSaveLock();
             return;
           }
         }
@@ -1720,11 +1718,13 @@ export function InvoiceForm({
 
       router.push(`/dashboard/invoices/${invoiceId}`);
       router.refresh();
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
-    } finally {
+      // Keep isSavingRef locked after success so a late second click cannot
+      // create another invoice while navigation is still in progress.
       setIsLoading(false);
       setSavingAs(null);
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "An error occurred");
+      releaseSaveLock();
     }
   };
 
