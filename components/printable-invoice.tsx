@@ -33,6 +33,7 @@ interface Invoice {
   discount_amount: string;
   total_amount: string;
   amount_paid: string;
+  credit_applied?: string;
   notes: string | null;
   total_birds?: number;
   clients: {
@@ -332,6 +333,12 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
               </div>
               {Number(invoice.amount_paid) > 0 && (
                 <>
+                  {Number(invoice.credit_applied || 0) > 0 && (
+                    <div className="flex justify-between py-1 text-purple-600">
+                      <span>Credit Applied:</span>
+                      <span>₹{Number(invoice.credit_applied).toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between py-1 text-green-600">
                     <span>Amount Paid:</span>
                     <span>₹{Number(invoice.amount_paid).toFixed(2)}</span>

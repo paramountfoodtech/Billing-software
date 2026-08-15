@@ -79,7 +79,7 @@ export default async function ReportsPage({
     allUnpaidInvoicesResult,
     periodPaymentsResult,
   ] = await Promise.all([
-    supabase.from("clients").select("id, name").order("name", { ascending: true }),
+    supabase.from("clients").select("id, name, credit_balance").order("name", { ascending: true }),
 
     supabase
       .from("invoices")
@@ -119,6 +119,7 @@ export default async function ReportsPage({
     payments: number
     outstanding: number
     oldBal: number
+    creditBalance: number
   }
 
   const clientMap = new Map<string, ClientRow>()
@@ -133,6 +134,7 @@ export default async function ReportsPage({
       payments: 0,
       outstanding: 0,
       oldBal: 0,
+      creditBalance: Number(client.credit_balance || 0),
     })
   }
 

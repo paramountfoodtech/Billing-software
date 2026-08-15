@@ -27,6 +27,7 @@ type ClientRow = {
   payments: number
   outstanding: number
   oldBal: number
+  creditBalance: number
 }
 
 type ProductRow = {

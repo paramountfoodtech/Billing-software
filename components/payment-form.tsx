@@ -69,6 +69,7 @@ export function PaymentForm({
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [isReferenceDuplicate, setIsReferenceDuplicate] = useState(false);
   const [isCheckingReference, setIsCheckingReference] = useState(false);
+  const [clientCreditBalance, setClientCreditBalance] = useState(0);
 
   const [formData, setFormData] = useState({
     invoice_id: preSelectedInvoiceId || "",
@@ -149,6 +150,41 @@ export function PaymentForm({
       }
     }
   }, [formData.invoice_id, invoices, autoFilledInvoiceId]);
+
+  // Fetch client credit balance when client changes (bulk mode) or invoice changes (individual mode)
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchCreditBalance = async () => {
+      let clientId: string | null = null;
+
+      if (paymentMode === "bulk") {
+        clientId = selectedClientId;
+      } else if (selectedInvoice?.client_id) {
+        clientId = selectedInvoice.client_id;
+      }
+
+      if (!clientId) {
+        setClientCreditBalance(0);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("clients")
+        .select("credit_balance")
+        .eq("id", clientId)
+        .maybeSingle();
+
+      if (!isActive) return;
+      setClientCreditBalance(Number(data?.credit_balance || 0));
+    };
+
+    void fetchCreditBalance();
+
+    return () => {
+      isActive = false;
+    };
+  }, [paymentMode, selectedClientId, selectedInvoice?.client_id, supabase]);
 
   // Resolve user's organization once for inline duplicate checks.
   useEffect(() => {
@@ -296,6 +332,12 @@ export function PaymentForm({
               new Date(b.issue_date || "").getTime(),
           );
 
+        // Calculate credit that will be generated
+        const totalOutstanding = unpaidInvoices.reduce((sum, inv) => {
+          return sum + (Number(inv.total_amount) - Number(inv.amount_paid));
+        }, 0);
+        const creditToGenerate = Math.max(0, paymentAmount - totalOutstanding);
+
         // Create a single payment record for tracking
         const { data: paymentRow, error: paymentError } = await supabase
           .from("payments")
@@ -306,9 +348,10 @@ export function PaymentForm({
             payment_method: formData.payment_method,
             reference_number: normalizedReference || null,
             status: formData.status,
-            notes: `Bulk payment for client - allocated across ${unpaidInvoices.length} invoices. ${formData.notes || ""}`,
+            notes: `Bulk payment for client - allocated across ${unpaidInvoices.length} invoices.${creditToGenerate > 0 ? ` ₹${creditToGenerate.toFixed(2)} added as credit.` : ""} ${formData.notes || ""}`,
             created_by: user.id,
             organization_id: profile.organization_id,
+            credit_generated: creditToGenerate,
           })
           .select("id")
           .single();
@@ -346,14 +389,35 @@ export function PaymentForm({
           remainingAmount -= allocationAmount;
         }
 
+        // Generate credit if overpayment
+        if (creditToGenerate > 0) {
+          const { data: clientData } = await supabase
+            .from("clients")
+            .select("credit_balance")
+            .eq("id", selectedClientId)
+            .single();
+
+          const currentCredit = Number(clientData?.credit_balance || 0);
+          const { error: creditError } = await supabase
+            .from("clients")
+            .update({ credit_balance: currentCredit + creditToGenerate })
+            .eq("id", selectedClientId);
+
+          if (creditError) throw creditError;
+        }
+
         toast({
           variant: "success",
           title: "Bulk payment recorded",
-          description: `₹${paymentAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} allocated across ${unpaidInvoices.length} invoices.`,
+          description: `₹${paymentAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} allocated across ${unpaidInvoices.length} invoices.${creditToGenerate > 0 ? ` ₹${creditToGenerate.toFixed(2)} added as credit balance.` : ""}`,
         });
       } else {
         // Individual invoice payment mode
         if (!selectedInvoice) throw new Error("Please select an invoice");
+
+        // Calculate credit to generate for individual invoice overpayment
+        const invoiceBalance = Number(selectedInvoice.total_amount) - Number(selectedInvoice.amount_paid);
+        const creditToGenerate = Math.max(0, paymentAmount - invoiceBalance);
 
         // Insert payment
         const { data: paymentRow, error: paymentError } = await supabase
@@ -365,9 +429,12 @@ export function PaymentForm({
             payment_method: formData.payment_method,
             reference_number: normalizedReference || null,
             status: formData.status,
-            notes: formData.notes || null,
+            notes: creditToGenerate > 0
+              ? `${formData.notes || ""} ₹${creditToGenerate.toFixed(2)} added as credit.`.trim()
+              : formData.notes || null,
             created_by: user.id,
             organization_id: profile.organization_id,
+            credit_generated: creditToGenerate,
           })
           .select("id")
           .single();
@@ -375,10 +442,12 @@ export function PaymentForm({
         if (paymentError) throw paymentError;
         paymentId = paymentRow?.id ?? null;
 
-        // Update invoice amount_paid
-        const newAmountPaid =
-          Number(selectedInvoice.amount_paid) + Number(formData.amount);
+        // Update invoice amount_paid (cap at total_amount)
         const totalAmount = Number(selectedInvoice.total_amount);
+        const newAmountPaid = Math.min(
+          Number(selectedInvoice.amount_paid) + paymentAmount,
+          totalAmount,
+        );
         const paidOff = newAmountPaid >= totalAmount - 0.01;
 
         // Determine new status
@@ -398,6 +467,23 @@ export function PaymentForm({
           .eq("id", formData.invoice_id);
 
         if (invoiceError) throw invoiceError;
+
+        // Generate credit if overpayment
+        if (creditToGenerate > 0 && selectedInvoice.client_id) {
+          const { data: clientData } = await supabase
+            .from("clients")
+            .select("credit_balance")
+            .eq("id", selectedInvoice.client_id)
+            .single();
+
+          const currentCredit = Number(clientData?.credit_balance || 0);
+          const { error: creditError } = await supabase
+            .from("clients")
+            .update({ credit_balance: currentCredit + creditToGenerate })
+            .eq("id", selectedInvoice.client_id);
+
+          if (creditError) throw creditError;
+        }
       }
 
       if (paymentId) {
@@ -411,12 +497,6 @@ export function PaymentForm({
           userName,
         });
       }
-
-      toast({
-        variant: "success",
-        title: "Payment recorded",
-        description: `₹${Number(formData.amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} payment has been recorded successfully.`,
-      });
 
       router.push("/dashboard/payments");
       router.refresh();
@@ -557,6 +637,17 @@ export function PaymentForm({
                       </span>
                     </div>
 
+                    {clientCreditBalance > 0 && (
+                      <div className="mt-3 pt-3 border-t border-blue-300">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-blue-700">Existing Credit Balance:</span>
+                          <span className="font-medium text-purple-600">
+                            ₹{clientCreditBalance.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     {Number(formData.amount) > 0 && (
                       <div className="mt-3 pt-3 border-t border-blue-300">
                         <div className="flex justify-between text-sm">
@@ -577,8 +668,9 @@ export function PaymentForm({
                             }
                           >
                             ₹
-                            {(
-                              clientTotalPending - Number(formData.amount)
+                            {Math.max(
+                              0,
+                              clientTotalPending - Number(formData.amount),
                             ).toFixed(2)}
                           </span>
                         </div>
@@ -591,6 +683,13 @@ export function PaymentForm({
                           <p className="text-xs text-orange-600 mt-1">
                             ⚠ Partial payment - balance remains
                           </p>
+                        )}
+                        {Number(formData.amount) > clientTotalPending && (
+                          <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded">
+                            <p className="text-xs text-purple-700 font-semibold">
+                              💰 ₹{(Number(formData.amount) - clientTotalPending).toFixed(2)} will be added as credit balance for this client
+                            </p>
+                          </div>
                         )}
                       </div>
                     )}
@@ -646,6 +745,17 @@ export function PaymentForm({
                     <span className="text-red-600">₹{balance.toFixed(2)}</span>
                   </div>
 
+                  {clientCreditBalance > 0 && (
+                    <div className="mt-3 pt-3 border-t border-blue-300">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-blue-700">Existing Credit Balance:</span>
+                        <span className="font-medium text-purple-600">
+                          ₹{clientCreditBalance.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {paymentAmount > 0 && (
                     <div className="mt-3 pt-3 border-t border-blue-300">
                       <div className="flex justify-between text-sm">
@@ -665,7 +775,7 @@ export function PaymentForm({
                               : "text-green-600"
                           }
                         >
-                          ₹{remainingBalance.toFixed(2)}
+                          ₹{Math.max(0, remainingBalance).toFixed(2)}
                         </span>
                       </div>
                       {remainingBalance === 0 && (
@@ -677,6 +787,13 @@ export function PaymentForm({
                         <p className="text-xs text-orange-600 mt-1">
                           ⚠ Partial payment - balance remains
                         </p>
+                      )}
+                      {remainingBalance < 0 && (
+                        <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded">
+                          <p className="text-xs text-purple-700 font-semibold">
+                            💰 ₹{Math.abs(remainingBalance).toFixed(2)} will be added as credit balance for this client
+                          </p>
+                        </div>
                       )}
                     </div>
                   )}
@@ -695,13 +812,6 @@ export function PaymentForm({
                 type="number"
                 step="0.01"
                 min="0.01"
-                max={
-                  paymentMode === "bulk"
-                    ? clientTotalPending
-                    : balance > 0
-                      ? balance
-                      : undefined
-                }
                 required
                 value={formData.amount}
                 onChange={(e) =>
@@ -712,7 +822,7 @@ export function PaymentForm({
               <p className="text-xs text-muted-foreground">
                 {paymentMode === "bulk" ? (
                   <>
-                    Maximum: ₹{clientTotalPending.toFixed(2)} |{" "}
+                    Outstanding: ₹{clientTotalPending.toFixed(2)} |{" "}
                     <button
                       type="button"
                       onClick={() =>
@@ -728,7 +838,7 @@ export function PaymentForm({
                   </>
                 ) : (
                   <>
-                    Maximum: ₹{balance.toFixed(2)} |{" "}
+                    Outstanding: ₹{balance.toFixed(2)} |{" "}
                     <button
                       type="button"
                       onClick={() =>

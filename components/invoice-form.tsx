@@ -1092,12 +1092,42 @@ export function InvoiceForm({
     initialInvoice?.total_birds || 0,
   );
 
+  // Client credit balance for auto-apply on new invoices
+  const [clientCreditBalance, setClientCreditBalance] = useState(0);
+
   // sync bird count if editing an existing invoice
   useEffect(() => {
     if (initialInvoice && initialInvoice.total_birds != null) {
       setGlobalBirdCount(initialInvoice.total_birds);
     }
   }, [initialInvoice]);
+
+  // Fetch client credit balance when client changes
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchCreditBalance = async () => {
+      if (!formData.client_id) {
+        setClientCreditBalance(0);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("clients")
+        .select("credit_balance")
+        .eq("id", formData.client_id)
+        .maybeSingle();
+
+      if (!isActive) return;
+      setClientCreditBalance(Number(data?.credit_balance || 0));
+    };
+
+    void fetchCreditBalance();
+
+    return () => {
+      isActive = false;
+    };
+  }, [formData.client_id, supabase]);
 
   // Calculate line total for each item
   // Order: Subtotal → Apply Discount → Calculate Tax on Discounted Amount → Add Tax
@@ -1328,8 +1358,8 @@ export function InvoiceForm({
     setIsLoading(true);
     setSavingAs(status);
     setError(null);
-    // Yield to the browser so React can paint the spinner before any async work starts.
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    // Ensure React commits state and browser repaints the loading overlay/spinner before heavy DB operations start.
+    await new Promise((resolve) => setTimeout(resolve, 30));
 
     const releaseSaveLock = () => {
       isSavingRef.current = false;
@@ -1382,6 +1412,8 @@ export function InvoiceForm({
       releaseSaveLock();
       return;
     }
+
+    let newlyCreatedInvoiceHeaderId: string | null = null;
 
     try {
       // Full validation only when completing/recording (not Blank/Cancelled draft)
@@ -1460,6 +1492,30 @@ export function InvoiceForm({
           );
           releaseSaveLock();
           return;
+        }
+
+        // Idempotency check: prevent duplicate invoice creation if an identical invoice was created in the last 2 minutes
+        const windowStart = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        const { data: recentInvoices } = await supabase
+          .from("invoices")
+          .select("id, invoice_number, total_amount, client_id, issue_date, created_by")
+          .eq("organization_id", profile.organization_id)
+          .eq("client_id", formData.client_id)
+          .eq("issue_date", formData.issue_date)
+          .eq("created_by", user.id)
+          .gte("created_at", windowStart)
+          .order("created_at", { ascending: false });
+
+        if (recentInvoices && recentInvoices.length > 0) {
+          const matchingInvoice = recentInvoices.find(
+            (inv) =>
+              Math.abs(Number(inv.total_amount) - totals.total_amount) < 0.01,
+          );
+          if (matchingInvoice) {
+            router.push(`/dashboard/invoices/${matchingInvoice.id}`);
+            router.refresh();
+            return;
+          }
         }
 
         // Generate reference number with REF. prefix
@@ -1558,39 +1614,60 @@ export function InvoiceForm({
 
           if (!invoiceError && inserted) {
             invoice = inserted;
+            newlyCreatedInvoiceHeaderId = inserted.id;
             break;
           }
 
           if (
             autoSequenceActive &&
-            isInvoiceNumberUniqueViolation(invoiceError) &&
-            insertAttempts < maxInsertAttempts
+            isInvoiceNumberUniqueViolation(invoiceError)
           ) {
-            const afterCollision =
-              getNextInvoiceNumber(invoiceNumber) || invoiceNumber;
-            const { invoiceNumber: availableNumber, error: availableError } =
-              await findNextAvailableInvoiceNumber(
-                supabase,
-                profile.organization_id,
-                afterCollision,
-              );
+            // Check if the conflicting invoice has identical payload (created by parallel submission)
+            const { data: existingConflicting } = await supabase
+              .from("invoices")
+              .select("id, client_id, issue_date, total_amount, created_by")
+              .eq("organization_id", profile.organization_id)
+              .eq("invoice_number", invoiceNumber)
+              .maybeSingle();
 
-            if (availableError || !availableNumber) {
-              throw (
-                availableError ||
-                new Error(
-                  "Could not resolve the next available invoice number after a conflict.",
-                )
-              );
+            if (
+              existingConflicting &&
+              existingConflicting.client_id === formData.client_id &&
+              existingConflicting.issue_date === formData.issue_date &&
+              existingConflicting.created_by === user.id &&
+              Math.abs(Number(existingConflicting.total_amount) - totals.total_amount) < 0.01
+            ) {
+              invoice = existingConflicting;
+              break;
             }
 
-            invoiceNumber = availableNumber;
-            setAutoSequenceInvoiceNumber(availableNumber);
-            setFormData((prev) => ({
-              ...prev,
-              invoice_number: availableNumber,
-            }));
-            continue;
+            if (insertAttempts < maxInsertAttempts) {
+              const afterCollision =
+                getNextInvoiceNumber(invoiceNumber) || invoiceNumber;
+              const { invoiceNumber: availableNumber, error: availableError } =
+                await findNextAvailableInvoiceNumber(
+                  supabase,
+                  profile.organization_id,
+                  afterCollision,
+                );
+
+              if (availableError || !availableNumber) {
+                throw (
+                  availableError ||
+                  new Error(
+                    "Could not resolve the next available invoice number after a conflict.",
+                  )
+                );
+              }
+
+              invoiceNumber = availableNumber;
+              setAutoSequenceInvoiceNumber(availableNumber);
+              setFormData((prev) => ({
+                ...prev,
+                invoice_number: availableNumber,
+              }));
+              continue;
+            }
           }
 
           if (invoiceError) throw invoiceError;
@@ -1698,6 +1775,35 @@ export function InvoiceForm({
         if (itemsError) throw itemsError;
       }
 
+      // Auto-apply client credit balance for new invoices (not edits, not drafts)
+      if (!initialInvoice?.id && status === "recorded" && clientCreditBalance > 0 && totals.total_amount > 0) {
+        const creditToApply = Math.min(clientCreditBalance, totals.total_amount);
+        if (creditToApply > 0) {
+          const paidOff = creditToApply >= totals.total_amount - 0.01;
+          const creditStatus = paidOff ? "paid" : "partially_paid";
+
+          const { error: creditApplyError } = await supabase
+            .from("invoices")
+            .update({
+              amount_paid: creditToApply,
+              credit_applied: creditToApply,
+              status: creditStatus,
+            })
+            .eq("id", invoiceId);
+
+          if (creditApplyError) throw creditApplyError;
+
+          // Decrement client credit balance
+          const newCreditBalance = clientCreditBalance - creditToApply;
+          const { error: creditUpdateError } = await supabase
+            .from("clients")
+            .update({ credit_balance: newCreditBalance })
+            .eq("id", formData.client_id);
+
+          if (creditUpdateError) throw creditUpdateError;
+        }
+      }
+
       const userName = await getProfileDisplayName(supabase, user.id);
       await logEntryHistory(supabase, {
         organizationId: profile.organization_id,
@@ -1723,6 +1829,16 @@ export function InvoiceForm({
       setIsLoading(false);
       setSavingAs(null);
     } catch (error: unknown) {
+      if (newlyCreatedInvoiceHeaderId) {
+        try {
+          await supabase
+            .from("invoices")
+            .delete()
+            .eq("id", newlyCreatedInvoiceHeaderId);
+        } catch {
+          // ignore cleanup failure
+        }
+      }
       setError(error instanceof Error ? error.message : "An error occurred");
       releaseSaveLock();
     }
@@ -2454,6 +2570,50 @@ export function InvoiceForm({
               <span>Total:</span>
               <span>₹{totals.total_amount.toFixed(2)}</span>
             </div>
+
+            {/* Credit balance info banner for new invoices */}
+            {!isEditMode && clientCreditBalance > 0 && totals.total_amount > 0 && (
+              <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
+                <h4 className="font-semibold text-purple-900 text-sm flex items-center gap-1">
+                  💰 Client Credit Available
+                </h4>
+                <div className="flex justify-between text-sm">
+                  <span className="text-purple-700">Available Credit:</span>
+                  <span className="font-medium text-purple-600">
+                    ₹{clientCreditBalance.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-purple-700">Credit to apply:</span>
+                  <span className="font-medium text-purple-600">
+                    ₹{Math.min(clientCreditBalance, totals.total_amount).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm font-bold border-t border-purple-200 pt-2">
+                  <span className="text-purple-900">Net outstanding after credit:</span>
+                  <span className={totals.total_amount - Math.min(clientCreditBalance, totals.total_amount) <= 0 ? "text-green-600" : "text-orange-600"}>
+                    ₹{Math.max(0, totals.total_amount - clientCreditBalance).toFixed(2)}
+                  </span>
+                </div>
+                {clientCreditBalance >= totals.total_amount ? (
+                  <p className="text-xs text-green-600 font-medium">
+                    ✓ This invoice will be fully paid from credit balance
+                  </p>
+                ) : (
+                  <p className="text-xs text-orange-600 font-medium">
+                    ⚠ Invoice will be partially paid from credit (₹{Math.max(0, totals.total_amount - clientCreditBalance).toFixed(2)} remaining)
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Show credit applied on existing invoices */}
+            {isEditMode && Number(initialInvoice?.amount_paid || 0) > 0 && (
+              <div className="mt-3 flex justify-between text-sm text-green-600">
+                <span>Amount Paid (incl. credit):</span>
+                <span>₹{Number(initialInvoice?.amount_paid || 0).toFixed(2)}</span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -2495,10 +2655,10 @@ export function InvoiceForm({
             (clientPerBirdEnabled && globalBirdCount <= 0)
           }
         >
-          {isLoading && savingAs === "recorded" && (
+          {isLoading && savingAs !== "draft" && (
             <Spinner className="mr-2 h-4 w-4" />
           )}
-          {savingAs === "recorded"
+          {isLoading && savingAs !== "draft"
             ? isEditingDraft
               ? "Completing..."
               : isEditMode

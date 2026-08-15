@@ -58,6 +58,7 @@ interface Challan {
   challan_date: string;
   num_boxes: number;
   total_weight_kg: string;
+  total_birds?: number | null;
   status: string;
   purchase_invoice_id: string | null;
   created_at: string;
@@ -161,6 +162,10 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
             aVal = Number(a.total_weight_kg);
             bVal = Number(b.total_weight_kg);
             break;
+          case "total_birds":
+            aVal = Number(a.total_birds || 0);
+            bVal = Number(b.total_birds || 0);
+            break;
           case "status":
             aVal = a.status;
             bVal = b.status;
@@ -234,6 +239,11 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
         formatter: (val) => (val != null ? Number(val).toFixed(3) : ""),
       },
       {
+        key: "total_birds",
+        label: "Birds",
+        formatter: (val) => (val != null ? String(Number(val)) : "0"),
+      },
+      {
         key: "status",
         label: "Status",
         formatter: (status) =>
@@ -305,6 +315,13 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
               </TableHead>
               <TableHead
                 className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                onClick={() => handleSort("total_birds")}
+              >
+                Birds
+                <SortIcon column="total_birds" />
+              </TableHead>
+              <TableHead
+                className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
                 onClick={() => handleSort("status")}
               >
                 Status
@@ -338,6 +355,7 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
               <TableHead className="px-2 sm:px-4 py-2" />
               <TableHead className="hidden sm:table-cell" />
               <TableHead className="px-2 sm:px-4 py-2" />
+              <TableHead className="px-2 sm:px-4 py-2" />
               <TableHead className="px-2 sm:px-4 py-2">
                 <SearchableSelect
                   value={filters.status}
@@ -353,7 +371,7 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
             {paginatedItems.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={8}
                   className="text-center text-muted-foreground py-12"
                 >
                   No purchase challans found for the selected filters.
@@ -386,6 +404,9 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
                     </TableCell>
                     <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
                       {Number(challan.total_weight_kg).toFixed(3)}
+                    </TableCell>
+                    <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
+                      {Number(challan.total_birds || 0).toLocaleString("en-IN")}
                     </TableCell>
                     <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
                       <Badge variant="secondary" className={statusInfo.className}>

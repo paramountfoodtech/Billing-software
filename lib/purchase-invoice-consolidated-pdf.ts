@@ -174,6 +174,24 @@ export async function fetchPurchaseInvoicesForExport(invoiceIds: string[]) {
     }
   }
 
+  const orderMap = new Map(invoiceIds.map((id, index) => [id, index]));
+  all.sort((a, b) => {
+    const orderA = orderMap.get(a.id);
+    const orderB = orderMap.get(b.id);
+    if (orderA !== undefined && orderB !== undefined) {
+      return orderA - orderB;
+    }
+    const dateA = a.issue_date ? new Date(a.issue_date).getTime() : 0;
+    const dateB = b.issue_date ? new Date(b.issue_date).getTime() : 0;
+    if (dateA !== dateB) return dateA - dateB;
+    const numA = a.purchaser_invoice_number || a.invoice_number || "";
+    const numB = b.purchaser_invoice_number || b.invoice_number || "";
+    return numA.localeCompare(numB, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
+
   const linkedByInvoice = new Map<
     string,
     Array<{

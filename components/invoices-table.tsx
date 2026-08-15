@@ -59,6 +59,7 @@ interface Invoice {
   status: string;
   total_amount: string;
   amount_paid: string;
+  credit_applied?: string;
   created_at?: string;
   clients: {
     name: string;
@@ -454,7 +455,24 @@ export function InvoicesTable({
       return;
     }
 
-    const validInvoices = fetchedInvoices || [];
+    const orderMap = new Map(invoiceIds.map((id, index) => [id, index]));
+    const validInvoices = [...(fetchedInvoices || [])]
+      .filter((inv) => inv.status !== "draft")
+      .sort((a, b) => {
+        const orderA = orderMap.get(a.id);
+        const orderB = orderMap.get(b.id);
+        if (orderA !== undefined && orderB !== undefined) {
+          return orderA - orderB;
+        }
+        const dateA = a.issue_date ? new Date(a.issue_date).getTime() : 0;
+        const dateB = b.issue_date ? new Date(b.issue_date).getTime() : 0;
+        if (dateA !== dateB) return dateA - dateB;
+        return (a.invoice_number || "").localeCompare(
+          b.invoice_number || "",
+          undefined,
+          { numeric: true, sensitivity: "base" },
+        );
+      });
 
     if (validInvoices.length === 0) {
       toast({
@@ -547,11 +565,11 @@ export function InvoicesTable({
 
       // Calculate totals for the invoice
       const totalWeight = invoice.invoice_items.reduce(
-        (sum, item) => sum + Number(item.quantity || 0),
+        (sum: number, item: any) => sum + Number(item.quantity || 0),
         0,
       );
       const totalSkinlessWeight = invoice.invoice_items.reduce(
-        (sum, item) => sum + Number(item.skinless_weight || 0),
+        (sum: number, item: any) => sum + Number(item.skinless_weight || 0),
         0,
       );
       const totalBirds = Number(invoice.total_birds || 0);
@@ -1163,11 +1181,20 @@ export function InvoicesTable({
                         })}
                       </TableCell>
                       <TableCell className="hidden md:table-cell text-green-600 px-2 sm:px-4 py-2 sm:py-3 text-xs">
-                        ₹
-                        {Number(invoice.amount_paid).toLocaleString("en-IN", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        <div className="flex items-center gap-1">
+                          <span>
+                            ₹
+                            {Number(invoice.amount_paid).toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                          {Number(invoice.credit_applied || 0) > 0 && (
+                            <Badge variant="secondary" className="bg-purple-100 text-purple-700 text-[10px] px-1 py-0">
+                              Credit
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell
                         className={`hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs ${balance > 0 ? "font-semibold text-orange-600" : "text-green-600"}`}
