@@ -610,7 +610,8 @@ export function InvoiceForm({
             pricingRule.conditional_discount_above_equal || 0,
           );
 
-          return `Conditional discount: <₹${threshold.toFixed(0)} -₹${below.toFixed(0)}, ≥₹${threshold.toFixed(0)} -₹${aboveEqual.toFixed(0)}`;
+          return `Conditional discount: ≤₹${threshold.toFixed(0)} -₹${below.toFixed(0)}, >₹${threshold.toFixed(0)} -₹${aboveEqual.toFixed(0)}`;
+
         }
         case "category_based":
           return "Category-based pricing applied";

@@ -164,7 +164,7 @@ export function ClientPricingTable({
             : rule.price_rule_type === "flat_addition"
               ? `+ ₹${Number(rule.price_rule_value || 0).toFixed(2)}`
               : rule.price_rule_type === "conditional_discount"
-                ? `<₹${Number(rule.conditional_threshold || 0).toFixed(0)}: -₹${Number(rule.conditional_discount_below || 0).toFixed(0)} | ≥₹${Number(rule.conditional_threshold || 0).toFixed(0)}: -₹${Number(rule.conditional_discount_above_equal || 0).toFixed(0)}`
+                ? `≤₹${Number(rule.conditional_threshold || 0).toFixed(0)}: -₹${Number(rule.conditional_discount_below || 0).toFixed(0)} | >₹${Number(rule.conditional_threshold || 0).toFixed(0)}: -₹${Number(rule.conditional_discount_above_equal || 0).toFixed(0)}`
                 : `× ${rule.price_rule_value}`,
       "Final Price": `₹${calculateFinalPrice(rule).toFixed(2)}`,
       Notes: rule.notes || "",
@@ -554,13 +554,13 @@ export function ClientPricingTable({
                       `+ ₹${Number(rule.price_rule_value || 0).toFixed(2)}`}
                     {rule.price_rule_type === "conditional_discount" && (
                       <span className="text-orange-600">
-                        &lt;₹
+                        &le;₹
                         {Number(rule.conditional_threshold || 0).toFixed(0)}: -₹
                         {Number(rule.conditional_discount_below || 0).toFixed(
                           0,
                         )}
                         {" | "}
-                        ≥₹{Number(rule.conditional_threshold || 0).toFixed(0)}:
+                        {'>'}₹{Number(rule.conditional_threshold || 0).toFixed(0)}:
                         -₹
                         {Number(
                           rule.conditional_discount_above_equal || 0,

@@ -151,7 +151,7 @@ export function applyPricingRuleStep(
       const threshold = Number(step.conditional_threshold || 0);
       const below = Number(step.conditional_discount_below || 0);
       const aboveEqual = Number(step.conditional_discount_above_equal || 0);
-      const discount = basePrice >= threshold ? aboveEqual : below;
+      const discount = basePrice > threshold ? aboveEqual : below;
       return Math.max(0, basePrice - discount);
     }
     default:
@@ -196,7 +196,7 @@ export function getPricingRuleStepDescription(
       const threshold = Number(step.conditional_threshold || 0);
       const below = Number(step.conditional_discount_below || 0);
       const aboveEqual = Number(step.conditional_discount_above_equal || 0);
-      const selected = basePrice >= threshold ? aboveEqual : below;
+      const selected = basePrice > threshold ? aboveEqual : below;
       return `Conditional: -₹${selected.toFixed(2)}`;
     }
     default:

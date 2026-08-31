@@ -118,7 +118,7 @@ export function PricingRuleStepFields({
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>
-                Discount when amount &lt; threshold (₹){" "}
+                Discount when amount &le; threshold (₹){" "}
                 {required && <span className="text-red-500">*</span>}
               </Label>
               <Input
@@ -137,7 +137,7 @@ export function PricingRuleStepFields({
 
             <div className="space-y-2">
               <Label>
-                Discount when amount ≥ threshold (₹){" "}
+                Discount when amount {'>'} threshold (₹){" "}
                 {required && <span className="text-red-500">*</span>}
               </Label>
               <Input
