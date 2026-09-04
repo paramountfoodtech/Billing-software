@@ -164,6 +164,7 @@ interface InvoiceFormProps {
     discount_amount?: number | null;
     total_amount?: number | null;
     total_birds?: number | null;
+    total_skinless_weight?: number | null;
   };
   initialItems?: Array<{
     product_id: string | null;
@@ -184,6 +185,7 @@ interface InvoiceItem {
   product_id: string | null;
   description: string;
   quantity: number | null;
+  quantity_input?: string;
   unit_price: number | null;
   tax_rate: number | null;
   discount: number | null;
@@ -251,7 +253,7 @@ export function InvoiceForm({
         (Number(item.quantity) *
           Number(item.unit_price) *
           Number(item.discount)) /
-          100,
+        100,
       0,
     );
 
@@ -508,6 +510,7 @@ export function InvoiceForm({
       product_id: it.product_id,
       description: it.description,
       quantity: Number(it.quantity),
+      quantity_input: String(it.quantity),
       unit_price: Number(it.unit_price),
       tax_rate: Number(it.tax_rate),
       discount: Number(it.discount),
@@ -1093,6 +1096,13 @@ export function InvoiceForm({
     initialInvoice?.total_birds || 0,
   );
 
+  // Global skinless weight for the whole invoice (mandatory for all clients)
+  const [globalSkinlessWeight, setGlobalSkinlessWeight] = useState<string>(
+    initialInvoice?.total_skinless_weight != null
+      ? String(initialInvoice.total_skinless_weight)
+      : "",
+  );
+
   // Client credit balance for auto-apply on new invoices
   const [clientCreditBalance, setClientCreditBalance] = useState(0);
 
@@ -1100,6 +1110,9 @@ export function InvoiceForm({
   useEffect(() => {
     if (initialInvoice && initialInvoice.total_birds != null) {
       setGlobalBirdCount(initialInvoice.total_birds);
+    }
+    if (initialInvoice && initialInvoice.total_skinless_weight != null) {
+      setGlobalSkinlessWeight(String(initialInvoice.total_skinless_weight));
     }
   }, [initialInvoice]);
 
@@ -1262,6 +1275,8 @@ export function InvoiceForm({
           product_id: productId,
           description: existing?.description || product.name,
           quantity: existing?.quantity ?? null,
+          quantity_input:
+            existing?.quantity != null ? String(existing.quantity) : "",
           unit_price: unitPrice,
           tax_rate: 0,
           discount: 0,
@@ -1298,11 +1313,195 @@ export function InvoiceForm({
   const parseNullableNumber = (val: string) =>
     val === "" ? null : Number(val);
 
-  const handleQuantityChange = (index: number, value: string) => {
+  const sanitizeQuantityExpression = (val: string): string => {
+    if (!val) return "";
+
+    const trimmed = val.trim();
+    if (trimmed.startsWith("=")) {
+      // Formula mode: allow digits 0-9, ., +
+      // Keep only one leading '='
+      let rest = trimmed.slice(1);
+      // Disallow any characters except 0-9, ., +
+      rest = rest.replace(/[^0-9.+]/g, "");
+      // Prevent starting with + right after =
+      rest = rest.replace(/^\++/, "");
+      // Prevent consecutive +
+      rest = rest.replace(/\+{2,}/g, "+");
+      // Ensure only one dot per segment separated by +
+      const parts = rest.split("+");
+      const validParts = parts.map((part) => {
+        const dotIndex = part.indexOf(".");
+        if (dotIndex === -1) return part;
+        const beforeDot = part.slice(0, dotIndex + 1);
+        const afterDot = part.slice(dotIndex + 1).replace(/\./g, "");
+        return beforeDot + afterDot;
+      });
+      return "=" + validParts.join("+");
+    }
+
+    // Standard number mode (no '=' at start): '+' is NOT allowed, only digits and at most one decimal dot
+    let cleaned = trimmed.replace(/[^0-9.]/g, "");
+    const dotIndex = cleaned.indexOf(".");
+    if (dotIndex !== -1) {
+      cleaned =
+        cleaned.slice(0, dotIndex + 1) +
+        cleaned.slice(dotIndex + 1).replace(/\./g, "");
+    }
+    return cleaned;
+  };
+
+  const evaluateQuantityExpression = (expr: string): number | null => {
+    if (!expr || !expr.trim()) return null;
+
+    const trimmed = expr.trim();
+    if (trimmed.startsWith("=")) {
+      const formula = trimmed.slice(1).trim();
+      if (!formula) return null;
+
+      const parts = formula.split("+");
+      let total = 0;
+      let hasValid = false;
+      for (const part of parts) {
+        const p = part.trim();
+        if (p === "") continue;
+        const num = parseFloat(p);
+        if (!isNaN(num)) {
+          total += num;
+          hasValid = true;
+        }
+      }
+      if (!hasValid) return null;
+      return Math.round((total + Number.EPSILON) * 10000) / 10000;
+    }
+
+    // If '=' is not at the start, no summation is done
+    const num = parseFloat(trimmed);
+    if (isNaN(num)) return null;
+    return Math.round((num + Number.EPSILON) * 10000) / 10000;
+  };
+
+  const handleQuantityChange = (index: number, rawValue: string) => {
+    const sanitized = sanitizeQuantityExpression(rawValue);
+    const evaluated = evaluateQuantityExpression(sanitized);
+
     updateItemByIndex(index, (item) => ({
       ...item,
-      quantity: parseNullableNumber(value),
+      quantity_input: sanitized,
+      quantity: evaluated,
     }));
+  };
+
+  const handleQuantityBlur = (index: number) => {
+    updateItemByIndex(index, (item) => {
+      const raw =
+        item.quantity_input !== undefined
+          ? item.quantity_input
+          : item.quantity != null
+            ? String(item.quantity)
+            : "";
+      const evaluated = evaluateQuantityExpression(raw);
+      return {
+        ...item,
+        quantity: evaluated,
+        quantity_input: evaluated != null ? String(evaluated) : "",
+      };
+    });
+  };
+
+  const handleQuantityKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    index: number,
+  ) => {
+    // Allow navigation, deletion, copy/paste/select shortcuts
+    if (
+      e.key === "Backspace" ||
+      e.key === "Delete" ||
+      e.key === "Tab" ||
+      e.key === "ArrowLeft" ||
+      e.key === "ArrowRight" ||
+      e.key === "ArrowUp" ||
+      e.key === "ArrowDown" ||
+      e.key === "Home" ||
+      e.key === "End" ||
+      e.key === "Escape" ||
+      e.ctrlKey ||
+      e.metaKey
+    ) {
+      return;
+    }
+
+    // On Enter: evaluate and blur, do not submit form
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleQuantityBlur(index);
+      e.currentTarget.blur();
+      return;
+    }
+
+    // Disallow spaces
+    if (e.key === " " || e.code === "Space") {
+      e.preventDefault();
+      return;
+    }
+
+    // Allow digits 0-9
+    if (/^[0-9]$/.test(e.key)) {
+      return;
+    }
+
+    const input = e.currentTarget;
+    const val = input.value;
+    const selectionStart = input.selectionStart ?? val.length;
+    const selectionEnd = input.selectionEnd ?? val.length;
+
+    // Allow '=' only at the beginning (index 0)
+    if (e.key === "=" || e.key === "Equal") {
+      const alreadyHasEqual = val.startsWith("=");
+      const replacingFirstChar =
+        selectionStart === 0 && selectionEnd > 0 && alreadyHasEqual;
+      if (selectionStart !== 0 || (alreadyHasEqual && !replacingFirstChar)) {
+        e.preventDefault();
+      }
+      return;
+    }
+
+    // Allow plus sign only if '=' is at the start
+    if (e.key === "+" || e.key === "Add") {
+      if (!val.startsWith("=")) {
+        e.preventDefault();
+        return;
+      }
+      // If '=' is at start, cannot put '+' at index 0 or index 1 (right after '=')
+      // and cannot put '+' right after another '+'
+      const charBeforeCursor =
+        selectionStart > 0 ? val[selectionStart - 1] : "";
+      if (
+        selectionStart <= 1 ||
+        charBeforeCursor === "+" ||
+        charBeforeCursor === "="
+      ) {
+        e.preventDefault();
+      }
+      return;
+    }
+
+    // Allow decimal point (only one dot per segment)
+    if (e.key === "." || e.key === "Decimal") {
+      const beforeCursor = val.slice(0, selectionStart);
+      const lastDelimiter = Math.max(
+        beforeCursor.lastIndexOf("+"),
+        beforeCursor.lastIndexOf("="),
+      );
+      const currentTerm = val.slice(lastDelimiter + 1);
+      const selectedText = val.slice(selectionStart, selectionEnd);
+      if (currentTerm.includes(".") && !selectedText.includes(".")) {
+        e.preventDefault();
+      }
+      return;
+    }
+
+    // Disallow any other characters (letters, minus, other symbols)
+    e.preventDefault();
   };
 
   const handleUnitPriceChange = (index: number, value: string) => {
@@ -1426,6 +1625,21 @@ export function InvoiceForm({
           releaseSaveLock();
           return;
         }
+
+        const hasLiveItemsAtSave = items.some(
+          (item) =>
+            item.product_id && formData.client_id
+              ? isLiveCategoryPricing(item.product_id, formData.client_id, formData.issue_date)
+              : false,
+        );
+        if (hasLiveItemsAtSave) {
+          const skinlessWeightNum = Number(globalSkinlessWeight);
+          if (globalSkinlessWeight === "" || isNaN(skinlessWeightNum) || skinlessWeightNum < 0) {
+            setError("Skinless weight is required for invoices with Live category products. Please enter 0 or a positive value in kg.");
+            releaseSaveLock();
+            return;
+          }
+        }
       }
 
       const issueDateUpperBound = getIndianToday();
@@ -1489,7 +1703,7 @@ export function InvoiceForm({
         ) {
           setError(
             getInvoiceNumberFormatError(invoiceNumber) ||
-              "Please enter a valid invoice number.",
+            "Please enter a valid invoice number.",
           );
           releaseSaveLock();
           return;
@@ -1513,6 +1727,7 @@ export function InvoiceForm({
               Math.abs(Number(inv.total_amount) - totals.total_amount) < 0.01,
           );
           if (matchingInvoice) {
+            // Keep spinner visible until navigation completes (component unmounts)
             router.push(`/dashboard/invoices/${matchingInvoice.id}`);
             router.refresh();
             return;
@@ -1533,7 +1748,7 @@ export function InvoiceForm({
           if (availableError) {
             setError(
               availableError.message ||
-                "Could not resolve the next available invoice number.",
+              "Could not resolve the next available invoice number.",
             );
             releaseSaveLock();
             return;
@@ -1591,6 +1806,7 @@ export function InvoiceForm({
           total_amount: totals.total_amount,
           amount_paid: 0,
           total_birds: globalBirdCount,
+          total_skinless_weight: globalSkinlessWeight ? Number(globalSkinlessWeight) : null,
           notes: formData.notes,
           created_by: user.id,
           organization_id: profile.organization_id,
@@ -1693,7 +1909,7 @@ export function InvoiceForm({
         if (canEditInvoiceNumber && !isValidInvoiceNumber(invoiceNumber)) {
           setError(
             getInvoiceNumberFormatError(invoiceNumber) ||
-              "Please enter a valid invoice number.",
+            "Please enter a valid invoice number.",
           );
           releaseSaveLock();
           return;
@@ -1742,6 +1958,7 @@ export function InvoiceForm({
             discount_amount: totals.discount_amount,
             total_amount: totals.total_amount,
             total_birds: globalBirdCount,
+            total_skinless_weight: globalSkinlessWeight ? Number(globalSkinlessWeight) : null,
             notes: formData.notes,
           })
           .eq("id", invoiceId);
@@ -1766,7 +1983,7 @@ export function InvoiceForm({
         line_total: item.line_total,
         bird_count: null,
         per_bird_adjustment: null,
-        skinless_weight: item.skinless_weight ?? null,
+        skinless_weight: null,
       }));
 
       if (itemsToInsert.length > 0) {
@@ -1823,12 +2040,14 @@ export function InvoiceForm({
               : "Created invoice",
       });
 
+      // Keep spinner visible until navigation completes (component unmounts).
+      // Do NOT call setIsLoading(false) here — router.push() is async and the
+      // component is still mounted until the new page renders. Dismissing the
+      // spinner here makes users think the save failed and they click again,
+      // causing duplicates. isSavingRef stays locked so any stray click is also blocked.
       router.push(`/dashboard/invoices/${invoiceId}`);
       router.refresh();
-      // Keep isSavingRef locked after success so a late second click cannot
-      // create another invoice while navigation is still in progress.
-      setIsLoading(false);
-      setSavingAs(null);
+      // (spinner clears on unmount — no setIsLoading(false) on success path)
     } catch (error: unknown) {
       if (newlyCreatedInvoiceHeaderId) {
         try {
@@ -1884,595 +2103,651 @@ export function InvoiceForm({
     return missing.length > 0 ? missing : null;
   }, [priceCategories, priceHistory, formData.issue_date]);
 
+  // Pre-compute skinless weight display values outside JSX to avoid
+  // IIFE patterns that shift Radix UI's component tree (hydration mismatch).
+
+  // Whether any current item uses the Live price category for this client
+  const hasLiveCategoryProduct = items.some(
+    (item) =>
+      item.product_id && formData.client_id
+        ? isLiveCategoryPricing(item.product_id, formData.client_id, formData.issue_date)
+        : false,
+  );
+
+  // For yielding %, only sum quantities of Live-category items
+  const liveCategoryTotalWeight = items.reduce((sum, item) => {
+    if (
+      item.product_id &&
+      formData.client_id &&
+      isLiveCategoryPricing(item.product_id, formData.client_id, formData.issue_date)
+    ) {
+      return sum + Number(item.quantity || 0);
+    }
+    return sum;
+  }, 0);
+
+  const skinlessWeightNum = Number(globalSkinlessWeight);
+  const yieldingPct =
+    liveCategoryTotalWeight > 0 && skinlessWeightNum > 0
+      ? (skinlessWeightNum / liveCategoryTotalWeight) * 100
+      : null;
+  const skinlessIsInvalid =
+    globalSkinlessWeight !== "" &&
+    (isNaN(skinlessWeightNum) || skinlessWeightNum < 0);
+
   return (
     <>
-    <div className="relative">
-    <FormBusyOverlay
-      active={isLoading}
-      label={
-        savingAs === "draft"
-          ? "Saving blank/cancelled invoice…"
-          : isEditingDraft
-            ? "Completing invoice…"
-            : isEditMode
-              ? "Updating invoice…"
-              : "Creating invoice…"
-      }
-    />
-    <form
-      onSubmit={handleSubmit}
-      className={`space-y-6 ${isLoading ? "pointer-events-none select-none" : ""}`}
-      aria-busy={isLoading}
-    >
-      <Card>
-        <CardHeader>
-          <CardTitle>Invoice Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="client_id">
-                Client <span className="text-red-500">*</span>
-              </Label>
-              <Popover
-                open={isClientDropdownOpen}
-                onOpenChange={(open) => {
-                  setIsClientDropdownOpen(open);
-                  if (!open) {
-                    setClientSearchValue("");
-                  }
-                }}
-              >
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={isClientDropdownOpen}
-                    id="client_id"
-                    className="w-full justify-between font-normal"
-                    disabled={!!initialInvoice?.id}
+      <div className="relative">
+        <FormBusyOverlay
+          active={isLoading}
+          label={
+            savingAs === "draft"
+              ? "Saving blank/cancelled invoice…"
+              : isEditingDraft
+                ? "Completing invoice…"
+                : isEditMode
+                  ? "Updating invoice…"
+                  : "Creating invoice…"
+          }
+        />
+        <form
+          onSubmit={handleSubmit}
+          onKeyDown={(e) => {
+            if (
+              e.key === "Enter" &&
+              (e.target as HTMLElement).tagName !== "BUTTON"
+            ) {
+              e.preventDefault();
+            }
+          }}
+          className={`space-y-6 ${isLoading ? "pointer-events-none select-none" : ""}`}
+          aria-busy={isLoading}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Invoice Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="client_id">
+                    Client <span className="text-red-500">*</span>
+                  </Label>
+                  <Popover
+                    open={isClientDropdownOpen}
+                    onOpenChange={(open) => {
+                      setIsClientDropdownOpen(open);
+                      if (!open) {
+                        setClientSearchValue("");
+                      }
+                    }}
                   >
-                    {selectedClient ? selectedClient.name : "Select a client"}
-                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                  <Command>
-                    <CommandInput
-                      placeholder="Type client name..."
-                      value={clientSearchValue}
-                      onValueChange={setClientSearchValue}
-                    />
-                    <CommandList>
-                      <CommandEmpty>No client found.</CommandEmpty>
-                      {filteredClients.map((client) => (
-                        <CommandItem
-                          key={client.id}
-                          value={client.name}
-                          onSelect={() => {
-                            handleClientChange(client.id);
-                            setIsClientDropdownOpen(false);
-                            setClientSearchValue("");
-                          }}
-                        >
-                          <Check
-                            className={`mr-2 h-4 w-4 ${formData.client_id === client.id ? "opacity-100" : "opacity-0"}`}
-                          />
-                          {client.name}
-                        </CommandItem>
-                      ))}
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-              {selectedClient && (
-                <div className="mt-1">
-                  {selectedClient.enable_per_bird ? (
-                    <p className="text-sm text-amber-600">
-                      Per‑bird enabled: ₹
-                      {Number(selectedClient.value_per_bird || 0).toFixed(2)} /
-                      bird
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={isClientDropdownOpen}
+                        id="client_id"
+                        className="w-full justify-between font-normal"
+                        disabled={!!initialInvoice?.id}
+                      >
+                        {selectedClient ? selectedClient.name : "Select a client"}
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                      <Command>
+                        <CommandInput
+                          placeholder="Type client name..."
+                          value={clientSearchValue}
+                          onValueChange={setClientSearchValue}
+                        />
+                        <CommandList>
+                          <CommandEmpty>No client found.</CommandEmpty>
+                          {filteredClients.map((client) => (
+                            <CommandItem
+                              key={client.id}
+                              value={client.name}
+                              onSelect={() => {
+                                handleClientChange(client.id);
+                                setIsClientDropdownOpen(false);
+                                setClientSearchValue("");
+                              }}
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 ${formData.client_id === client.id ? "opacity-100" : "opacity-0"}`}
+                              />
+                              {client.name}
+                            </CommandItem>
+                          ))}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {selectedClient && (
+                    <div className="mt-1">
+                      {selectedClient.enable_per_bird ? (
+                        <p className="text-sm text-amber-600">
+                          Per‑bird enabled: ₹
+                          {Number(selectedClient.value_per_bird || 0).toFixed(2)} /
+                          bird
+                        </p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Per‑bird disabled for this client
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="invoice_number">
+                    Invoice Number <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="invoice_number"
+                    required
+                    value={formData.invoice_number}
+                    onChange={(e) => {
+                      const sanitizedValue = sanitizeInvoiceNumberInput(
+                        e.target.value,
+                      );
+                      setFormData({ ...formData, invoice_number: sanitizedValue });
+                    }}
+                    placeholder="e.g., 0001, A1, B1234"
+                    disabled={
+                      (isEditMode && !canEditInvoiceNumber) || continueInvoiceSequence
+                    }
+                  />
+                  {isCheckingInvoiceNumber && formData.invoice_number.trim() && (
+                    <p className="text-xs text-muted-foreground">
+                      Checking invoice number...
                     </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Per‑bird disabled for this client
+                  )}
+                  {!isCheckingInvoiceNumber && invoiceNumberFormatError && (
+                    <p className="text-xs text-red-600">{invoiceNumberFormatError}</p>
+                  )}
+                  {!isCheckingInvoiceNumber &&
+                    !invoiceNumberFormatError &&
+                    isInvoiceNumberDuplicate && (
+                      <p className="text-xs text-red-600">
+                        This invoice number already exists. Please enter a unique one.
+                      </p>
+                    )}
+                  {!isEditMode && canToggleInvoiceSequence && (
+                    <div className="flex items-center justify-between gap-3 rounded-md border p-2">
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-medium">Continue sequence</p>
+                        <p className="text-xs text-muted-foreground">
+                          Auto-fill next invoice number from the client&apos;s
+                          pattern or the organization series.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={continueInvoiceSequence}
+                        onCheckedChange={async (checked) => {
+                          setContinueInvoiceSequence(checked);
+                          if (checked) {
+                            setFollowFromThisSequence(false);
+                            setIsInvoiceNumberDuplicate(false);
+                            const client = clients.find(
+                              (c) => c.id === formData.client_id,
+                            );
+                            const next = await resolveSequenceForClient(client);
+                            setFormData((prev) => ({
+                              ...prev,
+                              invoice_number:
+                                next ||
+                                sanitizeInvoiceNumberInput(autoSequenceInvoiceNumber) ||
+                                prev.invoice_number,
+                            }));
+                            return;
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                  {!isEditMode &&
+                    canToggleInvoiceSequence &&
+                    !continueInvoiceSequence && (
+                      <div className="flex items-center justify-between gap-3 rounded-md border p-2">
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-medium">
+                            Follow from this sequence for new invoices
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            When enabled, future auto invoice numbers continue from
+                            this number. When disabled, the existing sequence is
+                            kept.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={followFromThisSequence}
+                          onCheckedChange={setFollowFromThisSequence}
+                        />
+                      </div>
+                    )}
+                  {!isEditMode &&
+                    selectedClient?.invoice_number_pattern_type ===
+                    "client_specific" &&
+                    selectedClient.invoice_number_pattern && (
+                      <p className="text-xs text-muted-foreground">
+                        Using client-specific pattern:{" "}
+                        {selectedClient.invoice_number_pattern}
+                      </p>
+                    )}
+                  {(isEditMode ||
+                    continueInvoiceSequence ||
+                    selectedClient?.invoice_number_pattern_type !==
+                    "client_specific") && (
+                      <p className="text-xs text-muted-foreground">
+                        {isEditMode
+                          ? canEditInvoiceNumber
+                            ? "Admin can edit invoice number"
+                            : "Only admin can edit invoice number"
+                          : continueInvoiceSequence
+                            ? "Invoice number is locked while auto sequence is enabled"
+                            : "Use a 4-digit number or one capital letter + number (1-10000), max 6 characters"}
+                      </p>
+                    )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="issue_date">
+                    Issue Date <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="issue_date"
+                    type="date"
+                    required
+                    max={today}
+                    placeholder="Select issue date"
+                    value={formData.issue_date}
+                    disabled={isEditMode && !canEditInvoiceNumber}
+                    onChange={(e) => handleIssueDateChange(e.target.value)}
+                  />
+                  {isEditMode && !canEditInvoiceNumber && (
+                    <p className="text-xs text-muted-foreground">
+                      Only admin can edit issue date.
                     </p>
                   )}
                 </div>
-              )}
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="invoice_number">
-                Invoice Number <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="invoice_number"
-                required
-                value={formData.invoice_number}
-                onChange={(e) => {
-                  const sanitizedValue = sanitizeInvoiceNumberInput(
-                    e.target.value,
-                  );
-                  setFormData({ ...formData, invoice_number: sanitizedValue });
-                }}
-                placeholder="e.g., 0001, A1, B1234"
-                disabled={
-                  (isEditMode && !canEditInvoiceNumber) || continueInvoiceSequence
-                }
-              />
-              {isCheckingInvoiceNumber && formData.invoice_number.trim() && (
-                <p className="text-xs text-muted-foreground">
-                  Checking invoice number...
-                </p>
-              )}
-              {!isCheckingInvoiceNumber && invoiceNumberFormatError && (
-                <p className="text-xs text-red-600">{invoiceNumberFormatError}</p>
-              )}
-              {!isCheckingInvoiceNumber &&
-                !invoiceNumberFormatError &&
-                isInvoiceNumberDuplicate && (
-                  <p className="text-xs text-red-600">
-                    This invoice number already exists. Please enter a unique one.
-                  </p>
-                )}
-              {!isEditMode && canToggleInvoiceSequence && (
-                <div className="flex items-center justify-between gap-3 rounded-md border p-2">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-medium">Continue sequence</p>
-                    <p className="text-xs text-muted-foreground">
-                      Auto-fill next invoice number from the client&apos;s
-                      pattern or the organization series.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={continueInvoiceSequence}
-                    onCheckedChange={async (checked) => {
-                      setContinueInvoiceSequence(checked);
-                      if (checked) {
-                        setFollowFromThisSequence(false);
-                        setIsInvoiceNumberDuplicate(false);
-                        const client = clients.find(
-                          (c) => c.id === formData.client_id,
-                        );
-                        const next = await resolveSequenceForClient(client);
-                        setFormData((prev) => ({
-                          ...prev,
-                          invoice_number:
-                            next ||
-                            sanitizeInvoiceNumberInput(autoSequenceInvoiceNumber) ||
-                            prev.invoice_number,
-                        }));
-                        return;
-                      }
-                    }}
-                  />
-                </div>
-              )}
-              {!isEditMode &&
-                canToggleInvoiceSequence &&
-                !continueInvoiceSequence && (
-                  <div className="flex items-center justify-between gap-3 rounded-md border p-2">
-                    <div className="space-y-0.5">
-                      <p className="text-xs font-medium">
-                        Follow from this sequence for new invoices
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        When enabled, future auto invoice numbers continue from
-                        this number. When disabled, the existing sequence is
-                        kept.
-                      </p>
+                <div className="space-y-2">
+                  <Label htmlFor="due_date">
+                    Due Date <span className="text-red-500">*</span>
+                  </Label>
+                  {selectedDueDaysType === "end_of_month" ? (
+                    <div className="flex items-center justify-center w-full px-3 py-2 rounded-md bg-blue-50 border border-blue-200 h-10">
+                      <span className="text-lg font-semibold text-blue-700">
+                        End of the billed month
+                      </span>
                     </div>
-                    <Switch
-                      checked={followFromThisSequence}
-                      onCheckedChange={setFollowFromThisSequence}
+                  ) : (
+                    <Input
+                      id="due_date"
+                      type="date"
+                      required
+                      placeholder="Select due date"
+                      value={formData.due_date}
+                      disabled
                     />
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Due date is auto-calculated from client due settings and issue
+                    date.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {missingPricesForDate && (
+            <div className="p-4 bg-yellow-50 border border-yellow-300 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-yellow-900">
+                    Prices Not Set for {formData.issue_date}
+                  </h3>
+                  <p className="text-sm text-yellow-800 mt-1">
+                    The following{" "}
+                    {missingPricesForDate.length === 1 ? "category has" : "categories have"}{" "}
+                    no price configured for this date:{" "}
+                    <span className="font-medium">
+                      {missingPricesForDate.map((c) => c.name).join(", ")}
+                    </span>
+                    . Products using{" "}
+                    {missingPricesForDate.length === 1 ? "this category" : "these categories"}{" "}
+                    will have a unit price of ₹0 on this invoice.
+                  </p>
+                  <div className="mt-3">
+                    <Button asChild size="sm" variant="outline" className="bg-white">
+                      <Link href={`/dashboard/prices/new?date=${formData.issue_date}`}>
+                        Set Prices for {formData.issue_date}
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <div>
+                <CardTitle>Line Items</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Add products to this invoice.
+                </p>
+              </div>
+              {formData.client_id && items.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefreshPrices}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh prices
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Existing Line Items */}
+              <div className="space-y-4">
+                {items.length === 0 && formData.client_id && (
+                  <div className="text-center py-8 text-sm text-muted-foreground border rounded-lg bg-slate-50">
+                    No products added yet. Use the dropdown below to add products.
                   </div>
                 )}
-              {!isEditMode &&
-                selectedClient?.invoice_number_pattern_type ===
-                  "client_specific" &&
-                selectedClient.invoice_number_pattern && (
-                  <p className="text-xs text-muted-foreground">
-                    Using client-specific pattern:{" "}
-                    {selectedClient.invoice_number_pattern}
-                  </p>
-                )}
-              {(isEditMode ||
-                continueInvoiceSequence ||
-                selectedClient?.invoice_number_pattern_type !==
-                  "client_specific") && (
-                <p className="text-xs text-muted-foreground">
-                  {isEditMode
-                    ? canEditInvoiceNumber
-                      ? "Admin can edit invoice number"
-                      : "Only admin can edit invoice number"
-                    : continueInvoiceSequence
-                      ? "Invoice number is locked while auto sequence is enabled"
-                      : "Use a 4-digit number or one capital letter + number (1-10000), max 6 characters"}
-                </p>
-              )}
-            </div>
-          </div>
+                {items.map((item, index) => {
+                  if (!item.product_id) return null;
+                  const product = products.find((p) => p.id === item.product_id);
+                  if (!product) return null;
 
-          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="issue_date">
-                Issue Date <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="issue_date"
-                type="date"
-                required
-                max={today}
-                placeholder="Select issue date"
-                value={formData.issue_date}
-                disabled={isEditMode && !canEditInvoiceNumber}
-                onChange={(e) => handleIssueDateChange(e.target.value)}
-              />
-              {isEditMode && !canEditInvoiceNumber && (
-                <p className="text-xs text-muted-foreground">
-                  Only admin can edit issue date.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="due_date">
-                Due Date <span className="text-red-500">*</span>
-              </Label>
-              {selectedDueDaysType === "end_of_month" ? (
-                <div className="flex items-center justify-center w-full px-3 py-2 rounded-md bg-blue-50 border border-blue-200 h-10">
-                  <span className="text-lg font-semibold text-blue-700">
-                    End of the billed month
-                  </span>
-                </div>
-              ) : (
-                <Input
-                  id="due_date"
-                  type="date"
-                  required
-                  placeholder="Select due date"
-                  value={formData.due_date}
-                  disabled
-                />
-              )}
-              <p className="text-xs text-muted-foreground">
-                Due date is auto-calculated from client due settings and issue
-                date.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {missingPricesForDate && (
-        <div className="p-4 bg-yellow-50 border border-yellow-300 rounded-lg">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-yellow-900">
-                Prices Not Set for {formData.issue_date}
-              </h3>
-              <p className="text-sm text-yellow-800 mt-1">
-                The following{" "}
-                {missingPricesForDate.length === 1 ? "category has" : "categories have"}{" "}
-                no price configured for this date:{" "}
-                <span className="font-medium">
-                  {missingPricesForDate.map((c) => c.name).join(", ")}
-                </span>
-                . Products using{" "}
-                {missingPricesForDate.length === 1 ? "this category" : "these categories"}{" "}
-                will have a unit price of ₹0 on this invoice.
-              </p>
-              <div className="mt-3">
-                <Button asChild size="sm" variant="outline" className="bg-white">
-                  <Link href={`/dashboard/prices/new?date=${formData.issue_date}`}>
-                    Set Prices for {formData.issue_date}
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <div>
-            <CardTitle>Line Items</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Add products to this invoice.
-            </p>
-          </div>
-          {formData.client_id && items.length > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleRefreshPrices}
-            >
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Refresh prices
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Existing Line Items */}
-          <div className="space-y-4">
-            {items.length === 0 && formData.client_id && (
-              <div className="text-center py-8 text-sm text-muted-foreground border rounded-lg bg-slate-50">
-                No products added yet. Use the dropdown below to add products.
-              </div>
-            )}
-            {items.map((item, index) => {
-              if (!item.product_id) return null;
-              const product = products.find((p) => p.id === item.product_id);
-              if (!product) return null;
-
-              const enabled = true;
-              // per-item per-bird logic removed; preview is just based on current pricing rules
-              const previewPrice = calculateClientPrice(
-                product.id,
-                formData.client_id,
-                formData.issue_date,
-                false,
-                1,
-              );
-              const ruleInfo = formData.client_id
-                ? getPricingRuleInfo(
-                    product.id,
-                    formData.client_id,
-                    formData.issue_date,
-                  )
-                : null;
-              const showMissingRuleWarning = formData.client_id && !ruleInfo;
-              const clientAdj = formData.client_id
-                ? getClientAdjustment(formData.client_id)
-                : 0;
-              const breakdown = formData.client_id
-                ? getPriceBreakdown(
+                  const enabled = true;
+                  // per-item per-bird logic removed; preview is just based on current pricing rules
+                  const previewPrice = calculateClientPrice(
                     product.id,
                     formData.client_id,
                     formData.issue_date,
                     false,
                     1,
-                  )
-                : null;
-              const showSkinlessWeight = formData.client_id
-                ? isLiveCategoryPricing(
-                    product.id,
-                    formData.client_id,
-                    formData.issue_date,
-                  )
-                : false;
+                  );
+                  const ruleInfo = formData.client_id
+                    ? getPricingRuleInfo(
+                      product.id,
+                      formData.client_id,
+                      formData.issue_date,
+                    )
+                    : null;
+                  const showMissingRuleWarning = formData.client_id && !ruleInfo;
+                  const clientAdj = formData.client_id
+                    ? getClientAdjustment(formData.client_id)
+                    : 0;
+                  const breakdown = formData.client_id
+                    ? getPriceBreakdown(
+                      product.id,
+                      formData.client_id,
+                      formData.issue_date,
+                      false,
+                      1,
+                    )
+                    : null;
+                  const showSkinlessWeight = formData.client_id
+                    ? isLiveCategoryPricing(
+                      product.id,
+                      formData.client_id,
+                      formData.issue_date,
+                    )
+                    : false;
 
-              return (
-                <div
-                  key={`item-${index}`}
-                  className={`space-y-3 rounded-lg border p-4 ${isExactDuplicate(index) ? "border-red-500 border-2" : ""}`}
-                >
-                  <div className="flex items-start gap-3">
-                    <IconTooltip label="Remove line item">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveItem(index)}
-                        className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </IconTooltip>
-                    <div className="flex-1 space-y-1">
-                      <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-medium">{product.name}</p>
-                            {ruleInfo && (
-                              <Badge className="text-xs px-2 py-0.5 border rounded bg-green-100 text-green-800 border-green-200">
-                                {ruleInfo}
-                              </Badge>
-                            )}
-                            {showMissingRuleWarning && (
-                              <Badge className="text-xs px-2 py-0.5 border rounded bg-red-100 text-red-800 border-red-200">
-                                Set pricing rule first
-                              </Badge>
-                            )}
+                  return (
+                    <div
+                      key={`item-${index}`}
+                      className={`space-y-3 rounded-lg border p-4 ${isExactDuplicate(index) ? "border-red-500 border-2" : ""}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <IconTooltip label="Remove line item">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveItem(index)}
+                            className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </IconTooltip>
+                        <div className="flex-1 space-y-1">
+                          <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-medium">{product.name}</p>
+                                {ruleInfo && (
+                                  <Badge className="text-xs px-2 py-0.5 border rounded bg-green-100 text-green-800 border-green-200">
+                                    {ruleInfo}
+                                  </Badge>
+                                )}
+                                {showMissingRuleWarning && (
+                                  <Badge className="text-xs px-2 py-0.5 border rounded bg-red-100 text-red-800 border-red-200">
+                                    Set pricing rule first
+                                  </Badge>
+                                )}
+                              </div>
+                              {product.description && (
+                                <p className="text-xs text-muted-foreground">
+                                  {product.description}
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-sm font-medium">
+                              ₹{previewPrice.toFixed(2)}
+                            </div>
                           </div>
-                          {product.description && (
-                            <p className="text-xs text-muted-foreground">
-                              {product.description}
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-sm font-medium">
-                          ₹{previewPrice.toFixed(2)}
-                        </div>
-                      </div>
 
-                      {breakdown && (
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          <div>
-                            <span className="font-medium">Base:</span> ₹
-                            {breakdown.basePrice.toFixed(2)}
-                          </div>
-                          {breakdown.ruleLabel && (
-                            <div>
-                              <span className="font-medium">
-                                {breakdown.ruleLabel}:
-                              </span>{" "}
-                              {breakdown.ruleValueDisplay
-                                ? breakdown.ruleValueDisplay
-                                : "Applied"}{" "}
-                              → ₹{breakdown.afterRule.toFixed(2)}
+                          {breakdown && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              <div>
+                                <span className="font-medium">Base:</span> ₹
+                                {breakdown.basePrice.toFixed(2)}
+                              </div>
+                              {breakdown.ruleLabel && (
+                                <div>
+                                  <span className="font-medium">
+                                    {breakdown.ruleLabel}:
+                                  </span>{" "}
+                                  {breakdown.ruleValueDisplay
+                                    ? breakdown.ruleValueDisplay
+                                    : "Applied"}{" "}
+                                  → ₹{breakdown.afterRule.toFixed(2)}
+                                </div>
+                              )}
+                              <div>
+                                <span className="font-medium">Unit Price:</span> ₹
+                                {breakdown.finalPrice.toFixed(2)}
+                              </div>
                             </div>
                           )}
-                          <div>
-                            <span className="font-medium">Unit Price:</span> ₹
-                            {breakdown.finalPrice.toFixed(2)}
+                        </div>
+                      </div>
+
+                      {enabled && item && (
+                        <div className="grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-4">
+                          <div className="space-y-2 md:col-span-2">
+                            <Label>Description</Label>
+                            <Input
+                              required
+                              disabled
+                              value={item.description}
+                              onChange={(e) =>
+                                handleDescriptionChange(index, e.target.value)
+                              }
+                              placeholder="Item description"
+                            />
                           </div>
+
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label>Quantity</Label>
+                              {item.quantity_input &&
+                                item.quantity_input.startsWith("=") &&
+                                item.quantity_input.includes("+") &&
+                                item.quantity !== null && (
+                                  <span className="text-xs font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                    = {item.quantity}
+                                  </span>
+                                )}
+                            </div>
+                            <Input
+                              ref={(el) => {
+                                quantityInputRefs.current[index] = el;
+                              }}
+                              type="text"
+                              inputMode="text"
+                              required
+                              placeholder="e.g., 10 or =26.5+30.5"
+                              value={
+                                item.quantity_input !== undefined
+                                  ? item.quantity_input
+                                  : item.quantity !== null &&
+                                      item.quantity !== undefined
+                                    ? String(item.quantity)
+                                    : ""
+                              }
+                              onChange={(e) =>
+                                handleQuantityChange(index, e.target.value)
+                              }
+                              onBlur={() => handleQuantityBlur(index)}
+                              onKeyDown={(e) =>
+                                handleQuantityKeyDown(e, index)
+                              }
+                              onPaste={(e) => {
+                                e.preventDefault();
+                                const pasteText =
+                                  e.clipboardData.getData("text");
+                                const input = e.currentTarget;
+                                const start =
+                                  input.selectionStart ?? input.value.length;
+                                const end =
+                                  input.selectionEnd ?? input.value.length;
+                                const rawNext =
+                                  input.value.slice(0, start) +
+                                  pasteText +
+                                  input.value.slice(end);
+                                handleQuantityChange(index, rawNext);
+                              }}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Unit Price</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder="e.g., 250.00"
+                              disabled
+                              value={
+                                item.unit_price !== null &&
+                                  item.unit_price !== undefined
+                                  ? item.unit_price
+                                  : ""
+                              }
+                              onChange={(e) =>
+                                handleUnitPriceChange(index, e.target.value)
+                              }
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Line Total</Label>
+                            <Input
+                              value={`₹${item.line_total.toFixed(2)}`}
+                              disabled
+                            />
+                          </div>
+
+
                         </div>
                       )}
                     </div>
-                  </div>
+                  );
+                })}
+              </div>
 
-                  {enabled && item && (
-                    <div className="grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-4">
-                      <div className="space-y-2 md:col-span-2">
-                        <Label>Description</Label>
-                        <Input
-                          required
-                          disabled
-                          value={item.description}
-                          onChange={(e) =>
-                            handleDescriptionChange(index, e.target.value)
-                          }
-                          placeholder="Item description"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Quantity</Label>
-                        <Input
-                          ref={(el) => {
-                            quantityInputRefs.current[index] = el;
-                          }}
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          required
-                          placeholder="e.g., 10"
-                          value={item.quantity ?? ""}
-                          onChange={(e) =>
-                            handleQuantityChange(index, e.target.value)
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Unit Price</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="e.g., 250.00"
-                          disabled
-                          value={
-                            item.unit_price !== null &&
-                            item.unit_price !== undefined
-                              ? item.unit_price
-                              : ""
-                          }
-                          onChange={(e) =>
-                            handleUnitPriceChange(index, e.target.value)
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Line Total</Label>
-                        <Input
-                          value={`₹${item.line_total.toFixed(2)}`}
-                          disabled
-                        />
-                      </div>
-
-                      {showSkinlessWeight && (
-                        <div className="space-y-2">
-                          <Label>Skinless Weight (kg)</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="e.g., 5.5"
-                            value={item.skinless_weight ?? ""}
-                            onChange={(e) =>
-                              updateItemByIndex(index, (item) => ({
-                                ...item,
-                                skinless_weight: e.target.value
-                                  ? Number(e.target.value)
-                                  : null,
-                              }))
-                            }
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Quick Add Product Dropdown */}
-          {formData.client_id && (
-            <div className="space-y-2 pb-4 border-b">
-              <Label htmlFor="add-product">Add Product</Label>
-              <Popover
-                open={isQuickAddOpen}
-                onOpenChange={(open) => {
-                  setIsQuickAddOpen(open);
-                  if (!open) {
-                    setProductSearchValue("");
-                  }
-                }}
-              >
-                <PopoverTrigger asChild>
-                  <Button
-                    id="add-product"
-                    type="button"
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={isQuickAddOpen}
-                    className="w-full justify-between font-normal"
+              {/* Quick Add Product Dropdown */}
+              {formData.client_id && (
+                <div className="space-y-2 pb-4 border-b">
+                  <Label htmlFor="add-product">Add Product</Label>
+                  <Popover
+                    open={isQuickAddOpen}
+                    onOpenChange={(open) => {
+                      setIsQuickAddOpen(open);
+                      if (!open) {
+                        setProductSearchValue("");
+                      }
+                    }}
                   >
-                    Select a product to add...
-                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                  <Command>
-                    <CommandInput
-                      placeholder="Type product name..."
-                      value={productSearchValue}
-                      onValueChange={setProductSearchValue}
-                    />
-                    <CommandList>
-                      <CommandEmpty>
-                        {availableProducts.length === 0
-                          ? "No products available with pricing rules"
-                          : "No product found."}
-                      </CommandEmpty>
-                      {filteredProducts.map((product) => (
-                        <CommandItem
-                          key={product.id}
-                          value={product.name}
-                          onSelect={() => handleQuickAddProduct(product.id)}
-                        >
-                          {product.name}
-                        </CommandItem>
-                      ))}
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-              <p className="text-xs text-muted-foreground">
-                {items.length === 0
-                  ? "Select products to add to this invoice"
-                  : `${items.length} product(s) added`}
-              </p>
-            </div>
-          )}
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="add-product"
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={isQuickAddOpen}
+                        className="w-full justify-between font-normal"
+                      >
+                        Select a product to add...
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                      <Command>
+                        <CommandInput
+                          placeholder="Type product name..."
+                          value={productSearchValue}
+                          onValueChange={setProductSearchValue}
+                        />
+                        <CommandList>
+                          <CommandEmpty>
+                            {availableProducts.length === 0
+                              ? "No products available with pricing rules"
+                              : "No product found."}
+                          </CommandEmpty>
+                          {filteredProducts.map((product) => (
+                            <CommandItem
+                              key={product.id}
+                              value={product.name}
+                              onSelect={() => handleQuickAddProduct(product.id)}
+                            >
+                              {product.name}
+                            </CommandItem>
+                          ))}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground">
+                    {items.length === 0
+                      ? "Select products to add to this invoice"
+                      : `${items.length} product(s) added`}
+                  </p>
+                </div>
+              )}
 
-          {!formData.client_id && (
-            <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
-              Please select a client first to add products.
-            </div>
-          )}
+              {!formData.client_id && (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
+                  Please select a client first to add products.
+                </div>
+              )}
 
-          {/*
+              {/*
           <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
             <div className="space-y-2">
               <Label className="text-sm">Invoice Discount (%)</Label>
@@ -2512,248 +2787,299 @@ export function InvoiceForm({
           </div>
           */}
 
-          <div className="border-t pt-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Subtotal:</span>
-              <span className="font-medium">₹{totals.subtotal.toFixed(2)}</span>
-            </div>
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal:</span>
+                  <span className="font-medium">₹{totals.subtotal.toFixed(2)}</span>
+                </div>
 
-            {/* <div className="flex justify-between text-sm">
+                {/* Skinless Weight — shown only when at least one Live-category product is selected */}
+                {hasLiveCategoryProduct && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <Label className="text-sm">
+                        Skinless Weight (kg){" "}
+                        <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        required
+                        value={globalSkinlessWeight}
+                        onChange={(e) =>
+                          setGlobalSkinlessWeight(e.target.value)
+                        }
+                        placeholder="e.g., 125.50"
+                        className={`w-36 mt-1 ${
+                          skinlessIsInvalid || globalSkinlessWeight === ""
+                            ? "border-red-300"
+                            : ""
+                        }`}
+                      />
+                    </div>
+                    {yieldingPct !== null && (
+                      <div className="flex-1 text-right">
+                        <p className="text-xs text-muted-foreground">Yielding %</p>
+                        <p
+                          className={`text-lg font-semibold ${
+                            yieldingPct >= 70
+                              ? "text-green-600"
+                              : yieldingPct >= 55
+                                ? "text-amber-600"
+                                : "text-red-600"
+                          }`}
+                        >
+                          {yieldingPct.toFixed(1)}%
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {skinlessWeightNum.toFixed(2)} kg /{" "}
+                          {liveCategoryTotalWeight.toFixed(2)} kg
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Tax:</span>
               <span className="font-medium">₹{totals.tax_amount.toFixed(2)}</span>
             </div> */}
 
-            {Number(totals.discount_amount) > 0 && (
-              <div className="flex justify-between text-sm text-green-600">
-                <span>Discount:</span>
-                <span>-₹{totals.discount_amount.toFixed(2)}</span>
-              </div>
-            )}
+                {Number(totals.discount_amount) > 0 && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span>Discount:</span>
+                    <span>-₹{totals.discount_amount.toFixed(2)}</span>
+                  </div>
+                )}
 
-            {clientPerBirdEnabled && (
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <Label className="text-sm">
-                    Total birds <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    required
-                    value={globalBirdCount || ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "") {
-                        setGlobalBirdCount(0);
-                      } else {
-                        setGlobalBirdCount(Math.max(0, Number(val)));
-                      }
-                    }}
-                    placeholder="Enter number of birds"
-                    className={`w-36 ${globalBirdCount <= 0 ? "border-red-300" : ""}`}
+                {clientPerBirdEnabled && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <Label className="text-sm">
+                        Total birds <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        required
+                        value={globalBirdCount || ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "") {
+                            setGlobalBirdCount(0);
+                          } else {
+                            setGlobalBirdCount(Math.max(0, Number(val)));
+                          }
+                        }}
+                        placeholder="Enter number of birds"
+                        className={`w-36 ${globalBirdCount <= 0 ? "border-red-300" : ""}`}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {clientPerBirdEnabled && totals.total_birds > 0 && (
+                  <div className="flex justify-between text-sm text-amber-600">
+                    <span>
+                      Per-bird adjustment ({totals.total_birds} birds × ₹
+                      {clientPerBirdValue.toFixed(2)}/bird)
+                    </span>
+                    <span>₹{totals.per_bird_amount.toFixed(2)}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between text-lg font-bold border-t pt-2">
+                  <span>Total:</span>
+                  <span>₹{totals.total_amount.toFixed(2)}</span>
+                </div>
+
+                {/* Credit balance info banner for new invoices */}
+                {!isEditMode && clientCreditBalance > 0 && totals.total_amount > 0 && (
+                  <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
+                    <h4 className="font-semibold text-purple-900 text-sm flex items-center gap-1">
+                      💰 Client Credit Available
+                    </h4>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-purple-700">Available Credit:</span>
+                      <span className="font-medium text-purple-600">
+                        ₹{clientCreditBalance.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-purple-700">Credit to apply:</span>
+                      <span className="font-medium text-purple-600">
+                        ₹{Math.min(clientCreditBalance, totals.total_amount).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm font-bold border-t border-purple-200 pt-2">
+                      <span className="text-purple-900">Net outstanding after credit:</span>
+                      <span className={totals.total_amount - Math.min(clientCreditBalance, totals.total_amount) <= 0 ? "text-green-600" : "text-orange-600"}>
+                        ₹{Math.max(0, totals.total_amount - clientCreditBalance).toFixed(2)}
+                      </span>
+                    </div>
+                    {clientCreditBalance >= totals.total_amount ? (
+                      <p className="text-xs text-green-600 font-medium">
+                        ✓ This invoice will be fully paid from credit balance
+                      </p>
+                    ) : (
+                      <p className="text-xs text-orange-600 font-medium">
+                        ⚠ Invoice will be partially paid from credit (₹{Math.max(0, totals.total_amount - clientCreditBalance).toFixed(2)} remaining)
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Show credit applied on existing invoices */}
+                {isEditMode && Number(initialInvoice?.amount_paid || 0) > 0 && (
+                  <div className="mt-3 flex justify-between text-sm text-green-600">
+                    <span>Amount Paid (incl. credit):</span>
+                    <span>₹{Number(initialInvoice?.amount_paid || 0).toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div className="grid gap-3 sm:gap-4 grid-cols-1">
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    value={formData.notes}
+                    onChange={(e) =>
+                      setFormData({ ...formData, notes: e.target.value })
+                    }
+                    placeholder="Additional notes for this invoice..."
+                    rows={2}
                   />
                 </div>
               </div>
-            )}
+            </CardContent>
+          </Card>
 
-            {clientPerBirdEnabled && totals.total_birds > 0 && (
-              <div className="flex justify-between text-sm text-amber-600">
-                <span>
-                  Per-bird adjustment ({totals.total_birds} birds × ₹
-                  {clientPerBirdValue.toFixed(2)}/bird)
-                </span>
-                <span>₹{totals.per_bird_amount.toFixed(2)}</span>
-              </div>
-            )}
-
-            <div className="flex justify-between text-lg font-bold border-t pt-2">
-              <span>Total:</span>
-              <span>₹{totals.total_amount.toFixed(2)}</span>
+          {error && (
+            <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+              {error}
             </div>
-
-            {/* Credit balance info banner for new invoices */}
-            {!isEditMode && clientCreditBalance > 0 && totals.total_amount > 0 && (
-              <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
-                <h4 className="font-semibold text-purple-900 text-sm flex items-center gap-1">
-                  💰 Client Credit Available
-                </h4>
-                <div className="flex justify-between text-sm">
-                  <span className="text-purple-700">Available Credit:</span>
-                  <span className="font-medium text-purple-600">
-                    ₹{clientCreditBalance.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-purple-700">Credit to apply:</span>
-                  <span className="font-medium text-purple-600">
-                    ₹{Math.min(clientCreditBalance, totals.total_amount).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm font-bold border-t border-purple-200 pt-2">
-                  <span className="text-purple-900">Net outstanding after credit:</span>
-                  <span className={totals.total_amount - Math.min(clientCreditBalance, totals.total_amount) <= 0 ? "text-green-600" : "text-orange-600"}>
-                    ₹{Math.max(0, totals.total_amount - clientCreditBalance).toFixed(2)}
-                  </span>
-                </div>
-                {clientCreditBalance >= totals.total_amount ? (
-                  <p className="text-xs text-green-600 font-medium">
-                    ✓ This invoice will be fully paid from credit balance
-                  </p>
-                ) : (
-                  <p className="text-xs text-orange-600 font-medium">
-                    ⚠ Invoice will be partially paid from credit (₹{Math.max(0, totals.total_amount - clientCreditBalance).toFixed(2)} remaining)
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Show credit applied on existing invoices */}
-            {isEditMode && Number(initialInvoice?.amount_paid || 0) > 0 && (
-              <div className="mt-3 flex justify-between text-sm text-green-600">
-                <span>Amount Paid (incl. credit):</span>
-                <span>₹{Number(initialInvoice?.amount_paid || 0).toFixed(2)}</span>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-4 sm:p-6">
-          <div className="grid gap-3 sm:gap-4 grid-cols-1">
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={formData.notes}
-                onChange={(e) =>
-                  setFormData({ ...formData, notes: e.target.value })
-                }
-                placeholder="Additional notes for this invoice..."
-                rows={2}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {error && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
-          {error}
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-3">
-        <Button
-          type="submit"
-          disabled={
-            isLoading ||
-            !formData.client_id ||
-            !effectiveInvoiceNumber ||
-            (!autoSequenceActive &&
-              (!!invoiceNumberFormatError || isInvoiceNumberDuplicate)) ||
-            (clientPerBirdEnabled && globalBirdCount <= 0)
-          }
-        >
-          {isLoading && savingAs !== "draft" && (
-            <Spinner className="mr-2 h-4 w-4" />
           )}
-          {isLoading && savingAs !== "draft"
-            ? isEditingDraft
-              ? "Completing..."
-              : isEditMode
-                ? "Updating..."
-                : "Creating..."
-            : isEditingDraft
-              ? "Complete Invoice"
-              : isEditMode
-                ? "Update Invoice"
-                : "Create Invoice"}
-        </Button>
-        {(!isEditMode || isEditingDraft) && (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={
-              isLoading ||
-              !formData.client_id ||
-              !effectiveInvoiceNumber ||
-              (!autoSequenceActive &&
-                (!!invoiceNumberFormatError || isInvoiceNumberDuplicate))
-            }
-            onClick={() => void saveInvoice("draft")}
-          >
-            {isLoading && savingAs === "draft" && (
-              <Spinner className="mr-2 h-4 w-4" />
+
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="submit"
+              disabled={
+                isLoading ||
+                !formData.client_id ||
+                !effectiveInvoiceNumber ||
+                (!autoSequenceActive &&
+                  (!!invoiceNumberFormatError || isInvoiceNumberDuplicate)) ||
+                (clientPerBirdEnabled && globalBirdCount <= 0) ||
+                !globalSkinlessWeight ||
+                isNaN(Number(globalSkinlessWeight)) ||
+                Number(globalSkinlessWeight) < 0
+              }
+            >
+              {isLoading && savingAs !== "draft" && (
+                <Spinner className="mr-2 h-4 w-4" />
+              )}
+              {isLoading && savingAs !== "draft"
+                ? isEditingDraft
+                  ? "Completing..."
+                  : isEditMode
+                    ? "Updating..."
+                    : "Creating..."
+                : isEditingDraft
+                  ? "Complete Invoice"
+                  : isEditMode
+                    ? "Update Invoice"
+                    : "Create Invoice"}
+            </Button>
+            {(!isEditMode || isEditingDraft) && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  isLoading ||
+                  !formData.client_id ||
+                  !effectiveInvoiceNumber ||
+                  (!autoSequenceActive &&
+                    (!!invoiceNumberFormatError || isInvoiceNumberDuplicate))
+                }
+                onClick={() => void saveInvoice("draft")}
+              >
+                {isLoading && savingAs === "draft" && (
+                  <Spinner className="mr-2 h-4 w-4" />
+                )}
+                {savingAs === "draft"
+                  ? "Saving..."
+                  : "Blank/Cancelled"}
+              </Button>
             )}
-            {savingAs === "draft"
-              ? "Saving..."
-              : "Blank/Cancelled"}
-          </Button>
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.back()}
-          disabled={isLoading}
-        >
-          Cancel
-        </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.back()}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
       </div>
-    </form>
-    </div>
 
-    <AlertDialog
-      open={refreshPricesDialogOpen}
-      onOpenChange={setRefreshPricesDialogOpen}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Refresh line prices?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will recalculate all line prices using pricing rules and
-            category prices for {formData.issue_date}. Saved unit prices will
-            be overwritten.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={confirmRefreshPrices}>
-            Refresh prices
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialog
+        open={refreshPricesDialogOpen}
+        onOpenChange={setRefreshPricesDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Refresh line prices?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will recalculate all line prices using pricing rules and
+              category prices for {formData.issue_date}. Saved unit prices will
+              be overwritten.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRefreshPrices}>
+              Refresh prices
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-    <AlertDialog
-      open={issueDateChangeDialogOpen}
-      onOpenChange={(open) => {
-        setIssueDateChangeDialogOpen(open);
-        if (!open) setPendingIssueDate(null);
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Change issue date?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Changing the issue date to{" "}
-            {pendingIssueDate ? (
-              <span className="font-medium">{pendingIssueDate}</span>
-            ) : (
-              "the selected date"
-            )}{" "}
-            will recalculate line prices using pricing rules for the new date.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={confirmIssueDateChange}>
-            Change date
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialog
+        open={issueDateChangeDialogOpen}
+        onOpenChange={(open) => {
+          setIssueDateChangeDialogOpen(open);
+          if (!open) setPendingIssueDate(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change issue date?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Changing the issue date to{" "}
+              {pendingIssueDate ? (
+                <span className="font-medium">{pendingIssueDate}</span>
+              ) : (
+                "the selected date"
+              )}{" "}
+              will recalculate line prices using pricing rules for the new date.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmIssueDateChange}>
+              Change date
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

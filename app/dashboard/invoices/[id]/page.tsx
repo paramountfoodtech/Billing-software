@@ -37,8 +37,7 @@ export default async function InvoiceDetailPage({
         discount,
         line_total,
         bird_count,
-        per_bird_adjustment,
-        skinless_weight
+        per_bird_adjustment
       ),
       profiles!invoices_created_by_fkey(full_name)
     `,

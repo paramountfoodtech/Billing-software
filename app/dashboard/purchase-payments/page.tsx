@@ -34,19 +34,19 @@ export default async function PurchasePaymentsPage() {
           profiles!purchase_payments_created_by_fkey(full_name)
         `,
         )
-        .order("payment_date", { ascending: false }),
+        .order("created_at", { ascending: false }),
       supabase
         .from("purchase_invoices")
         .select("id, invoice_number, total_amount, amount_paid, status, purchaser_id")
         .order("purchaser_id"),
     ])
 
-  const purchaserInvoices: Record<string, typeof invoices> = {}
+  const purchaserInvoices: Record<string, NonNullable<typeof invoices>> = {}
   for (const invoice of invoices || []) {
     if (!purchaserInvoices[invoice.purchaser_id]) {
       purchaserInvoices[invoice.purchaser_id] = []
     }
-    purchaserInvoices[invoice.purchaser_id].push(invoice)
+    purchaserInvoices[invoice.purchaser_id]!.push(invoice)
   }
 
   return (

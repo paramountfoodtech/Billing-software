@@ -57,6 +57,8 @@ export interface ExpenseEntryRow {
   discount_amount: string;
   total_amount: string;
   entry_month: string | null;
+  payment_method?: string | null;
+  reference_number?: string | null;
   status: string;
   created_at: string;
   expense_categories: { name: string; slug: string | null } | null;
@@ -96,7 +98,8 @@ export function ExpensesTable({
     entry_number: "",
     vendor_invoice: "",
     category: "",
-    description: "",
+    method: "",
+    reference: "",
   });
 
   const handleSort = (column: string) => {
@@ -134,9 +137,19 @@ export function ExpensesTable({
           .includes(filters.category.toLowerCase()),
       );
     }
-    if (filters.description) {
+    if (filters.method) {
+      const q = filters.method.toLowerCase();
       filtered = filtered.filter((e) =>
-        e.description.toLowerCase().includes(filters.description.toLowerCase()),
+        (e.payment_method || "")
+          .toLowerCase()
+          .replace("_", " ")
+          .includes(q),
+      );
+    }
+    if (filters.reference) {
+      const q = filters.reference.toLowerCase();
+      filtered = filtered.filter((e) =>
+        (e.reference_number || "").toLowerCase().includes(q),
       );
     }
 
@@ -152,6 +165,14 @@ export function ExpensesTable({
           case "category":
             aVal = a.expense_categories?.name || "";
             bVal = b.expense_categories?.name || "";
+            break;
+          case "payment_method":
+            aVal = (a.payment_method || "").replace("_", " ");
+            bVal = (b.payment_method || "").replace("_", " ");
+            break;
+          case "reference_number":
+            aVal = a.reference_number || "";
+            bVal = b.reference_number || "";
             break;
           case "issue_date":
             aVal = new Date(a.issue_date).getTime();
@@ -172,6 +193,12 @@ export function ExpensesTable({
         if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
         return 0;
       });
+    } else {
+      filtered.sort(
+        (a, b) =>
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime(),
+      );
     }
 
     return filtered;
@@ -309,7 +336,24 @@ export function ExpensesTable({
                   Category <SortIcon column="category" />
                 </button>
               </TableHead>
-              <TableHead>Description</TableHead>
+              <TableHead>
+                <button
+                  type="button"
+                  className="font-semibold"
+                  onClick={() => handleSort("payment_method")}
+                >
+                  Method <SortIcon column="payment_method" />
+                </button>
+              </TableHead>
+              <TableHead>
+                <button
+                  type="button"
+                  className="font-semibold"
+                  onClick={() => handleSort("reference_number")}
+                >
+                  Reference <SortIcon column="reference_number" />
+                </button>
+              </TableHead>
               <TableHead>
                 <button
                   type="button"
@@ -374,9 +418,19 @@ export function ExpensesTable({
               <TableCell className="py-2">
                 <Input
                   placeholder="Filter..."
-                  value={filters.description}
+                  value={filters.method}
                   onChange={(e) =>
-                    handleFilterChange("description", e.target.value)
+                    handleFilterChange("method", e.target.value)
+                  }
+                  className="h-8"
+                />
+              </TableCell>
+              <TableCell className="py-2">
+                <Input
+                  placeholder="Filter..."
+                  value={filters.reference}
+                  onChange={(e) =>
+                    handleFilterChange("reference", e.target.value)
                   }
                   className="h-8"
                 />
@@ -387,7 +441,7 @@ export function ExpensesTable({
           <TableBody>
             {pagination.paginatedItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                   No expense entries found
                 </TableCell>
               </TableRow>
@@ -409,8 +463,13 @@ export function ExpensesTable({
                         {entry.expense_categories?.name || "—"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="max-w-[200px] truncate">
-                      {entry.description}
+                    <TableCell className="capitalize text-sm">
+                      {entry.payment_method
+                        ? entry.payment_method.replace("_", " ")
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground font-mono text-xs">
+                      {entry.reference_number || "—"}
                     </TableCell>
                     <TableCell>
                       {formatIndianDate(entry.issue_date, {

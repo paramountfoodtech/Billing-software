@@ -84,7 +84,7 @@ export default async function ReportsPage({
     supabase
       .from("invoices")
       .select(
-        "id, client_id, issue_date, total_amount, status, invoice_items(product_id, description, quantity, skinless_weight, line_total)",
+        "id, client_id, issue_date, total_amount, status, invoice_items(product_id, description, quantity, line_total)",
       )
       .neq("status", "cancelled")
       .gte("issue_date", periodStart)
@@ -142,19 +142,12 @@ export default async function ReportsPage({
     const row = clientMap.get(invoice.client_id)
     if (!row) continue
     row.sale += Number(invoice.total_amount)
-    const items =
-      (invoice.invoice_items as
-        | {
-            quantity: string | number | null
-            skinless_weight: string | number | null
-          }[]
-        | null) ?? []
+    type ClientInvoiceItem = {
+      quantity: string | number | null
+    }
+    const items = (invoice.invoice_items as ClientInvoiceItem[] | null) ?? []
     const invoiceQty = items.reduce((sum, item) => {
-      const weight =
-        item.skinless_weight && Number(item.skinless_weight) > 0
-          ? Number(item.skinless_weight)
-          : Number(item.quantity || 0)
-      return sum + weight
+      return sum + Number(item.quantity || 0)
     }, 0)
     row.saleKgs += invoiceQty
     if (invoice.issue_date === todayDate) {
@@ -199,16 +192,13 @@ export default async function ReportsPage({
 
   const productMap = new Map<string, ProductRow>()
   for (const invoice of periodInvoices) {
-    const items =
-      (invoice.invoice_items as
-        | {
-            product_id: string | null
-            description: string | null
-            quantity: string | number | null
-            skinless_weight: string | number | null
-            line_total: string | number | null
-          }[]
-        | null) ?? []
+    type ProductInvoiceItem = {
+      product_id: string | null
+      description: string | null
+      quantity: string | number | null
+      line_total: string | number | null
+    }
+    const items = (invoice.invoice_items as ProductInvoiceItem[] | null) ?? []
 
     for (const item of items) {
       const name = (item.description || "Unnamed Product").trim()
@@ -223,10 +213,7 @@ export default async function ReportsPage({
         avgQtyPerDay: 0,
       }
 
-      const qty =
-        item.skinless_weight && Number(item.skinless_weight) > 0
-          ? Number(item.skinless_weight)
-          : Number(item.quantity || 0)
+      const qty = Number(item.quantity || 0)
       const lineValue = Number(item.line_total || 0)
 
       current.currentMonthSaleValue += lineValue

@@ -14,10 +14,11 @@ export function formatChallanNumbers(
 export function sumChallanWeightKg(
   challans: Array<{ total_weight_kg?: string | number | null }>,
 ): number {
-  return challans.reduce(
-    (sum, c) => sum + (Number(c.total_weight_kg) || 0),
+  const sum = challans.reduce(
+    (acc, c) => acc + (Number(c.total_weight_kg) || 0),
     0,
   );
+  return Math.round((sum + Number.EPSILON) * 100) / 100;
 }
 
 export function sumChallanBirds(

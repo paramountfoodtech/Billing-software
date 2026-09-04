@@ -29,7 +29,7 @@ export default async function PaymentsPage() {
           profiles!payments_created_by_fkey(full_name)
         `,
         )
-        .order("payment_date", { ascending: false }),
+        .order("created_at", { ascending: false }),
       supabase
         .from("invoices")
         .select("id, invoice_number, total_amount, amount_paid, status, client_id")
@@ -38,13 +38,13 @@ export default async function PaymentsPage() {
 
   const userRole = profile?.role
 
-  const clientInvoices: Record<string, typeof invoices> = {}
+  const clientInvoices: Record<string, NonNullable<typeof invoices>> = {}
   if (invoices) {
     for (const invoice of invoices) {
       if (!clientInvoices[invoice.client_id]) {
         clientInvoices[invoice.client_id] = []
       }
-      clientInvoices[invoice.client_id].push(invoice)
+      clientInvoices[invoice.client_id]!.push(invoice)
     }
   }
 

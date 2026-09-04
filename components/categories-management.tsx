@@ -275,7 +275,13 @@ export function CategoriesManagement({ priceCategories }: CategoriesManagementPr
       )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {priceCategories.map((category) => (
+        {[...priceCategories]
+          .sort(
+            (a, b) =>
+              new Date(b.created_at || 0).getTime() -
+              new Date(a.created_at || 0).getTime(),
+          )
+          .map((category) => (
           <Card key={category.id} className={!category.is_active ? "opacity-60" : ""}>
             <CardContent className="pt-6">
               <div className="space-y-3">

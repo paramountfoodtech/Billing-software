@@ -36,6 +36,7 @@ interface Invoice {
   credit_applied?: string;
   notes: string | null;
   total_birds?: number;
+  total_skinless_weight?: number | null;
   clients: {
     name: string;
     email: string;
@@ -56,7 +57,6 @@ interface Invoice {
     line_total: string;
     bird_count: number | null;
     per_bird_adjustment: string | null;
-    skinless_weight: string | number | null;
   }>;
 }
 
@@ -102,11 +102,12 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
     0,
   );
 
-  // total skinless weight (kg) is sum of item skinless_weight
-  const totalSkinlessWeight = invoice.invoice_items.reduce(
-    (sum, item) => sum + Number(item.skinless_weight || 0),
-    0,
-  );
+  // invoice-level skinless weight and yielding %
+  const invoiceSkinlessWeight = Number(invoice.total_skinless_weight || 0);
+  const yieldingPct =
+    invoiceSkinlessWeight > 0 && totalWeight > 0
+      ? (invoiceSkinlessWeight / totalWeight) * 100
+      : null;
 
   const handlePrint = () => {
     setIsPrinting(true);
@@ -282,11 +283,29 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
                 <td></td>
                 <td></td>
               </tr>
-              {totalSkinlessWeight > 0 && (
+              {invoiceSkinlessWeight > 0 && (
                 <tr>
-                  <td className="py-2 font-semibold">Total skinless weight (kgs):</td>
-                  <td className="text-right font-semibold">
-                    {totalSkinlessWeight.toFixed(2)}
+                  <td className="py-1 text-sm text-muted-foreground">Skinless weight (kgs):</td>
+                  <td className="text-right text-sm text-muted-foreground">
+                    {invoiceSkinlessWeight.toFixed(2)}
+                  </td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              )}
+              {yieldingPct !== null && (
+                <tr>
+                  <td className="py-1 text-sm font-semibold">Yielding %:</td>
+                  <td
+                    className={`text-right text-sm font-semibold ${
+                      yieldingPct >= 70
+                        ? "text-green-600"
+                        : yieldingPct >= 55
+                          ? "text-amber-600"
+                          : "text-red-600"
+                    }`}
+                  >
+                    {yieldingPct.toFixed(1)}%
                   </td>
                   <td></td>
                   <td></td>

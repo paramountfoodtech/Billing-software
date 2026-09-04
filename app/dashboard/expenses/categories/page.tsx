@@ -31,7 +31,7 @@ export default async function ExpenseCategoriesPage() {
     `,
     )
     .eq("organization_id", profile.organization_id)
-    .order("position", { ascending: true });
+    .order("created_at", { ascending: false });
 
   return (
     <DashboardPageWrapper title="Expense Categories">

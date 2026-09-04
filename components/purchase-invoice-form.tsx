@@ -158,9 +158,18 @@ export function PurchaseInvoiceForm({
   const [originalChallanIds] = useState<string[]>(seedChallanIds);
   const [totalWeightInput, setTotalWeightInput] = useState(
     initialInvoice
-      ? String(initialInvoice.total_weight_kg)
+      ? String(
+          Number.isFinite(Number(initialInvoice.total_weight_kg))
+            ? (
+                Math.round(
+                  (Number(initialInvoice.total_weight_kg) + Number.EPSILON) *
+                    100,
+                ) / 100
+              ).toFixed(2)
+            : initialInvoice.total_weight_kg,
+        )
       : seedChallans.length > 0
-        ? String(sumChallanWeightKg(seedChallans))
+        ? sumChallanWeightKg(seedChallans).toFixed(2)
         : "",
   );
   const [totalBirdsInput, setTotalBirdsInput] = useState(
@@ -317,7 +326,7 @@ export function PurchaseInvoiceForm({
     }
     if (selectedChallans.length === 0) return;
     setPurchaserId(selectedChallans[0].purchaser_id);
-    setTotalWeightInput(String(sumChallanWeightKg(selectedChallans)));
+    setTotalWeightInput(sumChallanWeightKg(selectedChallans).toFixed(2));
     setTotalBirdsInput(String(sumChallanBirds(selectedChallans)));
   }, [selectedChallans]);
 
@@ -343,7 +352,8 @@ export function PurchaseInvoiceForm({
     });
   };
 
-  const totalWeight = Number(totalWeightInput) || 0;
+  const totalWeight =
+    Math.round(((Number(totalWeightInput) || 0) + Number.EPSILON) * 100) / 100;
   const totalBirds = Math.max(0, Math.round(Number(totalBirdsInput) || 0));
   const average =
     totalBirds > 0 && totalWeight > 0 ? totalWeight / totalBirds : null;
@@ -925,11 +935,11 @@ export function PurchaseInvoiceForm({
               <Input
                 id="total_weight"
                 type="number"
-                step="0.001"
+                step="0.01"
                 min="0"
                 value={totalWeightInput}
                 onChange={(e) => setTotalWeightInput(e.target.value)}
-                placeholder="0.000"
+                placeholder="0.00"
                 readOnly={hasLinkedChallans}
                 className={hasLinkedChallans ? "bg-muted" : undefined}
               />

@@ -41,7 +41,8 @@ export default async function InvoicesPage() {
         `
         *,
         clients(name, email),
-        profiles!invoices_created_by_fkey(full_name)
+        profiles!invoices_created_by_fkey(full_name),
+        invoice_items(quantity)
       `,
       )
       .order("created_at", { ascending: false })

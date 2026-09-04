@@ -71,7 +71,9 @@ export function ExpenseCategoriesManagement({
   }>(null);
 
   const sortedCategories = [...categories].sort(
-    (a, b) => (a.position ?? 0) - (b.position ?? 0),
+    (a, b) =>
+      new Date(b.created_at || 0).getTime() -
+      new Date(a.created_at || 0).getTime(),
   );
 
   const handleAdd = async (e: React.FormEvent) => {

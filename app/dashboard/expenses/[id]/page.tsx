@@ -107,10 +107,26 @@ export default async function ExpenseDetailPage({
                 </p>
               </div>
             )}
-            <div className="sm:col-span-2">
-              <p className="text-muted-foreground">Description</p>
-              <p className="font-medium">{entry.description}</p>
-            </div>
+            {entry.payment_method && (
+              <div>
+                <p className="text-muted-foreground">Payment Mode</p>
+                <p className="font-medium capitalize">
+                  {entry.payment_method.replace("_", " ")}
+                </p>
+              </div>
+            )}
+            {entry.reference_number && (
+              <div>
+                <p className="text-muted-foreground">Reference Number</p>
+                <p className="font-medium">{entry.reference_number}</p>
+              </div>
+            )}
+            {entry.description && entry.description !== category?.name && (
+              <div className="sm:col-span-2">
+                <p className="text-muted-foreground">Description</p>
+                <p className="font-medium">{entry.description}</p>
+              </div>
+            )}
           </div>
 
           <div className="border-t pt-4 space-y-2 text-sm">

@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
   type ExpenseDiscountType,
 } from "@/lib/expense-calculations";
 import { canEdit } from "@/lib/permissions";
+import { isPaymentReferenceDuplicate } from "@/lib/payment-reference";
 
 export interface ExpenseCategoryOption {
   id: string;
@@ -37,13 +38,15 @@ export interface ExpenseEntryInitial {
   vendor_invoice_number: string | null;
   category_id: string;
   issue_date: string;
-  description: string;
+  description?: string;
   units: string | number;
   unit_cost: string | number;
   gst_amount: string | number;
   discount_type: ExpenseDiscountType;
   discount_value: string | number;
   entry_month: string | null;
+  payment_method?: string | null;
+  reference_number?: string | null;
   notes: string | null;
   status: string;
 }
@@ -58,6 +61,14 @@ const discountTypeOptions = [
   { value: "none", label: "No discount" },
   { value: "percent", label: "Discount %" },
   { value: "flat", label: "Flat discount (₹)" },
+];
+
+const paymentMethodOptions = [
+  { value: "cash", label: "Cash" },
+  { value: "bank_transfer", label: "Bank Transfer" },
+  { value: "check", label: "Check" },
+  { value: "credit_card", label: "Credit Card" },
+  { value: "other", label: "Other" },
 ];
 
 export function ExpenseEntryForm({
@@ -87,9 +98,6 @@ export function ExpenseEntryForm({
   const [issueDate, setIssueDate] = useState(
     initialEntry?.issue_date || getIndianToday(),
   );
-  const [description, setDescription] = useState(
-    initialEntry?.description || "",
-  );
   const [entryMonth, setEntryMonth] = useState(() => {
     if (initialEntry?.entry_month) return initialEntry.entry_month;
     const dateForMonth = initialEntry?.issue_date || getIndianToday();
@@ -116,6 +124,16 @@ export function ExpenseEntryForm({
       ? String(Number(initialEntry.discount_value))
       : "",
   );
+  const [paymentMethod, setPaymentMethod] = useState(
+    initialEntry?.payment_method || "bank_transfer",
+  );
+  const [referenceNumber, setReferenceNumber] = useState(
+    initialEntry?.reference_number || "",
+  );
+  const [isReferenceDuplicate, setIsReferenceDuplicate] = useState(false);
+  const [isCheckingReference, setIsCheckingReference] = useState(false);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const hasMountedCashRef = useRef(false);
   const [notes, setNotes] = useState(initialEntry?.notes || "");
 
   const today = getIndianToday();
@@ -130,6 +148,91 @@ export function ExpenseEntryForm({
   }));
 
   const selectedCategory = selectableCategories.find((c) => c.id === categoryId);
+
+  useEffect(() => {
+    const fetchOrg = async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", user.id)
+        .single();
+      if (profile?.organization_id) {
+        setOrganizationId(profile.organization_id);
+      }
+    };
+    fetchOrg();
+  }, []);
+
+  // Auto-generate reference number for cash payments
+  useEffect(() => {
+    if (!hasMountedCashRef.current) {
+      hasMountedCashRef.current = true;
+      if (!isEditMode && paymentMethod === "cash" && !referenceNumber) {
+        const timestamp = Date.now();
+        const randomNum = Math.floor(Math.random() * 1000)
+          .toString()
+          .padStart(3, "0");
+        setReferenceNumber(`CASH-${timestamp}-${randomNum}`);
+      }
+      return;
+    }
+
+    if (paymentMethod === "cash") {
+      const timestamp = Date.now();
+      const randomNum = Math.floor(Math.random() * 1000)
+        .toString()
+        .padStart(3, "0");
+      setReferenceNumber(`CASH-${timestamp}-${randomNum}`);
+    } else {
+      if (referenceNumber.startsWith("CASH-")) {
+        setReferenceNumber("");
+      }
+    }
+  }, [paymentMethod]);
+
+  // Check for duplicate reference numbers
+  useEffect(() => {
+    let isActive = true;
+    const normalized = referenceNumber.trim();
+
+    if (!normalized || !organizationId) {
+      setIsReferenceDuplicate(false);
+      setIsCheckingReference(false);
+      return;
+    }
+
+    setIsCheckingReference(true);
+    const timer = setTimeout(async () => {
+      const supabase = createClient();
+      const { isDuplicate, error } = await isPaymentReferenceDuplicate(
+        supabase,
+        organizationId,
+        normalized,
+        isEditMode && initialEntry?.id
+          ? { table: "expense_entries", id: initialEntry.id }
+          : undefined,
+      );
+
+      if (!isActive) return;
+
+      if (error) {
+        setIsReferenceDuplicate(false);
+      } else {
+        setIsReferenceDuplicate(isDuplicate);
+      }
+      setIsCheckingReference(false);
+    }, 350);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timer);
+    };
+  }, [referenceNumber, organizationId, isEditMode, initialEntry?.id]);
 
   useEffect(() => {
     if (!categoryId && defaultCategory) {
@@ -234,15 +337,30 @@ export function ExpenseEntryForm({
         throw new Error("User must belong to an organization");
       }
 
-      if (isEditMode && !canEdit(profile.role)) {
-        throw new Error("Only Super Admin can edit expense entries");
+      if (paymentMethod !== "cash" && !referenceNumber.trim()) {
+        toast({
+          variant: "destructive",
+          title: "Missing reference number",
+          description: "Please enter a reference number for the selected payment mode.",
+        });
+        return;
+      }
+
+      if (isReferenceDuplicate) {
+        toast({
+          variant: "destructive",
+          title: "Duplicate reference number",
+          description:
+            "This reference number already exists in payments or expenses. Please enter a unique reference.",
+        });
+        return;
       }
 
       const payload = {
         vendor_invoice_number: vendorInvoiceNumber.trim() || null,
         category_id: categoryId,
         issue_date: issueDate,
-        description: description.trim(),
+        description: selectedCategory?.name || "Expense",
         units: Number(units) || 0,
         unit_cost: Number(unitCost) || 0,
         gst_amount: Number(gstAmount) || 0,
@@ -252,6 +370,8 @@ export function ExpenseEntryForm({
         subtotal_amount: amounts.subtotal,
         total_amount: amounts.totalAmount,
         entry_month: entryMonth,
+        payment_method: paymentMethod,
+        reference_number: referenceNumber.trim() || null,
         notes: notes.trim() || null,
         updated_at: new Date().toISOString(),
       };
@@ -259,15 +379,24 @@ export function ExpenseEntryForm({
       let entryId = initialEntry?.id;
 
       if (isEditMode && initialEntry) {
-        const { error } = await supabase
+        let updateRes = await supabase
           .from("expense_entries")
           .update(payload)
           .eq("id", initialEntry.id)
           .eq("organization_id", profile.organization_id);
 
-        if (error) throw error;
+        if (updateRes.error && updateRes.error.code === "42703") {
+          const { payment_method, reference_number, ...fallbackPayload } = payload;
+          updateRes = await supabase
+            .from("expense_entries")
+            .update(fallbackPayload)
+            .eq("id", initialEntry.id)
+            .eq("organization_id", profile.organization_id);
+        }
+
+        if (updateRes.error) throw updateRes.error;
       } else {
-        const { data: entry, error } = await supabase
+        let insertRes = await supabase
           .from("expense_entries")
           .insert({
             ...payload,
@@ -280,12 +409,31 @@ export function ExpenseEntryForm({
           .select("id")
           .single();
 
-        if (error) throw error;
-        entryId = entry?.id;
+        if (insertRes.error && insertRes.error.code === "42703") {
+          const { payment_method, reference_number, ...fallbackPayload } = payload;
+          insertRes = await supabase
+            .from("expense_entries")
+            .insert({
+              ...fallbackPayload,
+              entry_number: entryNumber.trim(),
+              status: "recorded",
+              amount_paid: 0,
+              organization_id: profile.organization_id,
+              created_by: user.id,
+            })
+            .select("id")
+            .single();
+        }
+
+        if (insertRes.error) throw insertRes.error;
+        entryId = insertRes.data?.id;
       }
 
       if (entryId) {
         const userName = await getProfileDisplayName(supabase, user.id);
+        const refInfo = referenceNumber.trim()
+          ? ` [Ref: ${referenceNumber.trim()}]`
+          : "";
         await logEntryHistory(supabase, {
           organizationId: profile.organization_id,
           entityType: "expense_entry",
@@ -294,8 +442,8 @@ export function ExpenseEntryForm({
           userId: user.id,
           userName,
           summary: isEditMode
-            ? `Updated ${selectedCategory?.name || "expense"}: ${description.trim()}`
-            : `${selectedCategory?.name || "Expense"}: ${description.trim()}`,
+            ? `Updated ${selectedCategory?.name || "expense"}${refInfo}`
+            : `${selectedCategory?.name || "Expense"}${refInfo}`,
         });
       }
 
@@ -415,17 +563,6 @@ export function ExpenseEntryForm({
                 required
               />
             </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="description">Description</Label>
-              <Input
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Enter description for this entry"
-                disabled
-              />
-            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 border-t pt-4">
@@ -498,6 +635,60 @@ export function ExpenseEntryForm({
             )}
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2 border-t pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="payment_method">
+                Payment Mode <span className="text-red-500">*</span>
+              </Label>
+              <SearchableSelect
+                options={paymentMethodOptions}
+                value={paymentMethod}
+                onValueChange={(value) => setPaymentMethod(value)}
+                placeholder="Select payment mode"
+                searchPlaceholder="Type payment mode..."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reference_number">
+                Reference Number
+                {paymentMethod !== "cash" && (
+                  <span className="text-red-500"> *</span>
+                )}
+              </Label>
+              <Input
+                id="reference_number"
+                value={referenceNumber}
+                onChange={(e) => setReferenceNumber(e.target.value)}
+                placeholder={
+                  paymentMethod === "cash"
+                    ? "Auto-generated (optional for cash)"
+                    : "Transaction ID, Check #, UTR, etc."
+                }
+                className={
+                  !isCheckingReference && isReferenceDuplicate
+                    ? "border-red-500 focus-visible:ring-red-500"
+                    : ""
+                }
+              />
+              {isCheckingReference && referenceNumber.trim() && (
+                <p className="text-xs text-muted-foreground">
+                  Checking reference number...
+                </p>
+              )}
+              {!isCheckingReference && isReferenceDuplicate && (
+                <p className="text-xs text-red-600 font-medium">
+                  This reference number already exists in payments or expenses. Please enter a unique reference.
+                </p>
+              )}
+              {paymentMethod === "cash" && (
+                <p className="text-xs text-muted-foreground">
+                  Optional for cash payments. Auto-populated for tracking.
+                </p>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea
@@ -543,7 +734,10 @@ export function ExpenseEntryForm({
                 Cancel
               </Link>
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button
+              type="submit"
+              disabled={isLoading || isReferenceDuplicate || isCheckingReference}
+            >
               {isLoading && <Spinner className="mr-2 h-4 w-4" />}
               {isEditMode ? "Save Changes" : "Create Entry"}
             </Button>

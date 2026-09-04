@@ -29,7 +29,7 @@ export default async function CategoriesPage() {
     .from("price_categories")
     .select("*, profiles!price_categories_created_by_fkey(full_name)")
     .eq("organization_id", profile.organization_id)
-    .order("name", { ascending: true })
+    .order("created_at", { ascending: false })
 
   return (
     <div className="p-6 lg:p-8">

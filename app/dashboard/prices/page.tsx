@@ -38,7 +38,7 @@ export default async function PricesPage() {
       .from("price_categories")
       .select("*")
       .eq("organization_id", profile.organization_id)
-      .order("position", { ascending: true }),
+      .order("created_at", { ascending: false }),
     supabase
       .from("price_category_history")
       .select("*")

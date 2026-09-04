@@ -132,13 +132,13 @@ export default async function TradeSummaryPage({
         issue_date: string
         total_amount: number | string
         invoice_items:
-          | { quantity: number | string | null; skinless_weight: number | string | null }[]
+          | { quantity: number | string | null }[]
           | null
       }>(async (from, to) => {
         const { data, error } = await supabase
           .from("invoices")
           .select(
-            "id, invoice_number, issue_date, total_amount, invoice_items(quantity, skinless_weight)",
+            "id, invoice_number, issue_date, total_amount, invoice_items(quantity)",
           )
           .eq("client_id", selectedClientId)
           .neq("status", "cancelled")
@@ -175,8 +175,7 @@ export default async function TradeSummaryPage({
       const items = inv.invoice_items || []
       const weightKg = items.reduce((sum, item) => {
         const qty = Number(item.quantity || 0)
-        const skinless = Number(item.skinless_weight || 0)
-        return sum + (skinless > 0 ? skinless : qty)
+        return sum + qty
       }, 0)
       const amount = Number(inv.total_amount || 0)
       return {

@@ -163,6 +163,12 @@ export function ClientsTable({ clients, userRole }: ClientsTableProps) {
         if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
         return 0;
       });
+    } else {
+      filtered.sort(
+        (a, b) =>
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime(),
+      );
     }
 
     return filtered;

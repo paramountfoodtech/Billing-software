@@ -85,6 +85,17 @@ export function PaymentForm({
   const clientInvoices = selectedClientId
     ? invoices.filter((inv) => inv.client_id === selectedClientId)
     : invoices;
+  // Format date as DD/MM/YYYY and get weekday name
+  const formatInvoiceLabel = (invoice: Invoice) => {
+    if (!invoice.issue_date) return invoice.invoice_number;
+    const d = new Date(invoice.issue_date);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const weekday = d.toLocaleDateString("en-IN", { weekday: "long" });
+    return `${invoice.invoice_number}_${dd}/${mm}/${yyyy}_${weekday}`;
+  };
+
   const invoiceOptions = invoices.map((invoice) => {
     const invoiceBalance = Number(invoice.total_amount) - Number(invoice.amount_paid);
     const clientName = Array.isArray(invoice.clients)
@@ -93,7 +104,7 @@ export function PaymentForm({
 
     return {
       value: invoice.id,
-      label: `${invoice.invoice_number} - ${clientName || "Unknown client"} (₹${invoiceBalance.toFixed(2)} due)`,
+      label: `${formatInvoiceLabel(invoice)} - ${clientName || "Unknown client"} (₹${invoiceBalance.toFixed(2)} due)`,
     };
   });
   const paymentMethodOptions = [
@@ -577,7 +588,7 @@ export function PaymentForm({
                               className="flex justify-between items-center text-sm pb-2 border-b border-amber-200 last:border-b-0"
                             >
                               <span className="font-medium">
-                                {inv.invoice_number}
+                                {formatInvoiceLabel(inv)}
                               </span>
                               <span className="text-amber-700 font-semibold">
                                 ₹{pending.toFixed(2)} due

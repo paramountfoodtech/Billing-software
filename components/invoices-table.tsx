@@ -56,6 +56,7 @@ interface Invoice {
   due_date: string;
   due_days_type?: string | null;
   total_birds?: number | null;
+  total_skinless_weight?: number | null;
   status: string;
   total_amount: string;
   amount_paid: string;
@@ -68,6 +69,7 @@ interface Invoice {
   profiles?: {
     full_name: string;
   } | null;
+  invoice_items?: Array<{ quantity: string | number | null }> | null;
 }
 
 interface InvoicesTableProps {
@@ -199,6 +201,22 @@ export function InvoicesTable({
             aVal = a.status;
             bVal = b.status;
             break;
+          case "total_qty":
+            aVal = (a.invoice_items || []).reduce((s, it) => s + Number(it.quantity || 0), 0);
+            bVal = (b.invoice_items || []).reduce((s, it) => s + Number(it.quantity || 0), 0);
+            break;
+          case "yield_pct":
+            aVal = a.total_skinless_weight && (a.invoice_items || []).reduce((s, it) => s + Number(it.quantity || 0), 0) > 0
+              ? (Number(a.total_skinless_weight) / (a.invoice_items || []).reduce((s, it) => s + Number(it.quantity || 0), 0)) * 100
+              : -1;
+            bVal = b.total_skinless_weight && (b.invoice_items || []).reduce((s, it) => s + Number(it.quantity || 0), 0) > 0
+              ? (Number(b.total_skinless_weight) / (b.invoice_items || []).reduce((s, it) => s + Number(it.quantity || 0), 0)) * 100
+              : -1;
+            break;
+          case "skinless_wt":
+            aVal = Number(a.total_skinless_weight || -1);
+            bVal = Number(b.total_skinless_weight || -1);
+            break;
           default:
             return 0;
         }
@@ -207,6 +225,12 @@ export function InvoicesTable({
         if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
         return 0;
       });
+    } else {
+      filtered.sort(
+        (a, b) =>
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime(),
+      );
     }
 
     return filtered;
@@ -260,20 +284,31 @@ export function InvoicesTable({
 
   const handleExport = () => {
     // Enrich invoices with due amount calculation and format due_date based on due_days_type
-    const enrichedInvoices = processedInvoices.map((invoice) => ({
-      ...invoice,
-      due_amount: (
-        Number(invoice.total_amount) - Number(invoice.amount_paid)
-      ).toFixed(2),
-      due_date_display:
-        invoice.due_days_type === "end_of_month"
-          ? "End of the billed month"
-          : formatIndianDate(invoice.due_date, {
-              year: "numeric",
-              month: "2-digit",
-              day: "2-digit",
-            }),
-    }));
+    const enrichedInvoices = processedInvoices.map((invoice) => {
+      const totalQty = (invoice.invoice_items || []).reduce(
+        (s, it) => s + Number(it.quantity || 0),
+        0,
+      );
+      const sw = Number(invoice.total_skinless_weight || 0);
+      const yieldPct = sw > 0 && totalQty > 0 ? (sw / totalQty) * 100 : null;
+      return {
+        ...invoice,
+        due_amount: (
+          Number(invoice.total_amount) - Number(invoice.amount_paid)
+        ).toFixed(2),
+        due_date_display:
+          invoice.due_days_type === "end_of_month"
+            ? "End of the billed month"
+            : formatIndianDate(invoice.due_date, {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+              }),
+        total_qty_fmt: totalQty > 0 ? totalQty.toFixed(2) : "",
+        skinless_wt_fmt: sw > 0 ? sw.toFixed(2) : "",
+        yield_pct_fmt: yieldPct !== null ? `${yieldPct.toFixed(1)}%` : "",
+      };
+    });
 
     const columns: ExportColumn[] = [
       { key: "invoice_number", label: "Invoice Number" },
@@ -311,6 +346,18 @@ export function InvoicesTable({
         label: "Due Amount",
       },
       {
+        key: "total_qty_fmt",
+        label: "Total Qty (kg)",
+      },
+      {
+        key: "skinless_wt_fmt",
+        label: "Skinless Wt (kg)",
+      },
+      {
+        key: "yield_pct_fmt",
+        label: "Yield %",
+      },
+      {
         key: "status",
         label: "Status",
         formatter: (status) =>
@@ -329,39 +376,53 @@ export function InvoicesTable({
   const handleExportPDF = async () => {
     setIsExporting("pdf");
     try {
-    const enrichedInvoices = processedInvoices.map((invoice) => ({
-      ...invoice,
-      client_name: invoice.clients.name,
-      issue_date_fmt: formatIndianDate(invoice.issue_date, {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }),
-      due_date_display:
-        invoice.due_days_type === "end_of_month"
-          ? "End of billed month"
-          : formatIndianDate(invoice.due_date, {
-              year: "numeric",
-              month: "2-digit",
-              day: "2-digit",
-            }),
-      total_fmt: `Rs.${Number(invoice.total_amount).toFixed(2)}`,
-      paid_fmt: `Rs.${Number(invoice.amount_paid).toFixed(2)}`,
-      due_fmt: `Rs.${(Number(invoice.total_amount) - Number(invoice.amount_paid)).toFixed(2)}`,
-      status_label:
-        statusConfig[invoice.status as keyof typeof statusConfig]?.label ||
-        invoice.status,
-    }));
+    const enrichedInvoices = processedInvoices.map((invoice) => {
+      const totalQty = (invoice.invoice_items || []).reduce(
+        (s, it) => s + Number(it.quantity || 0),
+        0,
+      );
+      const sw = Number(invoice.total_skinless_weight || 0);
+      const yieldPct = sw > 0 && totalQty > 0 ? (sw / totalQty) * 100 : null;
+      return {
+        ...invoice,
+        client_name: invoice.clients.name,
+        issue_date_fmt: formatIndianDate(invoice.issue_date, {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }),
+        due_date_display:
+          invoice.due_days_type === "end_of_month"
+            ? "End of billed month"
+            : formatIndianDate(invoice.due_date, {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+              }),
+        total_fmt: `Rs.${Number(invoice.total_amount).toFixed(2)}`,
+        paid_fmt: `Rs.${Number(invoice.amount_paid).toFixed(2)}`,
+        due_fmt: `Rs.${(Number(invoice.total_amount) - Number(invoice.amount_paid)).toFixed(2)}`,
+        status_label:
+          statusConfig[invoice.status as keyof typeof statusConfig]?.label ||
+          invoice.status,
+        total_qty_fmt: totalQty > 0 ? totalQty.toFixed(2) : "—",
+        skinless_wt_fmt: sw > 0 ? sw.toFixed(2) : "—",
+        yield_pct_fmt: yieldPct !== null ? `${yieldPct.toFixed(1)}%` : "—",
+      };
+    });
 
     const pdfColumns: ExportColumn[] = [
       { key: "invoice_number", label: "Invoice #", widthFrac: 0.09 },
-      { key: "client_name", label: "Client", widthFrac: 0.24 },
-      { key: "issue_date_fmt", label: "Issue Date", widthFrac: 0.1 },
-      { key: "due_date_display", label: "Due Date", widthFrac: 0.12 },
-      { key: "total_fmt", label: "Total", widthFrac: 0.1, align: "right" },
-      { key: "paid_fmt", label: "Paid", widthFrac: 0.1, align: "right" },
-      { key: "due_fmt", label: "Due", widthFrac: 0.1, align: "right" },
-      { key: "status_label", label: "Status", widthFrac: 0.15 },
+      { key: "client_name", label: "Client", widthFrac: 0.18 },
+      { key: "issue_date_fmt", label: "Issue Date", widthFrac: 0.09 },
+      { key: "due_date_display", label: "Due Date", widthFrac: 0.1 },
+      { key: "total_fmt", label: "Total", widthFrac: 0.09, align: "right" },
+      { key: "paid_fmt", label: "Paid", widthFrac: 0.09, align: "right" },
+      { key: "due_fmt", label: "Due", widthFrac: 0.09, align: "right" },
+      { key: "total_qty_fmt", label: "Qty (kg)", widthFrac: 0.07, align: "right" },
+      { key: "skinless_wt_fmt", label: "Skinless (kg)", widthFrac: 0.08, align: "right" },
+      { key: "yield_pct_fmt", label: "Yield %", widthFrac: 0.07, align: "right" },
+      { key: "status_label", label: "Status", widthFrac: 0.05 },
     ];
 
     const rangeLabel =
@@ -566,10 +627,6 @@ export function InvoicesTable({
       // Calculate totals for the invoice
       const totalWeight = invoice.invoice_items.reduce(
         (sum: number, item: any) => sum + Number(item.quantity || 0),
-        0,
-      );
-      const totalSkinlessWeight = invoice.invoice_items.reduce(
-        (sum: number, item: any) => sum + Number(item.skinless_weight || 0),
         0,
       );
       const totalBirds = Number(invoice.total_birds || 0);
@@ -788,9 +845,11 @@ export function InvoicesTable({
       pdf.text(totalWeight.toFixed(2), colX.qty + colWidths.qty - 1, y, { align: "right" });
       y += 3;
 
-      if (totalSkinlessWeight > 0) {
-        pdf.text("Total skinless weight (kgs):", colX.description + 1, y);
-        pdf.text(totalSkinlessWeight.toFixed(2), colX.qty + colWidths.qty - 1, y, { align: "right" });
+      // Yield % row — only if invoice has total_skinless_weight
+      const invoiceSkinlessWt = Number((invoice as any).total_skinless_weight || 0);
+      if (invoiceSkinlessWt > 0 && totalWeight > 0) {
+        const yieldPct = (invoiceSkinlessWt / totalWeight) * 100;
+        pdf.text(`Skinless weight: ${invoiceSkinlessWt.toFixed(2)} kg  |  Yield: ${yieldPct.toFixed(1)}%`, colX.description + 1, y);
         y += 3;
       }
 
@@ -1040,6 +1099,27 @@ export function InvoicesTable({
                     <SortIcon column="due_amount" />
                   </TableHead>
                   <TableHead
+                    className="hidden xl:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                    onClick={() => handleSort("total_qty")}
+                  >
+                    Total Qty
+                    <SortIcon column="total_qty" />
+                  </TableHead>
+                  <TableHead
+                    className="hidden xl:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                    onClick={() => handleSort("skinless_wt")}
+                  >
+                    Skinless Wt
+                    <SortIcon column="skinless_wt" />
+                  </TableHead>
+                  <TableHead
+                    className="hidden xl:table-cell cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
+                    onClick={() => handleSort("yield_pct")}
+                  >
+                    Yield %
+                    <SortIcon column="yield_pct" />
+                  </TableHead>
+                  <TableHead
                     className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
                     onClick={() => handleSort("status")}
                   >
@@ -1077,6 +1157,9 @@ export function InvoicesTable({
                   <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
                   <TableHead className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
                   <TableHead className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+                  <TableHead className="hidden xl:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+                  <TableHead className="hidden xl:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
+                  <TableHead className="hidden xl:table-cell px-2 sm:px-4 py-2 sm:py-3"></TableHead>
                   <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
                     <Input
                       placeholder="Filter..."
@@ -1093,7 +1176,7 @@ export function InvoicesTable({
               <TableBody>
                 {pagination.paginatedItems.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
+                    <TableCell colSpan={13} className="text-center text-muted-foreground py-12">
                       No invoices found for the selected filters.
                     </TableCell>
                   </TableRow>
@@ -1204,6 +1287,43 @@ export function InvoicesTable({
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
+                      </TableCell>
+                      {/* Total Qty */}
+                      <TableCell className="hidden xl:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs">
+                        {(() => {
+                          const qty = (invoice.invoice_items || []).reduce(
+                            (s: number, it: { quantity: string | number | null }) => s + Number(it.quantity || 0),
+                            0,
+                          );
+                          return qty > 0 ? qty.toFixed(2) : "—";
+                        })()}
+                      </TableCell>
+                      {/* Skinless Weight */}
+                      <TableCell className="hidden xl:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs">
+                        {invoice.total_skinless_weight != null && Number(invoice.total_skinless_weight) > 0
+                          ? Number(invoice.total_skinless_weight).toFixed(2)
+                          : "—"}
+                      </TableCell>
+                      {/* Yield % */}
+                      <TableCell className="hidden xl:table-cell px-2 sm:px-4 py-2 sm:py-3 text-xs">
+                        {(() => {
+                          const totalQty = (invoice.invoice_items || []).reduce(
+                            (s: number, it: { quantity: string | number | null }) => s + Number(it.quantity || 0),
+                            0,
+                          );
+                          const sw = Number(invoice.total_skinless_weight || 0);
+                          if (sw > 0 && totalQty > 0) {
+                            const pct = (sw / totalQty) * 100;
+                            const colorClass =
+                              pct >= 70
+                                ? "text-green-600 font-semibold"
+                                : pct >= 55
+                                  ? "text-amber-600 font-semibold"
+                                  : "text-red-600 font-semibold";
+                            return <span className={colorClass}>{pct.toFixed(1)}%</span>;
+                          }
+                          return "—";
+                        })()}
                       </TableCell>
                       <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
                         <Badge
