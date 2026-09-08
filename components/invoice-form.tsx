@@ -2977,9 +2977,10 @@ export function InvoiceForm({
                 (!autoSequenceActive &&
                   (!!invoiceNumberFormatError || isInvoiceNumberDuplicate)) ||
                 (clientPerBirdEnabled && globalBirdCount <= 0) ||
-                !globalSkinlessWeight ||
-                isNaN(Number(globalSkinlessWeight)) ||
-                Number(globalSkinlessWeight) < 0
+                (hasLiveCategoryProduct &&
+                  (!globalSkinlessWeight ||
+                    isNaN(Number(globalSkinlessWeight)) ||
+                    Number(globalSkinlessWeight) < 0))
               }
             >
               {isLoading && savingAs !== "draft" && (
