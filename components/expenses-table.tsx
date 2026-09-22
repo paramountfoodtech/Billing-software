@@ -480,10 +480,10 @@ export function ExpensesTable({
                     </TableCell>
                     <TableCell>
                       {entry.entry_month
-                        ? new Date(`${entry.entry_month}-01`).toLocaleDateString(
-                            "en-IN",
-                            { month: "short", year: "numeric" },
-                          )
+                        ? formatIndianDate(`${entry.entry_month}-01`, {
+                            month: "short",
+                            year: "numeric",
+                          })
                         : "—"}
                     </TableCell>
                     <TableCell className="text-right font-medium">

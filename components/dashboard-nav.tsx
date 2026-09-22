@@ -231,7 +231,7 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             href: "/dashboard/expenses",
             label: "Expenses",
             icon: CircleDollarSign,
-            roles: ["super_admin", "admin"],
+            roles: ["super_admin", "admin", "accountant"],
           },
           {
             href: "/dashboard/expenses/reports",

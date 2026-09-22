@@ -99,7 +99,8 @@ export default async function ReportsPage({
 
     supabase
       .from("payments")
-      .select("amount, invoices(client_id)")
+      .select("amount, client_id")
+      .eq("status", "completed")
       .gte("payment_date", periodStart)
       .lte("payment_date", periodEnd),
   ])
@@ -168,8 +169,7 @@ export default async function ReportsPage({
   }
 
   for (const payment of periodPayments) {
-    const clientId = (payment.invoices as unknown as { client_id: string } | null)
-      ?.client_id
+    const clientId = payment.client_id
     if (!clientId) continue
     const row = clientMap.get(clientId)
     if (!row) continue

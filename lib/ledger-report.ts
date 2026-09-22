@@ -81,7 +81,7 @@ export function buildLedgerTransactions(
 
   const paymentRows: LedgerTxnRow[] = []
   for (const p of payments) {
-    if (p.status === "failed" || p.status === "refunded" || !p.payment_date) {
+    if (p.status !== "completed" || !p.payment_date) {
       continue
     }
     const amt = Number(p.amount || 0)

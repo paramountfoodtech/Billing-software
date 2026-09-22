@@ -3,6 +3,10 @@
 import { useState, useCallback } from "react";
 import { ClientSelector } from "@/components/client-selector";
 import { PaymentsTable } from "@/components/payments-table";
+import {
+  getPaymentLinkedInvoices,
+  type PaymentWithAllocations,
+} from "@/components/payment-invoice-links";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   FinancialYearSelector,
@@ -17,7 +21,8 @@ interface Client {
 
 interface Payment {
   id: string;
-  invoice_id: string;
+  invoice_id: string | null;
+  client_id?: string;
   amount: string;
   payment_date: string;
   payment_method: string;
@@ -33,7 +38,11 @@ interface Payment {
     clients: {
       name: string;
     };
-  };
+  } | null;
+  client?: {
+    name: string;
+  } | null;
+  payment_allocations?: PaymentWithAllocations["payment_allocations"];
 }
 
 interface Invoice {
@@ -65,7 +74,8 @@ export function PaymentsPageClient({
 
   // Filter payments by client, financial year, and custom date range
   const filteredPayments = payments.filter((payment) => {
-    if (selectedClientId && payment.invoices?.client_id !== selectedClientId) return false;
+    const paymentClientId = payment.client_id || payment.invoices?.client_id;
+    if (selectedClientId && paymentClientId !== selectedClientId) return false;
 
     const { start, end } = getFinancialYearDateRange(selectedFY);
     const paymentDate = payment.payment_date;
@@ -174,14 +184,21 @@ export function PaymentsPageClient({
           <Card className="bg-blue-50 border-blue-200">
             <CardContent className="pt-6">
               <div className="space-y-2">
-                {filteredPayments.slice(0, 5).map((payment) => (
+                {filteredPayments.slice(0, 5).map((payment) => {
+                  const linked = getPaymentLinkedInvoices(payment);
+                  return (
                   <div
                     key={payment.id}
                     className="flex justify-between items-center text-sm pb-2 border-b border-blue-100 last:border-b-0"
                   >
                     <div>
                       <p className="font-medium">
-                        {payment.invoices?.invoice_number}
+                        {linked[0]?.invoice_number || "-"}
+                        {linked.length > 1 && (
+                          <span className="ml-1 text-xs font-semibold text-blue-700">
+                            +{linked.length - 1}
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {payment.payment_date}
@@ -195,7 +212,8 @@ export function PaymentsPageClient({
                       })}
                     </p>
                   </div>
-                ))}
+                  );
+                })}
                 {filteredPayments.length === 0 && (
                   <p className="text-sm text-muted-foreground">
                     No payments recorded yet

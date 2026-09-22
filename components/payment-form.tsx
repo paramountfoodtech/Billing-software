@@ -96,17 +96,23 @@ export function PaymentForm({
     return `${invoice.invoice_number}_${dd}/${mm}/${yyyy}_${weekday}`;
   };
 
-  const invoiceOptions = invoices.map((invoice) => {
-    const invoiceBalance = Number(invoice.total_amount) - Number(invoice.amount_paid);
-    const clientName = Array.isArray(invoice.clients)
-      ? invoice.clients[0]?.name
-      : invoice.clients?.name;
+  const invoiceOptions = invoices
+    .filter(
+      (invoice) =>
+        Number(invoice.total_amount) - Number(invoice.amount_paid) >= 0.01,
+    )
+    .map((invoice) => {
+      const invoiceBalance =
+        Number(invoice.total_amount) - Number(invoice.amount_paid);
+      const clientName = Array.isArray(invoice.clients)
+        ? invoice.clients[0]?.name
+        : invoice.clients?.name;
 
-    return {
-      value: invoice.id,
-      label: `${formatInvoiceLabel(invoice)} - ${clientName || "Unknown client"} (₹${invoiceBalance.toFixed(2)} due)`,
-    };
-  });
+      return {
+        value: invoice.id,
+        label: `${formatInvoiceLabel(invoice)} - ${clientName || "Unknown client"} (₹${invoiceBalance.toFixed(2)} due)`,
+      };
+    });
   const paymentMethodOptions = [
     { value: "cash", label: "Cash" },
     { value: "bank_transfer", label: "Bank Transfer" },
@@ -274,10 +280,46 @@ export function PaymentForm({
       return;
     }
 
+    const paymentAmount = Number(formData.amount);
+    if (!(paymentAmount > 0)) {
+      toast({
+        variant: "destructive",
+        title: "Invalid amount",
+        description: "Payment amount must be greater than zero.",
+      });
+      return;
+    }
+
+    if (paymentMode === "individual" && selectedInvoice) {
+      const invoiceDue =
+        Number(selectedInvoice.total_amount) - Number(selectedInvoice.amount_paid);
+      if (paymentAmount > invoiceDue + 0.005) {
+        toast({
+          variant: "destructive",
+          title: "Amount exceeds invoice balance",
+          description: `This invoice has ₹${invoiceDue.toFixed(2)} due. Use Bulk Payment to record extra amount as client credit.`,
+        });
+        return;
+      }
+    }
+
+    const targetClientId =
+      paymentMode === "bulk" ? selectedClientId : selectedInvoice?.client_id;
+    if (!targetClientId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          paymentMode === "bulk"
+            ? "Please select a client"
+            : "Please select an invoice",
+      });
+      return;
+    }
+
     setIsLoading(true);
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
-    // Get current user
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -292,222 +334,54 @@ export function PaymentForm({
     }
 
     try {
-      // Get user's organization
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("organization_id")
-        .eq("id", user.id)
-        .single();
-
-      if (!profile?.organization_id) {
-        throw new Error("User must belong to an organization");
-      }
-
       const normalizedReference = formData.reference_number.trim();
-      let paymentId: string | null = null;
 
-      if (normalizedReference) {
-        const { isDuplicate, error: duplicateCheckError } =
-          await isPaymentReferenceDuplicate(
-            supabase,
-            profile.organization_id,
-            normalizedReference,
-          );
+      const { data: result, error: rpcError } = await supabase.rpc(
+        "record_client_payment",
+        {
+          p_client_id: targetClientId,
+          p_invoice_id: paymentMode === "individual" ? formData.invoice_id : null,
+          p_amount: paymentAmount,
+          p_payment_date: formData.payment_date,
+          p_payment_method: formData.payment_method,
+          p_reference_number: normalizedReference || null,
+          p_status: formData.status,
+          p_notes: formData.notes || null,
+        },
+      );
 
-        if (duplicateCheckError) throw duplicateCheckError;
+      if (rpcError) throw rpcError;
 
-        if (isDuplicate) {
-          toast({
-            variant: "destructive",
-            title: "Duplicate payment reference",
-            description:
-              "This payment reference already exists. Please use a unique reference.",
-          });
-          return;
-        }
-      }
+      const summary = result as {
+        payment_id: string;
+        credit_generated: number;
+        credit_balance: number;
+        total_outstanding: number;
+      } | null;
 
-      const paymentAmount = Number(formData.amount);
-
-      if (paymentMode === "bulk" && selectedClientId) {
-        // Bulk payment mode: allocate payment to client's unpaid invoices
-        let remainingAmount = paymentAmount;
-        const unpaidInvoices = clientInvoices
-          .filter((inv) => {
-            const pending = Number(inv.total_amount) - Number(inv.amount_paid);
-            return pending > 0;
-          })
-          .sort(
-            (a, b) =>
-              new Date(a.issue_date || "").getTime() -
-              new Date(b.issue_date || "").getTime(),
-          );
-
-        // Calculate credit that will be generated
-        const totalOutstanding = unpaidInvoices.reduce((sum, inv) => {
-          return sum + (Number(inv.total_amount) - Number(inv.amount_paid));
-        }, 0);
-        const creditToGenerate = Math.max(0, paymentAmount - totalOutstanding);
-
-        // Create a single payment record for tracking
-        const { data: paymentRow, error: paymentError } = await supabase
-          .from("payments")
-          .insert({
-            invoice_id: unpaidInvoices[0]?.id || formData.invoice_id,
-            amount: formData.amount,
-            payment_date: formData.payment_date,
-            payment_method: formData.payment_method,
-            reference_number: normalizedReference || null,
-            status: formData.status,
-            notes: `Bulk payment for client - allocated across ${unpaidInvoices.length} invoices.${creditToGenerate > 0 ? ` ₹${creditToGenerate.toFixed(2)} added as credit.` : ""} ${formData.notes || ""}`,
-            created_by: user.id,
-            organization_id: profile.organization_id,
-            credit_generated: creditToGenerate,
-          })
-          .select("id")
-          .single();
-
-        if (paymentError) throw paymentError;
-        paymentId = paymentRow?.id ?? null;
-
-        // Allocate payment across invoices
-        for (const invoice of unpaidInvoices) {
-          if (remainingAmount <= 0) break;
-
-          const pending =
-            Number(invoice.total_amount) - Number(invoice.amount_paid);
-          const allocationAmount = Math.min(remainingAmount, pending);
-
-          const newAmountPaid = Number(invoice.amount_paid) + allocationAmount;
-          const totalAmount = Number(invoice.total_amount);
-          const paidOff = newAmountPaid >= totalAmount - 0.01;
-          let newStatus = invoice.status;
-          if (paidOff) {
-            newStatus = "paid";
-          } else if (newAmountPaid > 0) {
-            newStatus = "partially_paid";
-          }
-
-          const { error: invoiceError } = await supabase
-            .from("invoices")
-            .update({
-              amount_paid: newAmountPaid,
-              status: newStatus,
-            })
-            .eq("id", invoice.id);
-
-          if (invoiceError) throw invoiceError;
-          remainingAmount -= allocationAmount;
-        }
-
-        // Generate credit if overpayment
-        if (creditToGenerate > 0) {
-          const { data: clientData } = await supabase
-            .from("clients")
-            .select("credit_balance")
-            .eq("id", selectedClientId)
-            .single();
-
-          const currentCredit = Number(clientData?.credit_balance || 0);
-          const { error: creditError } = await supabase
-            .from("clients")
-            .update({ credit_balance: currentCredit + creditToGenerate })
-            .eq("id", selectedClientId);
-
-          if (creditError) throw creditError;
-        }
-
-        toast({
-          variant: "success",
-          title: "Bulk payment recorded",
-          description: `₹${paymentAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} allocated across ${unpaidInvoices.length} invoices.${creditToGenerate > 0 ? ` ₹${creditToGenerate.toFixed(2)} added as credit balance.` : ""}`,
-        });
-      } else {
-        // Individual invoice payment mode
-        if (!selectedInvoice) throw new Error("Please select an invoice");
-
-        // Calculate credit to generate for individual invoice overpayment
-        const invoiceBalance = Number(selectedInvoice.total_amount) - Number(selectedInvoice.amount_paid);
-        const creditToGenerate = Math.max(0, paymentAmount - invoiceBalance);
-
-        // Insert payment
-        const { data: paymentRow, error: paymentError } = await supabase
-          .from("payments")
-          .insert({
-            invoice_id: formData.invoice_id,
-            amount: formData.amount,
-            payment_date: formData.payment_date,
-            payment_method: formData.payment_method,
-            reference_number: normalizedReference || null,
-            status: formData.status,
-            notes: creditToGenerate > 0
-              ? `${formData.notes || ""} ₹${creditToGenerate.toFixed(2)} added as credit.`.trim()
-              : formData.notes || null,
-            created_by: user.id,
-            organization_id: profile.organization_id,
-            credit_generated: creditToGenerate,
-          })
-          .select("id")
-          .single();
-
-        if (paymentError) throw paymentError;
-        paymentId = paymentRow?.id ?? null;
-
-        // Update invoice amount_paid (cap at total_amount)
-        const totalAmount = Number(selectedInvoice.total_amount);
-        const newAmountPaid = Math.min(
-          Number(selectedInvoice.amount_paid) + paymentAmount,
-          totalAmount,
-        );
-        const paidOff = newAmountPaid >= totalAmount - 0.01;
-
-        // Determine new status
-        let newStatus = "recorded";
-        if (paidOff) {
-          newStatus = "paid";
-        } else if (newAmountPaid > 0) {
-          newStatus = "partially_paid";
-        }
-
-        const { error: invoiceError } = await supabase
-          .from("invoices")
-          .update({
-            amount_paid: newAmountPaid,
-            status: newStatus,
-          })
-          .eq("id", formData.invoice_id);
-
-        if (invoiceError) throw invoiceError;
-
-        // Generate credit if overpayment
-        if (creditToGenerate > 0 && selectedInvoice.client_id) {
-          const { data: clientData } = await supabase
-            .from("clients")
-            .select("credit_balance")
-            .eq("id", selectedInvoice.client_id)
-            .single();
-
-          const currentCredit = Number(clientData?.credit_balance || 0);
-          const { error: creditError } = await supabase
-            .from("clients")
-            .update({ credit_balance: currentCredit + creditToGenerate })
-            .eq("id", selectedInvoice.client_id);
-
-          if (creditError) throw creditError;
-        }
-      }
-
-      if (paymentId) {
+      if (summary?.payment_id) {
         const userName = await getProfileDisplayName(supabase, user.id);
         await logEntryHistory(supabase, {
-          organizationId: profile.organization_id,
+          organizationId: organizationId || "",
           entityType: "payment",
-          entityId: paymentId,
+          entityId: summary.payment_id,
           action: "created",
           userId: user.id,
           userName,
         });
       }
+
+      const amountApplied = summary
+        ? paymentAmount - Number(summary.credit_generated || 0)
+        : paymentAmount;
+
+      toast({
+        variant: "success",
+        title: "Payment recorded",
+        description: summary
+          ? `Applied ₹${amountApplied.toFixed(2)} to invoices. ${Number(summary.credit_generated) > 0 ? `₹${Number(summary.credit_generated).toFixed(2)} added as credit. ` : ""}Outstanding: ₹${Number(summary.total_outstanding).toFixed(2)}. Credit balance: ₹${Number(summary.credit_balance).toFixed(2)}.`
+          : "Payment recorded successfully.",
+      });
 
       router.push("/dashboard/payments");
       router.refresh();
@@ -799,10 +673,10 @@ export function PaymentForm({
                           ⚠ Partial payment - balance remains
                         </p>
                       )}
-                      {remainingBalance < 0 && (
-                        <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded">
-                          <p className="text-xs text-purple-700 font-semibold">
-                            💰 ₹{Math.abs(remainingBalance).toFixed(2)} will be added as credit balance for this client
+                      {remainingBalance < -0.005 && (
+                        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                          <p className="text-xs text-red-700 font-semibold">
+                            Amount exceeds this invoice&apos;s balance by ₹{Math.abs(remainingBalance).toFixed(2)}. Use Bulk Payment to record extra amount as client credit.
                           </p>
                         </div>
                       )}
@@ -823,6 +697,11 @@ export function PaymentForm({
                 type="number"
                 step="0.01"
                 min="0.01"
+                max={
+                  paymentMode === "individual" && selectedInvoice
+                    ? Math.max(balance, 0.01).toFixed(2)
+                    : undefined
+                }
                 required
                 value={formData.amount}
                 onChange={(e) =>
@@ -872,6 +751,7 @@ export function PaymentForm({
                 id="payment_date"
                 type="date"
                 required
+                max={getIndianToday()}
                 value={formData.payment_date}
                 onChange={(e) =>
                   setFormData({ ...formData, payment_date: e.target.value })
@@ -955,6 +835,7 @@ export function PaymentForm({
                 isReferenceDuplicate ||
                 !formData.amount ||
                 (paymentMode === "individual" && !formData.invoice_id) ||
+                (paymentMode === "individual" && remainingBalance < -0.005) ||
                 (paymentMode === "bulk" && !selectedClientId)
               }
               className="min-w-36"

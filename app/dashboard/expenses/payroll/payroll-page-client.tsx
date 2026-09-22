@@ -37,10 +37,10 @@ export interface AttendanceRow {
   organization_id: string;
   employee_id: string;
   attendance_month: string;
-  working_days: number;
-  days_present: number;
-  casual_leave: number;
-  loss_of_pay: number;
+  working_days: string;
+  days_present: string;
+  casual_leave: string;
+  loss_of_pay: string;
   status: "draft" | "finalized";
   finalized_by: string | null;
   finalized_at: string | null;
@@ -56,7 +56,7 @@ export interface AttendanceDayRow {
   organization_id: string;
   employee_id: string;
   attendance_date: string;
-  status: "present" | "absent" | "casual_leave";
+  status: "present" | "half_day" | "absent" | "casual_leave";
   created_at: string;
   updated_at: string;
 }
@@ -68,10 +68,10 @@ export interface SalaryRow {
   salary_month: string;
   attendance_id: string | null;
   base_salary: string;
-  working_days: number;
-  days_present: number;
-  casual_leave: number;
-  loss_of_pay: number;
+  working_days: string;
+  days_present: string;
+  casual_leave: string;
+  loss_of_pay: string;
   earned_salary: string;
   lop_deduction: string;
   advance_emi_deduction: string;

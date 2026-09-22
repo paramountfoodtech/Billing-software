@@ -22,6 +22,10 @@ export default async function PurchasersPage() {
 
   const userRole = profile?.role
 
+  if (userRole !== "super_admin" && userRole !== "admin") {
+    redirect("/dashboard")
+  }
+
   const [{ data: purchasers }, { data: invoices }] = await Promise.all([
     supabase
       .from("purchasers")

@@ -26,6 +26,8 @@ export default async function PaymentsPage() {
           `
           *,
           invoices(id, invoice_number, total_amount, amount_paid, status, client_id, clients(name)),
+          client:client_id(name),
+          payment_allocations(amount, allocation_type, invoices(id, invoice_number, issue_date)),
           profiles!payments_created_by_fkey(full_name)
         `,
         )

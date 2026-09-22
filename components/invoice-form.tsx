@@ -374,6 +374,18 @@ export function InvoiceForm({
     isEditMode,
   ]);
 
+  // Leaving mid-save (browser back/refresh/close) unloads the page and aborts
+  // the in-flight insert, silently losing the invoice. Warn before that happens.
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isSavingRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
   useEffect(() => {
     let isActive = true;
 
@@ -1993,33 +2005,16 @@ export function InvoiceForm({
         if (itemsError) throw itemsError;
       }
 
-      // Auto-apply client credit balance for new invoices (not edits, not drafts)
-      if (!initialInvoice?.id && status === "recorded" && clientCreditBalance > 0 && totals.total_amount > 0) {
-        const creditToApply = Math.min(clientCreditBalance, totals.total_amount);
-        if (creditToApply > 0) {
-          const paidOff = creditToApply >= totals.total_amount - 0.01;
-          const creditStatus = paidOff ? "paid" : "partially_paid";
-
-          const { error: creditApplyError } = await supabase
-            .from("invoices")
-            .update({
-              amount_paid: creditToApply,
-              credit_applied: creditToApply,
-              status: creditStatus,
-            })
-            .eq("id", invoiceId);
-
-          if (creditApplyError) throw creditApplyError;
-
-          // Decrement client credit balance
-          const newCreditBalance = clientCreditBalance - creditToApply;
-          const { error: creditUpdateError } = await supabase
-            .from("clients")
-            .update({ credit_balance: newCreditBalance })
-            .eq("id", formData.client_id);
-
-          if (creditUpdateError) throw creditUpdateError;
-        }
+      // Apply/re-apply client credit via the server-side recalculation engine.
+      // Draft invoices never consume credit, so only recalculate for recorded
+      // (or newly-completed) invoices. This also handles backdated invoices
+      // correctly, since the recalculation replays all invoices old-to-new.
+      if (status === "recorded") {
+        const { error: recalcError } = await supabase.rpc(
+          "recalculate_client_credit",
+          { p_client_id: formData.client_id },
+        );
+        if (recalcError) throw recalcError;
       }
 
       const userName = await getProfileDisplayName(supabase, user.id);

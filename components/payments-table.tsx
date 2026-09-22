@@ -44,11 +44,18 @@ import { IconTooltip } from "@/components/icon-tooltip";
 import { TableRowActions } from "@/components/table-row-actions";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { canDelete } from "@/lib/permissions";
+import {
+  PaymentInvoiceLinks,
+  getPaymentLinkedInvoices,
+  type PaymentWithAllocations,
+} from "@/components/payment-invoice-links";
 
 interface Payment {
   id: string;
-  invoice_id: string;
+  invoice_id: string | null;
+  client_id?: string;
   amount: string;
+  credit_generated?: string | number | null;
   payment_date: string;
   payment_method: string;
   reference_number: string | null;
@@ -65,7 +72,11 @@ interface Payment {
     clients: {
       name: string;
     };
-  };
+  } | null;
+  client?: {
+    name: string;
+  } | null;
+  payment_allocations?: PaymentWithAllocations["payment_allocations"];
 }
 
 interface PaymentsTableProps {
@@ -131,14 +142,16 @@ export function PaymentsTable({
     // Apply filters
     if (filters.invoice) {
       filtered = filtered.filter((p) =>
-        p.invoices.invoice_number
+        getPaymentLinkedInvoices(p)
+          .map((inv) => inv.invoice_number)
+          .join(" ")
           .toLowerCase()
           .includes(filters.invoice.toLowerCase()),
       );
     }
     if (filters.client) {
       filtered = filtered.filter((p) =>
-        p.invoices.clients.name
+        (p.invoices?.clients.name || p.client?.name || "")
           .toLowerCase()
           .includes(filters.client.toLowerCase()),
       );
@@ -161,12 +174,12 @@ export function PaymentsTable({
             bVal = new Date(b.payment_date).getTime();
             break;
           case "invoice":
-            aVal = a.invoices.invoice_number;
-            bVal = b.invoices.invoice_number;
+            aVal = getPaymentLinkedInvoices(a)[0]?.invoice_number || "";
+            bVal = getPaymentLinkedInvoices(b)[0]?.invoice_number || "";
             break;
           case "client":
-            aVal = a.invoices.clients.name;
-            bVal = b.invoices.clients.name;
+            aVal = a.invoices?.clients.name || a.client?.name || "";
+            bVal = b.invoices?.clients.name || b.client?.name || "";
             break;
           case "amount":
             aVal = Number(a.amount);
@@ -219,117 +232,16 @@ export function PaymentsTable({
     const supabase = createClient();
 
     try {
-      // First, fetch the payment to get invoice_id and amount
-      const { data: payment, error: fetchError } = await supabase
-        .from("payments")
-        .select("invoice_id, amount")
-        .eq("id", id)
-        .maybeSingle();
+      const { error } = await supabase.rpc("delete_client_payment", {
+        p_payment_id: id,
+      });
 
-      if (fetchError) {
-        console.error("Fetch payment error:", fetchError);
+      if (error) {
+        console.error("Delete payment error:", error);
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to fetch payment details.",
-        });
-        setIsDeleting(false);
-        return;
-      }
-
-      if (!payment) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Payment not found.",
-        });
-        setIsDeleting(false);
-        return;
-      }
-
-      if (!payment.invoice_id) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Payment has no associated invoice.",
-        });
-        setIsDeleting(false);
-        return;
-      }
-
-      // Fetch invoice details FIRST before deleting
-      const { data: invoice, error: invoiceFetchError } = await supabase
-        .from("invoices")
-        .select("amount_paid, total_amount")
-        .eq("id", payment.invoice_id)
-        .maybeSingle();
-
-      if (invoiceFetchError) {
-        console.error("Fetch invoice error:", invoiceFetchError);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch invoice details.",
-        });
-        setIsDeleting(false);
-        return;
-      }
-
-      if (!invoice) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Associated invoice not found.",
-        });
-        setIsDeleting(false);
-        return;
-      }
-
-      // Calculate new amounts BEFORE deletion
-      const newAmountPaid = Math.max(
-        0,
-        Number(invoice.amount_paid || 0) - Number(payment.amount || 0),
-      );
-      const totalAmount = Number(invoice.total_amount || 0);
-
-      // Determine status based on payment amount
-      let newStatus = "recorded";
-      if (newAmountPaid > 0 && newAmountPaid < totalAmount) {
-        newStatus = "partially_paid";
-      } else if (newAmountPaid >= totalAmount) {
-        newStatus = "paid";
-      }
-
-      // Now delete the payment
-      const { error: deleteError } = await supabase
-        .from("payments")
-        .delete()
-        .eq("id", id);
-
-      if (deleteError) {
-        console.error("Delete payment error:", deleteError);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to delete payment.",
-        });
-        setIsDeleting(false);
-        return;
-      }
-
-      // Update the invoice after successful payment deletion
-      const { error: updateError } = await supabase
-        .from("invoices")
-        .update({ amount_paid: newAmountPaid, status: newStatus })
-        .eq("id", payment.invoice_id);
-
-      if (updateError) {
-        console.error("Update invoice error:", updateError);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description:
-            "Payment deleted but failed to update invoice status. Please refresh the page.",
+          description: error.message || "Failed to delete payment.",
         });
         setIsDeleting(false);
         return;
@@ -339,7 +251,7 @@ export function PaymentsTable({
         variant: "success",
         title: "Payment deleted",
         description:
-          "The payment has been deleted successfully and invoice status has been updated.",
+          "The payment has been deleted and affected invoices/credit have been recalculated.",
       });
       router.refresh();
     } catch (error) {
@@ -357,14 +269,12 @@ export function PaymentsTable({
   const handleExport = () => {
     const columns: ExportColumn[] = [
       {
-        key: "invoices",
+        key: "invoice_numbers",
         label: "Invoice Number",
-        formatter: (inv) => inv?.invoice_number || "",
       },
       {
-        key: "invoices",
+        key: "client_name",
         label: "Client",
-        formatter: (inv) => inv?.clients?.name || "",
       },
       {
         key: "amount",
@@ -391,7 +301,16 @@ export function PaymentsTable({
       },
     ];
 
-    exportToCSV(processedPayments, columns, `payments-${getTimestamp()}.csv`);
+    const csvRows = processedPayments.map((p) => ({
+      ...p,
+      invoice_numbers:
+        getPaymentLinkedInvoices(p)
+          .map((inv) => inv.invoice_number)
+          .join(", ") || "-",
+      client_name: p.invoices?.clients.name || p.client?.name || "",
+    }));
+
+    exportToCSV(csvRows, columns, `payments-${getTimestamp()}.csv`);
     toast({
       variant: "success",
       title: "Exported",
@@ -402,8 +321,11 @@ export function PaymentsTable({
   const handleExportPDF = async () => {
     const enrichedPayments = processedPayments.map((p) => ({
       ...p,
-      invoice_number: p.invoices.invoice_number,
-      client_name: p.invoices.clients.name,
+      invoice_number:
+        getPaymentLinkedInvoices(p)
+          .map((inv) => inv.invoice_number)
+          .join(", ") || "-",
+      client_name: p.invoices?.clients.name || p.client?.name || "",
       amount_fmt: `Rs.${Number(p.amount).toFixed(2)}`,
       payment_date_fmt: formatIndianDate(p.payment_date, {
         year: "numeric",
@@ -587,22 +509,33 @@ export function PaymentsTable({
                         })}
                       </TableCell>
                       <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
-                        <Link
-                          href={`/dashboard/invoices/${payment.invoice_id}`}
-                          className="font-medium hover:underline text-blue-600 max-w-[100px] sm:max-w-none truncate block text-xs"
-                        >
-                          {payment.invoices.invoice_number}
-                        </Link>
+                        <PaymentInvoiceLinks
+                          invoices={getPaymentLinkedInvoices(payment)}
+                        />
                       </TableCell>
                       <TableCell className="px-2 sm:px-4 py-2 sm:py-3 text-xs">
-                        {payment.invoices.clients.name}
+                        {payment.invoices?.clients.name || payment.client?.name || "-"}
                       </TableCell>
                       <TableCell className="font-semibold text-green-600 px-2 sm:px-4 py-2 sm:py-3 text-xs">
-                        ₹
-                        {Number(payment.amount).toLocaleString("en-IN", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        <div className="flex items-center gap-1">
+                          <span>
+                            ₹
+                            {Number(payment.amount).toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                          {payment.status === "completed" &&
+                            Number(payment.credit_generated || 0) > 0 && (
+                              <Badge
+                                variant="secondary"
+                                title={`₹${Number(payment.credit_generated).toFixed(2)} added as client credit`}
+                                className="bg-purple-100 text-purple-700 text-[10px] px-1 py-0"
+                              >
+                                Credit
+                              </Badge>
+                            )}
+                        </div>
                       </TableCell>
                       <TableCell className="hidden md:table-cell capitalize px-2 sm:px-4 py-2 sm:py-3 text-xs">
                         {payment.payment_method.replace("_", " ")}

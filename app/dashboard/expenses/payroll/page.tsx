@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPages } from "@/lib/supabase/fetch-all";
 import { redirect } from "next/navigation";
@@ -144,20 +145,22 @@ export default async function PayrollPage({
 
   return (
     <DashboardPageWrapper title="Payroll">
-      <PayrollPageClient
-        initialTab={initialTab}
-        employees={employees}
-        attendance={attendance}
-        attendanceDays={attendanceDays}
-        salaries={salaries}
-        advances={advances}
-        advanceSchedules={advanceSchedules}
-        organization={orgResult.data}
-        invoiceTemplate={templateResult.data}
-        existingEmployeeIds={employees.map((e) => e.employee_id)}
-        userRole={profile.role}
-        organizationId={organizationId}
-      />
+      <Suspense fallback={null}>
+        <PayrollPageClient
+          initialTab={initialTab}
+          employees={employees}
+          attendance={attendance}
+          attendanceDays={attendanceDays}
+          salaries={salaries}
+          advances={advances}
+          advanceSchedules={advanceSchedules}
+          organization={orgResult.data}
+          invoiceTemplate={templateResult.data}
+          existingEmployeeIds={employees.map((e) => e.employee_id)}
+          userRole={profile.role}
+          organizationId={organizationId}
+        />
+      </Suspense>
     </DashboardPageWrapper>
   );
 }

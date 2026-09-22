@@ -543,6 +543,7 @@ export function PurchasePaymentForm({
               <Input
                 type="date"
                 required
+                max={getIndianToday()}
                 value={formData.payment_date}
                 onChange={(e) =>
                   setFormData({ ...formData, payment_date: e.target.value })

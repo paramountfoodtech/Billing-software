@@ -78,6 +78,7 @@ type SortCol =
 const STATUS_LABEL: Record<DayAttendanceMark, string> = {
   empty: "",
   present: "P",
+  half_day: "HL",
   absent: "A",
   casual_leave: "CL",
 };
@@ -88,6 +89,8 @@ const STATUS_CLASS_EDITABLE: Record<DayAttendanceMark, string> = {
     "bg-white text-slate-500 border-2 border-blue-400 hover:bg-blue-50 hover:border-blue-600 shadow-sm",
   present:
     "bg-green-500 text-white border-2 border-green-600 hover:bg-green-600 shadow-sm",
+  half_day:
+    "bg-orange-500 text-white border-2 border-orange-600 hover:bg-orange-600 shadow-sm",
   absent:
     "bg-red-500 text-white border-2 border-red-600 hover:bg-red-600 shadow-sm",
   casual_leave:
@@ -98,6 +101,7 @@ const STATUS_CLASS_EDITABLE: Record<DayAttendanceMark, string> = {
 const STATUS_CLASS_LOCKED: Record<DayAttendanceMark, string> = {
   empty: "bg-slate-100 text-slate-300 border border-slate-200",
   present: "bg-green-100/70 text-green-700/50 border border-green-200/60",
+  half_day: "bg-orange-100/70 text-orange-700/50 border border-orange-200/60",
   absent: "bg-red-100/70 text-red-700/50 border border-red-200/60",
   casual_leave: "bg-amber-100/70 text-amber-700/50 border border-amber-200/60",
 };
@@ -286,8 +290,8 @@ export function AttendanceTab({
 
     const statusCycle: DayAttendanceMark[] =
       row.maxCL > 0
-        ? ["empty", "present", "absent", "casual_leave"]
-        : ["empty", "present", "absent"];
+        ? ["empty", "present", "half_day", "absent", "casual_leave"]
+        : ["empty", "present", "half_day", "absent"];
 
     const current = row.days[date] || "empty";
     // If CL was marked but employee has no CL entitlement, treat as empty for cycling
@@ -300,9 +304,13 @@ export function AttendanceTab({
       ];
 
     if (next === "casual_leave") {
-      const usedCL = Object.entries(row.days).filter(
-        ([d, s]) => d !== date && s === "casual_leave",
-      ).length;
+      // Half Day Leave draws 0.5 from the same CL pool, so it counts here too.
+      const usedCL = Object.entries(row.days).reduce((sum, [d, s]) => {
+        if (d === date) return sum;
+        if (s === "casual_leave") return sum + 1;
+        if (s === "half_day") return sum + 0.5;
+        return sum;
+      }, 0);
       if (usedCL >= row.maxCL) {
         toast({
           variant: "destructive",
@@ -824,6 +832,7 @@ export function AttendanceTab({
           <span className="inline-flex flex-wrap items-center gap-x-1">
             Click editable days to cycle: empty →
             <Badge className="bg-green-500 text-white">P</Badge> Present
+            <Badge className="bg-orange-500 text-white">HL</Badge> Half Day Leave
             <Badge className="bg-red-500 text-white">A</Badge> Absent
             <Badge className="bg-amber-500 text-white">CL</Badge> Casual Leave
           </span>
@@ -958,7 +967,7 @@ export function AttendanceTab({
                           <span className="text-[10px] text-muted-foreground">
                             {row.maxCL > 0
                               ? `CL left: ${Math.max(0, row.maxCL - row.casualLeave)}/${row.maxCL}`
-                              : "No CL · Absent = LOP"}
+                              : "No CL · Absent/HL = LOP"}
                           </span>
                         </div>
                       </TableCell>

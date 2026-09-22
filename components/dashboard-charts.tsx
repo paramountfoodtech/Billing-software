@@ -29,6 +29,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { KpiValue } from "@/components/kpi-value";
+import { formatIndianDate } from "@/lib/date-time";
 
 interface DashboardChartsProps {
   invoices: Array<{
@@ -58,7 +59,7 @@ export function DashboardCharts({ invoices, payments }: DashboardChartsProps) {
   const sortedMonths = Object.keys(monthlyData).sort();
   const last6Months = sortedMonths.slice(-6);
   const revenueChartData = last6Months.map((month) => ({
-    month: new Date(month + "-01").toLocaleDateString("en-IN", {
+    month: formatIndianDate(month + "-01", {
       month: "short",
       year: "2-digit",
     }),
@@ -100,7 +101,7 @@ export function DashboardCharts({ invoices, payments }: DashboardChartsProps) {
 
   const invoicesChartData = Object.entries(last30DaysData).map(
     ([date, amount]) => ({
-      date: new Date(date).toLocaleDateString("en-IN", {
+      date: formatIndianDate(date, {
         month: "short",
         day: "numeric",
       }),

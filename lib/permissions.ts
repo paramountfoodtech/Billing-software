@@ -79,8 +79,9 @@ export function canDelete(role?: string | null): boolean {
   return isSuperAdmin(role);
 }
 
+/** Expenses module — Admin, Super Admin, or Accountant. */
 export function canAccessExpenses(role?: string | null): boolean {
-  return isAdminOrAbove(role);
+  return isAdminOrAbove(role) || role === "accountant";
 }
 
 export function canAccessOperationsReports(role?: string | null): boolean {

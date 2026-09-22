@@ -3,7 +3,11 @@
  * Pure functions — no side effects, no DB calls.
  */
 
-export type DayAttendanceStatus = "present" | "absent" | "casual_leave";
+export type DayAttendanceStatus =
+  | "present"
+  | "half_day"
+  | "absent"
+  | "casual_leave";
 
 /** Day mark including unmarked (empty) cells. */
 export type DayAttendanceMark = DayAttendanceStatus | "empty";
@@ -61,9 +65,19 @@ export function getEffectiveCasualLeaves(
   return getEmployeeCasualLeaveLimit(employeeOverride);
 }
 
+/** Round to one decimal place (avoids float drift from half-day sums). */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
 /**
  * Roll up daily attendance statuses into monthly totals.
  * Empty/unmarked days are ignored. Excess CL beyond maxCL is treated as LOP.
+ *
+ * Half Day Leave (HL) counts as 0.5 present (always paid) + 0.5 leave, and
+ * that leave half is drawn from the CL pool like a casual_leave day. Only
+ * once CL is exhausted (or the employee has none) does the HL half — or any
+ * casual_leave over the cap — fall through to loss-of-pay.
  */
 export function rollupDailyAttendance(
   statuses: DayAttendanceMark[],
@@ -74,21 +88,25 @@ export function rollupDailyAttendance(
   casualLeave: number;
   lop: number;
 } {
-  let daysPresent = 0;
+  let fullPresent = 0;
   let casualLeaveRaw = 0;
   let absent = 0;
+  let halfDay = 0;
 
   for (const status of statuses) {
     if (status === "empty" || !status) continue;
-    if (status === "present") daysPresent += 1;
+    if (status === "present") fullPresent += 1;
+    else if (status === "half_day") halfDay += 1;
     else if (status === "casual_leave") casualLeaveRaw += 1;
     else if (status === "absent") absent += 1;
   }
 
-  const casualLeave = Math.min(casualLeaveRaw, Math.max(0, maxCL));
-  const excessCL = casualLeaveRaw - casualLeave;
-  const lop = absent + excessCL;
-  const workingDays = daysPresent + casualLeave + lop;
+  const daysPresent = round1(fullPresent + halfDay * 0.5);
+  const clRequested = round1(casualLeaveRaw + halfDay * 0.5);
+  const casualLeave = round1(Math.min(clRequested, Math.max(0, maxCL)));
+  const excessCL = round1(clRequested - casualLeave);
+  const lop = round1(absent + excessCL);
+  const workingDays = round1(daysPresent + casualLeave + lop);
 
   return { workingDays, daysPresent, casualLeave, lop };
 }

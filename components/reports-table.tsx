@@ -285,7 +285,7 @@ export function ReportsTable({
         payment_date: string
         amount: string | number | null
         status: string
-        invoice_id: string
+        invoice_id: string | null
         invoices: { invoice_number: string } | { invoice_number: string }[] | null
       }
 
@@ -297,9 +297,9 @@ export function ReportsTable({
         const paymentsResult = await supabase
           .from("payments")
           .select(
-            "payment_date, amount, status, invoice_id, invoices!inner(invoice_number, client_id)",
+            "payment_date, amount, status, invoice_id, invoices(invoice_number, client_id)",
           )
-          .eq("invoices.client_id", client.id)
+          .eq("client_id", client.id)
           .order("payment_date", { ascending: true })
           .range(paymentFrom, paymentFrom + paymentPageSize - 1)
 

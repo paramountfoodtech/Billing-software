@@ -183,8 +183,9 @@ async function generateAndSendDailyReport(appBaseUrl: string) {
 
     adminClient
       .from("payments")
-      .select("amount, invoices(client_id)")
+      .select("amount, client_id")
       .eq("organization_id", superAdminProfile.organization_id)
+      .eq("status", "completed")
       .gte("payment_date", monthStart)
       .lte("payment_date", monthEnd),
   ]);
@@ -252,9 +253,7 @@ async function generateAndSendDailyReport(appBaseUrl: string) {
   }
 
   for (const payment of currentMonthPayments) {
-    const clientId = (
-      payment.invoices as unknown as { client_id: string } | null
-    )?.client_id;
+    const clientId = payment.client_id;
     if (!clientId) continue;
     const row = clientMap.get(clientId);
     if (!row) continue;
@@ -328,6 +327,7 @@ async function generateAndSendReport(
       .from("payments")
       .select("*")
       .eq("organization_id", organizationId)
+      .eq("status", "completed")
       .gte("payment_date", dateRange.start)
       .lte("payment_date", dateRange.end),
   ]);

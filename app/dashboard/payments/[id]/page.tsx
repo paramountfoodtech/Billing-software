@@ -42,6 +42,10 @@ export default async function PaymentDetailPage({
           email
         )
       ),
+      client:client_id (
+        name,
+        email
+      ),
       profiles!payments_created_by_fkey (
         full_name
       )
@@ -124,14 +128,16 @@ export default async function PaymentDetailPage({
             createdAt={payment.created_at}
             createdByName={payment.profiles?.full_name}
           />
-          <IconTooltip label="View Invoice">
-            <Button variant="outline" asChild>
-              <Link href={`/dashboard/invoices/${payment.invoices.id}`}>
-                <FileText className="h-4 w-4 mr-2" />
-                View Invoice
-              </Link>
-            </Button>
-          </IconTooltip>
+          {payment.invoices && (
+            <IconTooltip label="View Invoice">
+              <Button variant="outline" asChild>
+                <Link href={`/dashboard/invoices/${payment.invoices.id}`}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  View Invoice
+                </Link>
+              </Button>
+            </IconTooltip>
+          )}
         </div>
       </div>
 
@@ -162,13 +168,24 @@ export default async function PaymentDetailPage({
 
               <div>
                 <p className="text-sm text-muted-foreground">Amount</p>
-                <p className="text-2xl font-bold text-green-600">
-                  ₹
-                  {Number(payment.amount).toLocaleString("en-IN", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-2xl font-bold text-green-600">
+                    ₹
+                    {Number(payment.amount).toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </p>
+                  {payment.status === "completed" &&
+                    Number(payment.credit_generated || 0) > 0 && (
+                      <Badge
+                        variant="secondary"
+                        className="bg-purple-100 text-purple-700 text-xs"
+                      >
+                        Credit ₹{Number(payment.credit_generated).toFixed(2)}
+                      </Badge>
+                    )}
+                </div>
               </div>
 
               <div>
@@ -191,19 +208,25 @@ export default async function PaymentDetailPage({
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground">Invoice</p>
-                <Link
-                  href={`/dashboard/invoices/${payment.invoices.id}`}
-                  className="font-medium text-blue-600 hover:underline"
-                >
-                  {payment.invoices.invoice_number}
-                </Link>
+                {payment.invoices ? (
+                  <Link
+                    href={`/dashboard/invoices/${payment.invoices.id}`}
+                    className="font-medium text-blue-600 hover:underline"
+                  >
+                    {payment.invoices.invoice_number}
+                  </Link>
+                ) : (
+                  <p className="font-medium">-</p>
+                )}
               </div>
 
               <div>
                 <p className="text-sm text-muted-foreground">Client</p>
-                <p className="font-medium">{payment.invoices.clients.name}</p>
+                <p className="font-medium">
+                  {payment.invoices?.clients.name || payment.client?.name || "—"}
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  {payment.invoices.clients.email}
+                  {payment.invoices?.clients.email || payment.client?.email || ""}
                 </p>
               </div>
 
@@ -230,45 +253,47 @@ export default async function PaymentDetailPage({
           </div>
 
           {/* Invoice Status Summary */}
-          <div className="border-t pt-4">
-            <h3 className="font-semibold mb-3">Invoice Payment Status</h3>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm text-muted-foreground">Invoice Total</p>
-                <p className="font-bold">
-                  ₹
-                  {Number(payment.invoices.total_amount).toLocaleString(
-                    "en-IN",
-                    {
-                      minimumFractionDigits: 2,
-                    },
-                  )}
-                </p>
-              </div>
-              <div className="p-3 bg-green-50 rounded-lg">
-                <p className="text-sm text-muted-foreground">Total Paid</p>
-                <p className="font-bold text-green-600">
-                  ₹
-                  {Number(payment.invoices.amount_paid).toLocaleString(
-                    "en-IN",
-                    {
-                      minimumFractionDigits: 2,
-                    },
-                  )}
-                </p>
-              </div>
-              <div className="p-3 bg-orange-50 rounded-lg">
-                <p className="text-sm text-muted-foreground">Remaining</p>
-                <p className="font-bold text-orange-600">
-                  ₹
-                  {(
-                    Number(payment.invoices.total_amount) -
-                    Number(payment.invoices.amount_paid)
-                  ).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                </p>
+          {payment.invoices && (
+            <div className="border-t pt-4">
+              <h3 className="font-semibold mb-3">Invoice Payment Status</h3>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Invoice Total</p>
+                  <p className="font-bold">
+                    ₹
+                    {Number(payment.invoices.total_amount).toLocaleString(
+                      "en-IN",
+                      {
+                        minimumFractionDigits: 2,
+                      },
+                    )}
+                  </p>
+                </div>
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Total Paid</p>
+                  <p className="font-bold text-green-600">
+                    ₹
+                    {Number(payment.invoices.amount_paid).toLocaleString(
+                      "en-IN",
+                      {
+                        minimumFractionDigits: 2,
+                      },
+                    )}
+                  </p>
+                </div>
+                <div className="p-3 bg-orange-50 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Remaining</p>
+                  <p className="font-bold text-orange-600">
+                    ₹
+                    {(
+                      Number(payment.invoices.total_amount) -
+                      Number(payment.invoices.amount_paid)
+                    ).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 

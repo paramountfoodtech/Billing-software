@@ -137,6 +137,10 @@ export default async function EditInvoicePage({
           discount_amount: Number(invoice.discount_amount),
           total_amount: Number(invoice.total_amount),
           total_birds: Number(invoice.total_birds || 0),
+          total_skinless_weight:
+            invoice.total_skinless_weight != null
+              ? Number(invoice.total_skinless_weight)
+              : null,
         }}
         initialItems={(invoice.invoice_items || []).map((it: any) => ({
           product_id: it.product_id,

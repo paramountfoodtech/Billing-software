@@ -15,8 +15,10 @@ export default async function NewPaymentPage({
     .select("id, name")
     .order("name", { ascending: true })
 
-  // Fetch unpaid or partially paid invoices with clients data and client_id
-  const { data: invoices, error: invoicesError } = await supabase
+  // Fetch payable invoices (draft/cancelled invoices never consume credit or
+  // accept payments). Includes fully-paid invoices too, purely for display
+  // context in bulk mode — the payment form itself filters by remaining balance.
+  const { data: invoices } = await supabase
     .from("invoices")
     .select(`
       id,
@@ -30,7 +32,7 @@ export default async function NewPaymentPage({
         name
       )
     `)
-    .neq("status", "paid")
+    .neq("status", "draft")
     .neq("status", "cancelled")
     .order("invoice_number", { ascending: false })
 
@@ -42,16 +44,16 @@ export default async function NewPaymentPage({
       </div>
 
       <div className="max-w-2xl">
-        {!invoices || invoices.length === 0 ? (
+        {!clients || clients.length === 0 ? (
           <div className="p-6 border rounded-lg bg-yellow-50 text-yellow-800">
-            <p className="font-semibold">No invoices available for payment</p>
+            <p className="font-semibold">No clients available</p>
             <p className="text-sm mt-1">
-              Create an invoice first or ensure there are unpaid invoices in the system.
+              Create a client first before recording payments.
             </p>
           </div>
         ) : (
           <PaymentForm
-            invoices={invoices}
+            invoices={invoices || []}
             clients={clients || []}
             preSelectedInvoiceId={params.invoice_id}
             preSelectedClientId={params.client_id}

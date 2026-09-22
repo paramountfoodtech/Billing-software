@@ -13,6 +13,18 @@ export function getIndianCurrentMonth(): string {
   return getIndianToday().slice(0, 7)
 }
 
+/**
+ * Normalizes locale date formatting variations between Node.js (SSR) and client browsers.
+ * For example, in en-IN / en-GB, some Node ICU environments output "Sept" for short month
+ * while browsers output "Sep", causing React hydration mismatches.
+ * Also replaces narrow no-break space (\u202F) with regular space.
+ */
+export function normalizeDateString(formatted: string): string {
+  return formatted
+    .replace(/\bSept\b/g, "Sep")
+    .replace(/\u202F/g, " ")
+}
+
 /** Parse a date-only string as noon IST (avoids UTC midnight date shifts). */
 export function parseIndianDateOnly(dateStr: string): Date {
   return new Date(`${dateStr}T12:00:00+05:30`)
@@ -32,10 +44,12 @@ export function formatIndianDate(
 
   if (Number.isNaN(date.getTime())) return ""
 
-  return date.toLocaleDateString("en-IN", {
-    timeZone: INDIAN_TIMEZONE,
-    ...options,
-  })
+  return normalizeDateString(
+    date.toLocaleDateString("en-IN", {
+      timeZone: INDIAN_TIMEZONE,
+      ...options,
+    })
+  )
 }
 
 /** Format a timestamp for display in IST (date + time). */
@@ -48,15 +62,17 @@ export function formatIndianDateTime(
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ""
 
-  return date.toLocaleString("en-IN", {
-    timeZone: INDIAN_TIMEZONE,
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    ...options,
-  })
+  return normalizeDateString(
+    date.toLocaleString("en-IN", {
+      timeZone: INDIAN_TIMEZONE,
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      ...options,
+    })
+  )
 }
 
 /** Format time only in IST. */
@@ -69,12 +85,14 @@ export function formatIndianTime(
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ""
 
-  return date.toLocaleTimeString("en-IN", {
-    timeZone: INDIAN_TIMEZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    ...options,
-  })
+  return normalizeDateString(
+    date.toLocaleTimeString("en-IN", {
+      timeZone: INDIAN_TIMEZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      ...options,
+    })
+  )
 }
 
 /** Add calendar days to a YYYY-MM-DD date (timezone-neutral business dates). */
@@ -107,7 +125,8 @@ export function formatIndianStatementDate(dateKey: string): string {
     year: "numeric",
   }).formatToParts(d)
 
-  const month = parts.find((p) => p.type === "month")?.value ?? ""
+  const rawMonth = parts.find((p) => p.type === "month")?.value ?? ""
+  const month = normalizeDateString(rawMonth)
   const day = parts.find((p) => p.type === "day")?.value ?? ""
   const year = parts.find((p) => p.type === "year")?.value ?? ""
   return `${month}/${day}/${year}`

@@ -23,6 +23,7 @@ import {
   rebuildScheduleExtendTenure,
   rebuildScheduleRedistribute,
 } from "@/lib/hr-calculations";
+import { formatIndianDate } from "@/lib/date-time";
 import type {
   SalaryRow,
   EmployeeRow,
@@ -404,7 +405,7 @@ export function SalarySlipPrintable({
   const monthLabel = `${monthName} ${yearName}`;
 
   const lastDayOfMonth = new Date(yearName, monthDate.getMonth() + 1, 0).getDate();
-  const payDateFormatted = `${lastDayOfMonth} ${monthDate.toLocaleDateString("en-IN", { month: "short" })} ${yearName}`;
+  const payDateFormatted = `${lastDayOfMonth} ${formatIndianDate(monthDate, { month: "short" })} ${yearName}`;
 
   const companyName = template?.company_name || organization?.name || "Paramount Food Tech";
   const companyAddress = template?.company_address || organization?.address || "";
@@ -412,8 +413,8 @@ export function SalarySlipPrintable({
   const companyEmail = template?.company_email || organization?.email || "";
   const logoSrc = template?.company_logo_file || template?.company_logo_url || DEFAULT_LOGO_URL;
 
-  const paidDays = localSalary.days_present + localSalary.casual_leave;
-  const lopDays = localSalary.loss_of_pay;
+  const paidDays = Number(localSalary.days_present) + Number(localSalary.casual_leave);
+  const lopDays = Number(localSalary.loss_of_pay);
   const grossEarnings = Number(localSalary.earned_salary);
   const lopDeduction = Number(localSalary.lop_deduction);
   const advanceEmi = Number(localSalary.advance_emi_deduction);
@@ -681,10 +682,10 @@ export function SalarySlipPrintable({
 
       const result = calculateSalary(
         Number(localSalary.base_salary),
-        localSalary.working_days,
-        localSalary.days_present,
-        localSalary.casual_leave,
-        localSalary.loss_of_pay,
+        Number(localSalary.working_days),
+        Number(localSalary.days_present),
+        Number(localSalary.casual_leave),
+        Number(localSalary.loss_of_pay),
         rebuild.currentMonthEmi,
       );
 

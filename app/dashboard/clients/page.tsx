@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { ClientsTable } from "@/components/clients-table"
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
 
@@ -11,20 +12,24 @@ export default async function ClientsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  if (!user) redirect("/auth/login")
 
-  const [{ data: profile }, { data: clients }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user?.id || "")
-      .single(),
-    supabase
-      .from("clients")
-      .select("*, profiles!clients_created_by_fkey(full_name)")
-      .order("created_at", { ascending: false }),
-  ])
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
 
-  const userRole = profile?.role || "accountant"
+  if (!profile || (profile.role !== "super_admin" && profile.role !== "admin")) {
+    redirect("/dashboard")
+  }
+
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("*, profiles!clients_created_by_fkey(full_name)")
+    .order("created_at", { ascending: false })
+
+  const userRole = profile.role
 
   return (
     <DashboardPageWrapper title="Clients">

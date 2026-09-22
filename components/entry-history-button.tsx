@@ -4,7 +4,11 @@ import { useState } from "react"
 import { Clock } from "lucide-react"
 
 import { useMounted } from "@/hooks/use-mounted"
-import { IconTooltip } from "@/components/icon-tooltip"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
 import {
   Popover,
@@ -59,6 +63,13 @@ export function EntryHistoryButton({
   createdByName,
   className,
 }: EntryHistoryButtonProps) {
+  // NOTE: Do NOT use an early-return branch based on `useMounted()` that
+  // returns a structurally different JSX tree (e.g. just a Tooltip vs a
+  // Popover+Tooltip). Doing so shifts Radix's internal useId() counter for
+  // every subsequent Radix component in the page, causing hydration mismatches
+  // in unrelated components (e.g. DropdownMenuTrigger in TableRowActions).
+  // Always render the same tree structure; use `mounted` only to gate
+  // interactive behaviour (open state / onOpenChange).
   const mounted = useMounted()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -80,29 +91,27 @@ export function EntryHistoryButton({
 
   const displayRows = rows ?? buildDisplayRows([], createdAt, createdByName)
 
-  const triggerButton = (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      className={className}
-      aria-label="View entry history"
-    >
-      <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-    </Button>
-  )
-
-  if (!mounted) {
-    return (
-      <IconTooltip label="Entry history">{triggerButton}</IconTooltip>
-    )
-  }
-
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <IconTooltip label="Entry history">
-        <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
-      </IconTooltip>
+    <Popover
+      open={mounted ? open : false}
+      onOpenChange={mounted ? handleOpenChange : undefined}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={className}
+              aria-label="View entry history"
+            >
+              <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Entry history</TooltipContent>
+      </Tooltip>
       <PopoverContent align="end" className="w-80 p-0">
         <div className="border-b px-3 py-2">
           <p className="text-sm font-semibold">Entry history</p>

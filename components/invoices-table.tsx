@@ -257,22 +257,22 @@ export function InvoicesTable({
     setIsDeleting(true);
     const supabase = createClient();
 
-    const { error } = await supabase
-      .from("invoices")
-      .delete()
-      .eq("id", invoiceToDelete);
+    const { error } = await supabase.rpc("delete_client_invoice", {
+      p_invoice_id: invoiceToDelete,
+    });
 
     if (error) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete invoice.",
+        description: error.message || "Failed to delete invoice.",
       });
     } else {
       toast({
         variant: "success",
         title: "Invoice deleted",
-        description: "The invoice has been deleted successfully.",
+        description:
+          "The invoice has been deleted and affected invoices/credit have been recalculated.",
       });
       router.refresh();
     }

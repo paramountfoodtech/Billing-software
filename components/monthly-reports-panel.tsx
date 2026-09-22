@@ -213,9 +213,9 @@ function SalesStatementPanel(props: SalesStatementPanelProps) {
         const { data: paymentBatch, error: payErr } = await supabase
           .from("payments")
           .select(
-            "payment_date, amount, status, invoice_id, invoices!inner(invoice_number, client_id)",
+            "payment_date, amount, status, invoice_id, invoices(invoice_number, client_id)",
           )
-          .eq("invoices.client_id", clientId)
+          .eq("client_id", clientId)
           .order("payment_date", { ascending: true })
           .range(paymentFrom, paymentFrom + paymentPageSize - 1)
 

@@ -188,10 +188,10 @@ export function SalaryTab({
 
         const { earnedSalary, lopDeduction, advanceEmiDeduction, netPayable } = calculateSalary(
           Number(emp.base_salary),
-          att.working_days,
-          att.days_present,
-          att.casual_leave,
-          att.loss_of_pay,
+          Number(att.working_days),
+          Number(att.days_present),
+          Number(att.casual_leave),
+          Number(att.loss_of_pay),
           emiAmount,
         );
 
@@ -463,20 +463,20 @@ export function SalaryTab({
             bVal = Number(b.base_salary);
             break;
           case "working_days":
-            aVal = a.working_days;
-            bVal = b.working_days;
+            aVal = Number(a.working_days);
+            bVal = Number(b.working_days);
             break;
           case "days_present":
-            aVal = a.days_present;
-            bVal = b.days_present;
+            aVal = Number(a.days_present);
+            bVal = Number(b.days_present);
             break;
           case "casual_leave":
-            aVal = a.casual_leave;
-            bVal = b.casual_leave;
+            aVal = Number(a.casual_leave);
+            bVal = Number(b.casual_leave);
             break;
           case "loss_of_pay":
-            aVal = a.loss_of_pay;
-            bVal = b.loss_of_pay;
+            aVal = Number(a.loss_of_pay);
+            bVal = Number(b.loss_of_pay);
             break;
           case "earned_salary":
             aVal = Number(a.earned_salary);
@@ -762,7 +762,7 @@ export function SalaryTab({
                     <TableCell className="text-center">{sal.days_present}</TableCell>
                     <TableCell className="text-center">{sal.casual_leave}</TableCell>
                     <TableCell className="text-center">
-                      <span className={sal.loss_of_pay > 0 ? "text-red-600 font-medium" : ""}>
+                      <span className={Number(sal.loss_of_pay) > 0 ? "text-red-600 font-medium" : ""}>
                         {sal.loss_of_pay}
                       </span>
                     </TableCell>
