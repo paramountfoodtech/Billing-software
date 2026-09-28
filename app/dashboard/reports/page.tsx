@@ -4,6 +4,7 @@ import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
 import { ReportsPageClient } from "@/components/reports-page-client"
 import { getIndianToday } from "@/lib/date-time"
 import { resolveReportPeriod } from "@/lib/report-period"
+import { fetchAllPages } from "@/lib/supabase/fetch-all"
 
 export const revalidate = 0
 
@@ -72,32 +73,88 @@ export default async function ReportsPage({
   const initialToDate =
     params.to || (todayDate < monthEnd ? todayDate : monthEnd)
 
-  // Fetch all required data in parallel for the selected period
-  const [clientsResult, allInvoicesResult, allPaymentsResult] =
-    await Promise.all([
-      supabase
-        .from("clients")
-        .select("id, name, credit_balance")
-        .order("name", { ascending: true }),
+  // Fetch all required data in parallel with pagination to avoid Supabase 1,000-row limit.
+  // Historical data is fetched with lightweight column projections (no joins) to avoid memory bloat.
+  const [
+    clients,
+    historicalInvoices,
+    periodInvoices,
+    historicalPayments,
+    periodPayments,
+  ] = await Promise.all([
+    fetchAllPages<{ id: string; name: string; credit_balance: string | number | null }>(
+      async (from, to) =>
+        supabase
+          .from("clients")
+          .select("id, name, credit_balance")
+          .order("name", { ascending: true })
+          .range(from, to),
+    ),
 
-      supabase
-        .from("invoices")
-        .select(
-          "id, client_id, issue_date, total_amount, status, invoice_items(product_id, description, quantity, line_total)",
-        )
-        .neq("status", "cancelled")
-        .lte("issue_date", periodEnd),
+    // Historical invoices before periodStart: lightweight (client_id, total_amount)
+    fetchAllPages<{ client_id: string; total_amount: string | number | null }>(
+      async (from, to) =>
+        supabase
+          .from("invoices")
+          .select("client_id, total_amount")
+          .neq("status", "cancelled")
+          .lt("issue_date", periodStart)
+          .range(from, to),
+    ),
 
-      supabase
-        .from("payments")
-        .select("amount, client_id, payment_date")
-        .eq("status", "completed")
-        .lte("payment_date", periodEnd),
-    ])
+    // Active period invoices: with invoice_items for product analytics & kg calculations
+    fetchAllPages<{
+      id: string
+      client_id: string
+      issue_date: string
+      total_amount: string | number | null
+      status: string
+      invoice_items: Array<{
+        product_id: string | null
+        description: string | null
+        quantity: string | number | null
+        line_total: string | number | null
+      }> | null
+    }>(
+      async (from, to) =>
+        supabase
+          .from("invoices")
+          .select(
+            "id, client_id, issue_date, total_amount, status, invoice_items(product_id, description, quantity, line_total)",
+          )
+          .neq("status", "cancelled")
+          .gte("issue_date", periodStart)
+          .lte("issue_date", periodEnd)
+          .range(from, to),
+    ),
 
-  const clients = clientsResult.data || []
-  const allInvoices = allInvoicesResult.data || []
-  const allPayments = allPaymentsResult.data || []
+    // Historical payments before periodStart: lightweight (client_id, amount)
+    fetchAllPages<{ client_id: string | null; amount: string | number | null }>(
+      async (from, to) =>
+        supabase
+          .from("payments")
+          .select("amount, client_id")
+          .eq("status", "completed")
+          .lt("payment_date", periodStart)
+          .range(from, to),
+    ),
+
+    // Active period payments: amount, client_id, payment_date
+    fetchAllPages<{
+      client_id: string | null
+      amount: string | number | null
+      payment_date: string
+    }>(
+      async (from, to) =>
+        supabase
+          .from("payments")
+          .select("amount, client_id, payment_date")
+          .eq("status", "completed")
+          .gte("payment_date", periodStart)
+          .lte("payment_date", periodEnd)
+          .range(from, to),
+    ),
+  ])
 
   type ClientRow = {
     id: string
@@ -128,49 +185,56 @@ export default async function ReportsPage({
     })
   }
 
-  const periodInvoices: typeof allInvoices = []
+  // 1. Historical invoices before periodStart -> Old Balance (+)
+  for (const inv of historicalInvoices) {
+    const row = clientMap.get(inv.client_id)
+    if (row) {
+      row.oldBal += Number(inv.total_amount || 0)
+    }
+  }
 
-  for (const invoice of allInvoices) {
+  // 2. Historical payments before periodStart -> Old Balance (-)
+  for (const payment of historicalPayments) {
+    if (!payment.client_id) continue
+    const row = clientMap.get(payment.client_id)
+    if (row) {
+      row.oldBal -= Number(payment.amount || 0)
+    }
+  }
+
+  // 3. Active period invoices -> Sales (+), saleKgs, todaySale
+  for (const invoice of periodInvoices) {
     const row = clientMap.get(invoice.client_id)
     const amt = Number(invoice.total_amount || 0)
-
-    if (invoice.issue_date < periodStart) {
-      if (row) row.oldBal += amt
-    } else {
-      periodInvoices.push(invoice)
-      if (row) {
-        row.sale += amt
-        type ClientInvoiceItem = {
-          quantity: string | number | null
-        }
-        const items = (invoice.invoice_items as ClientInvoiceItem[] | null) ?? []
-        const invoiceQty = items.reduce((sum, item) => {
-          return sum + Number(item.quantity || 0)
-        }, 0)
-        row.saleKgs += invoiceQty
-        if (invoice.issue_date === todayDate) {
-          row.todaySaleQty += invoiceQty
-          row.todaySaleValue += amt
-        }
+    if (row) {
+      row.sale += amt
+      type ClientInvoiceItem = {
+        quantity: string | number | null
+      }
+      const items = (invoice.invoice_items as ClientInvoiceItem[] | null) ?? []
+      const invoiceQty = items.reduce((sum, item) => {
+        return sum + Number(item.quantity || 0)
+      }, 0)
+      row.saleKgs += invoiceQty
+      if (invoice.issue_date === todayDate) {
+        row.todaySaleQty += invoiceQty
+        row.todaySaleValue += amt
       }
     }
   }
 
-  for (const payment of allPayments) {
-    const clientId = payment.client_id
-    if (!clientId) continue
-    const row = clientMap.get(clientId)
-    if (!row) continue
-    const amt = Number(payment.amount || 0)
-    if (payment.payment_date < periodStart) {
-      row.oldBal -= amt
-    } else {
-      row.payments += amt
+  // 4. Active period payments -> Period Payments (+)
+  for (const payment of periodPayments) {
+    if (!payment.client_id) continue
+    const row = clientMap.get(payment.client_id)
+    if (row) {
+      row.payments += Number(payment.amount || 0)
     }
   }
 
+  // 5. Total Pending Amount calculation matching Statement of Account identity:
+  // Outstanding = Old Balance + Period Sale - Period Payments
   for (const row of clientMap.values()) {
-    // Statement of Account identity: Old Balance + Period Sale - Period Payments = Total Pending Amount
     row.outstanding = row.oldBal + row.sale - row.payments
   }
 
