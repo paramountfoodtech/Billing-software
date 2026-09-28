@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { PaymentForm } from "@/components/payment-form"
+import { fetchAllPages } from "@/lib/supabase/fetch-all"
 
 export default async function NewPaymentPage({
   searchParams,
@@ -15,26 +16,32 @@ export default async function NewPaymentPage({
     .select("id, name")
     .order("name", { ascending: true })
 
-  // Fetch payable invoices (draft/cancelled invoices never consume credit or
-  // accept payments). Includes fully-paid invoices too, purely for display
-  // context in bulk mode — the payment form itself filters by remaining balance.
-  const { data: invoices } = await supabase
-    .from("invoices")
-    .select(`
-      id,
-      invoice_number,
-      total_amount,
-      amount_paid,
-      status,
-      issue_date,
-      client_id,
-      clients (
-        name
-      )
-    `)
-    .neq("status", "draft")
-    .neq("status", "cancelled")
-    .order("invoice_number", { ascending: false })
+  // Fetch invoices that can still take a payment. Paid invoices are excluded
+  // and results are paginated: the unfiltered list exceeds Supabase's
+  // 1000-row cap, which silently dropped older unpaid invoices. Bulk mode
+  // loads the selected client's full invoice set itself (see PaymentForm).
+  const invoices = await fetchAllPages(async (from, to) => {
+    const { data, error } = await supabase
+      .from("invoices")
+      .select(`
+        id,
+        invoice_number,
+        total_amount,
+        amount_paid,
+        status,
+        issue_date,
+        client_id,
+        clients (
+          name
+        )
+      `)
+      .not("status", "in", "(draft,cancelled,paid)")
+      .order("issue_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, to)
+    return { data, error }
+  })
 
   return (
     <div className="p-6 lg:p-8">
@@ -53,7 +60,7 @@ export default async function NewPaymentPage({
           </div>
         ) : (
           <PaymentForm
-            invoices={invoices || []}
+            invoices={invoices}
             clients={clients || []}
             preSelectedInvoiceId={params.invoice_id}
             preSelectedClientId={params.client_id}

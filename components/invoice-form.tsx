@@ -624,9 +624,18 @@ export function InvoiceForm({
           const aboveEqual = Number(
             pricingRule.conditional_discount_above_equal || 0,
           );
+          const belowStr =
+            below < 0 ? `+₹${Math.abs(below).toFixed(0)}` : `-₹${below.toFixed(0)}`;
+          const aboveStr =
+            aboveEqual < 0
+              ? `+₹${Math.abs(aboveEqual).toFixed(0)}`
+              : `-₹${aboveEqual.toFixed(0)}`;
+          const label =
+            below < 0 || aboveEqual < 0
+              ? "Conditional pricing"
+              : "Conditional discount";
 
-          return `Conditional discount: ≤₹${threshold.toFixed(0)} -₹${below.toFixed(0)}, >₹${threshold.toFixed(0)} -₹${aboveEqual.toFixed(0)}`;
-
+          return `${label}: ≤₹${threshold.toFixed(0)} ${belowStr}, >₹${threshold.toFixed(0)} ${aboveStr}`;
         }
         case "category_based":
           return "Category-based pricing applied";

@@ -118,8 +118,8 @@ export function PurchaseReportsTable({
     }
     if (sortColumn) {
       filtered.sort((a, b) => {
-        const aVal = (a as Record<string, unknown>)[sortColumn] as number | string;
-        const bVal = (b as Record<string, unknown>)[sortColumn] as number | string;
+        const aVal = (a as unknown as Record<string, unknown>)[sortColumn] as number | string;
+        const bVal = (b as unknown as Record<string, unknown>)[sortColumn] as number | string;
         if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
         if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
         return 0;
@@ -581,7 +581,9 @@ export function PurchaseReportsTable({
         });
         drawRight(row.debit > 0 ? fmt(row.debit) : "-", "debit", textTop);
         drawRight(row.credit > 0 ? fmt(row.credit) : "-", "credit", textTop);
+        pdf.setFont("helvetica", "bold");
         drawRight(fmt(row.outstanding), "outstanding", textTop);
+        pdf.setFont("helvetica", "normal");
 
         const rowBottom = rowTop + dynamicRowH;
         pdf.setDrawColor(230, 230, 230);

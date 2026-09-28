@@ -22,6 +22,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getIndianToday } from "@/lib/date-time";
 import { isPaymentReferenceDuplicate } from "@/lib/payment-reference";
+import { fetchAllPages } from "@/lib/supabase/fetch-all";
 
 interface Invoice {
   id: string;
@@ -81,10 +82,11 @@ export function PaymentForm({
     notes: "",
   });
 
-  // Filter invoices by selected client for bulk mode
-  const clientInvoices = selectedClientId
-    ? invoices.filter((inv) => inv.client_id === selectedClientId)
-    : invoices;
+  // Bulk mode: the selected client's invoices, loaded straight from the DB
+  // (not from the page-level `invoices` prop) so the outstanding total and
+  // "added as credit" preview always reflect every invoice the client has.
+  const [clientInvoices, setClientInvoices] = useState<Invoice[]>([]);
+  const [isLoadingClientInvoices, setIsLoadingClientInvoices] = useState(false);
   // Format date as DD/MM/YYYY and get weekday name
   const formatInvoiceLabel = (invoice: Invoice) => {
     if (!invoice.issue_date) return invoice.invoice_number;
@@ -167,6 +169,58 @@ export function PaymentForm({
       }
     }
   }, [formData.invoice_id, invoices, autoFilledInvoiceId]);
+
+  // Load the selected client's payable invoices, oldest first (same order the
+  // credit engine allocates bulk payments in).
+  useEffect(() => {
+    let isActive = true;
+
+    if (!selectedClientId) {
+      setClientInvoices([]);
+      setIsLoadingClientInvoices(false);
+      return;
+    }
+
+    const loadClientInvoices = async () => {
+      setIsLoadingClientInvoices(true);
+      try {
+        const rows = await fetchAllPages<Invoice>(async (from, to) => {
+          const { data, error } = await supabase
+            .from("invoices")
+            .select(
+              "id, invoice_number, total_amount, amount_paid, status, issue_date, client_id",
+            )
+            .eq("client_id", selectedClientId)
+            .not("status", "in", "(draft,cancelled)")
+            .order("issue_date", { ascending: true })
+            .order("created_at", { ascending: true })
+            .order("invoice_number", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, to);
+          return { data, error };
+        });
+        if (!isActive) return;
+        setClientInvoices(rows);
+      } catch (error: unknown) {
+        if (!isActive) return;
+        setClientInvoices([]);
+        toast({
+          variant: "destructive",
+          title: "Could not load client invoices",
+          description:
+            error instanceof Error ? error.message : "Please try again.",
+        });
+      } finally {
+        if (isActive) setIsLoadingClientInvoices(false);
+      }
+    };
+
+    void loadClientInvoices();
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedClientId, supabase, toast]);
 
   // Fetch client credit balance when client changes (bulk mode) or invoice changes (individual mode)
   useEffect(() => {
@@ -440,7 +494,14 @@ export function PaymentForm({
                 </div>
               </div>
 
-              {selectedClientId && (
+              {selectedClientId && isLoadingClientInvoices && (
+                <div className="p-4 border rounded-lg flex items-center gap-2 text-sm text-muted-foreground">
+                  <Spinner className="h-4 w-4" />
+                  Loading client&apos;s invoices…
+                </div>
+              )}
+
+              {selectedClientId && !isLoadingClientInvoices && (
                 <>
                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
                     <h4 className="font-semibold text-amber-900 mb-2">
@@ -712,9 +773,14 @@ export function PaymentForm({
               <p className="text-xs text-muted-foreground">
                 {paymentMode === "bulk" ? (
                   <>
-                    Outstanding: ₹{clientTotalPending.toFixed(2)} |{" "}
+                    Outstanding:{" "}
+                    {isLoadingClientInvoices
+                      ? "loading…"
+                      : `₹${clientTotalPending.toFixed(2)}`}{" "}
+                    |{" "}
                     <button
                       type="button"
+                      disabled={isLoadingClientInvoices}
                       onClick={() =>
                         setFormData({
                           ...formData,
@@ -836,7 +902,8 @@ export function PaymentForm({
                 !formData.amount ||
                 (paymentMode === "individual" && !formData.invoice_id) ||
                 (paymentMode === "individual" && remainingBalance < -0.005) ||
-                (paymentMode === "bulk" && !selectedClientId)
+                (paymentMode === "bulk" &&
+                  (!selectedClientId || isLoadingClientInvoices))
               }
               className="min-w-36"
             >

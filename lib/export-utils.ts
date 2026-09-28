@@ -95,7 +95,7 @@ function normalizeWidthFracs(columns: ExportColumn[]): number[] {
     return columns.map(() => 1 / columns.length)
   }
 
-  const fixedSum = fracs.reduce((sum, f) => sum + (f ?? 0), 0)
+  const fixedSum = fracs.reduce<number>((sum, f) => sum + (f ?? 0), 0)
   const missing = fracs.filter((f) => f === undefined).length
   const remainder = Math.max(0, 1 - fixedSum)
   const fill = missing > 0 ? remainder / missing : 0

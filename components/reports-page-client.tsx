@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback } from "react"
+import { useCallback, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MonthYearPicker } from "@/components/month-year-picker"
@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { formatIndianStatementDate } from "@/lib/date-time"
 import type { ReportPeriodMode } from "@/lib/report-period"
+import { DataTableShimmer } from "@/components/page-shimmers"
+import { PendingSummaryTable } from "@/components/pending-summary-table"
 
 type ClientRow = {
   id: string
@@ -42,7 +44,7 @@ type ProductRow = {
 
 type ClientOption = { id: string; name: string }
 
-type ReportsTab = "overview" | "monthly" | "dateRange"
+type ReportsTab = "pendingSummary" | "overview" | "monthly" | "dateRange"
 
 interface ReportsPageClientProps {
   reportYear: number
@@ -66,9 +68,11 @@ interface ReportsPageClientProps {
 }
 
 function resolveTab(value: string | null): ReportsTab {
+  if (value === "overview") return "overview"
   if (value === "monthly") return "monthly"
   if (value === "dateRange") return "dateRange"
-  return "overview"
+  // no ?tab param = pending summary (primary default)
+  return "pendingSummary"
 }
 
 const PERIOD_MODE_OPTIONS = [
@@ -106,21 +110,36 @@ export function ReportsPageClient({
   const router = useRouter()
   const searchParams = useSearchParams()
   const tab = resolveTab(searchParams.get("tab"))
+  const [isPending, startTransition] = useTransition()
 
   const pushParams = useCallback(
     (mutate: (next: URLSearchParams) => void) => {
       const next = new URLSearchParams(searchParams.toString())
       mutate(next)
       const qs = next.toString()
-      router.push(qs ? `/dashboard/reports?${qs}` : "/dashboard/reports")
+      startTransition(() => {
+        router.push(qs ? `/dashboard/reports?${qs}` : "/dashboard/reports")
+      })
     },
     [router, searchParams],
   )
 
   const setTab = (value: string) => {
     pushParams((next) => {
-      if (value === "overview") {
+      if (value === "pendingSummary") {
+        // Primary tab — no ?tab param, always single-month mode
         next.delete("tab")
+        next.delete("period")
+        next.delete("months")
+        next.delete("fy")
+        next.delete("from")
+        next.delete("to")
+      } else if (value === "overview") {
+        next.set("tab", "overview")
+        if (next.get("period") !== "range") {
+          next.delete("from")
+          next.delete("to")
+        }
       } else if (value === "monthly") {
         next.set("tab", "monthly")
         // Keep from/to when Client Sales Report is in date-range mode
@@ -235,6 +254,13 @@ export function ReportsPageClient({
                   {periodLabel}
                 </span>
               </>
+            ) : tab === "pendingSummary" ? (
+              <>
+                Pending Summary:{" "}
+                <span className="font-semibold text-foreground">
+                  {monthLabel}
+                </span>
+              </>
             ) : (
               <>
                 Monthly Report:{" "}
@@ -245,7 +271,7 @@ export function ReportsPageClient({
             )}
           </p>
         </div>
-        {tab === "monthly" && (
+        {(tab === "pendingSummary" || tab === "monthly") && (
           <MonthYearPicker currentYear={reportYear} currentMonth={reportMonth} />
         )}
         {tab === "overview" &&
@@ -259,10 +285,26 @@ export function ReportsPageClient({
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-6">
         <TabsList className="flex w-full flex-wrap justify-start sm:w-auto">
-          <TabsTrigger value="overview">Sales reports</TabsTrigger>
+          <TabsTrigger value="pendingSummary">Pending Summary</TabsTrigger>
+          <TabsTrigger value="overview">Sales Reports</TabsTrigger>
           <TabsTrigger value="monthly">Monthly Reports</TabsTrigger>
           <TabsTrigger value="dateRange">Date Range</TabsTrigger>
         </TabsList>
+
+        {/* ── Pending Summary (Primary Tab) ────────────────────────── */}
+        <TabsContent value="pendingSummary" className="space-y-4 outline-none">
+          {isPending ? (
+            <DataTableShimmer
+              columns={5}
+              rows={8}
+              showFilterRow
+              exportButtons={2}
+              showPagination={false}
+            />
+          ) : (
+            <PendingSummaryTable rows={rows} periodLabel={monthLabel} />
+          )}
+        </TabsContent>
 
         <TabsContent value="overview" className="space-y-8 outline-none">
           <div className="rounded-lg border bg-white p-4 space-y-3">
@@ -351,28 +393,55 @@ export function ReportsPageClient({
             </p>
           </div>
 
-          <div>
-            <h2 className="mb-3 text-lg font-semibold">Client Sales Report</h2>
-            <ReportsTable
-              rows={rows}
-              daysInMonth={daysInPeriod}
-              monthLabel={periodLabel}
-              saleColumnLabel={
-                periodMode === "month" ? "Current Month Sale" : "Period Sale"
-              }
-            />
-          </div>
-          <div>
-            <h2 className="mb-3 text-lg font-semibold">Product Sales Report</h2>
-            <ProductReportsTable
-              rows={productRows}
-              daysInMonth={daysInPeriod}
-              monthLabel={periodLabel}
-              saleColumnLabel={
-                periodMode === "month" ? "Current Month Sale" : "Period Sale"
-              }
-            />
-          </div>
+          {isPending ? (
+            <div className="space-y-8">
+              <div>
+                <h2 className="mb-3 text-lg font-semibold">Client Sales Report</h2>
+                <DataTableShimmer
+                  columns={10}
+                  rows={8}
+                  showFilterRow
+                  exportButtons={2}
+                  showPagination={false}
+                />
+              </div>
+              <div>
+                <h2 className="mb-3 text-lg font-semibold">Product Sales Report</h2>
+                <DataTableShimmer
+                  columns={7}
+                  rows={5}
+                  showFilterRow={false}
+                  exportButtons={2}
+                  showPagination={false}
+                />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div>
+                <h2 className="mb-3 text-lg font-semibold">Client Sales Report</h2>
+                <ReportsTable
+                  rows={rows}
+                  daysInMonth={daysInPeriod}
+                  monthLabel={periodLabel}
+                  saleColumnLabel={
+                    periodMode === "month" ? "Current Month Sale" : "Period Sale"
+                  }
+                />
+              </div>
+              <div>
+                <h2 className="mb-3 text-lg font-semibold">Product Sales Report</h2>
+                <ProductReportsTable
+                  rows={productRows}
+                  daysInMonth={daysInPeriod}
+                  monthLabel={periodLabel}
+                  saleColumnLabel={
+                    periodMode === "month" ? "Current Month Sale" : "Period Sale"
+                  }
+                />
+              </div>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="monthly" className="outline-none">

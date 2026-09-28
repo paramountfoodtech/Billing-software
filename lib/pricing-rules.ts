@@ -25,7 +25,7 @@ export const PRICING_RULE_TYPE_OPTIONS = [
   { value: "discount_flat", label: "Discount Flat Amount (₹)" },
   { value: "multiplier", label: "Multiplier (e.g., 1.25)" },
   { value: "flat_addition", label: "Flat Amount Addition (₹)" },
-  { value: "conditional_discount", label: "Conditional Discount (₹)" },
+  { value: "conditional_discount", label: "Conditional Pricing: Discount / Addition (₹)" },
 ] as const;
 
 export function createDefaultPricingRuleStep(): PricingRuleStepFormValues {
@@ -192,12 +192,14 @@ export function getPricingRuleStepDescription(
     case "flat_addition":
       return `+ ₹${ruleValue}`;
     case "conditional_discount": {
-      if (basePrice === undefined) return "Conditional discount";
+      if (basePrice === undefined) return "Conditional pricing";
       const threshold = Number(step.conditional_threshold || 0);
       const below = Number(step.conditional_discount_below || 0);
       const aboveEqual = Number(step.conditional_discount_above_equal || 0);
       const selected = basePrice > threshold ? aboveEqual : below;
-      return `Conditional: -₹${selected.toFixed(2)}`;
+      if (selected > 0) return `Conditional: -₹${selected.toFixed(2)}`;
+      if (selected < 0) return `Conditional: +₹${Math.abs(selected).toFixed(2)}`;
+      return "Conditional: ₹0.00";
     }
     default:
       return step.price_rule_type;
@@ -228,12 +230,21 @@ export function validatePricingRuleStep(
   }
 
   if (step.price_rule_type === "conditional_discount") {
-    if (
-      !step.conditional_threshold ||
-      !step.conditional_discount_below ||
-      !step.conditional_discount_above_equal
-    ) {
-      return `Please enter all conditional discount values for ${label}`;
+    const hasThreshold =
+      step.conditional_threshold !== "" &&
+      step.conditional_threshold != null &&
+      !isNaN(Number(step.conditional_threshold));
+    const hasBelow =
+      step.conditional_discount_below !== "" &&
+      step.conditional_discount_below != null &&
+      !isNaN(Number(step.conditional_discount_below));
+    const hasAbove =
+      step.conditional_discount_above_equal !== "" &&
+      step.conditional_discount_above_equal != null &&
+      !isNaN(Number(step.conditional_discount_above_equal));
+
+    if (!hasThreshold || !hasBelow || !hasAbove) {
+      return `Please enter valid threshold and adjustment values for ${label}`;
     }
     return null;
   }

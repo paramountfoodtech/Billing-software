@@ -99,6 +99,15 @@ const ruleTypeLabels = {
   conditional_discount: "Conditional",
 };
 
+function formatConditionalAdjustment(
+  val: number | string | null | undefined,
+): string {
+  const n = Number(val || 0);
+  if (n < 0) return `+₹${Math.abs(n).toFixed(0)}`;
+  if (n > 0) return `-₹${n.toFixed(0)}`;
+  return "₹0";
+}
+
 export function ClientPricingTable({
   pricingRules,
   priceHistory = [],
@@ -164,7 +173,7 @@ export function ClientPricingTable({
             : rule.price_rule_type === "flat_addition"
               ? `+ ₹${Number(rule.price_rule_value || 0).toFixed(2)}`
               : rule.price_rule_type === "conditional_discount"
-                ? `≤₹${Number(rule.conditional_threshold || 0).toFixed(0)}: -₹${Number(rule.conditional_discount_below || 0).toFixed(0)} | >₹${Number(rule.conditional_threshold || 0).toFixed(0)}: -₹${Number(rule.conditional_discount_above_equal || 0).toFixed(0)}`
+                ? `≤₹${Number(rule.conditional_threshold || 0).toFixed(0)}: ${formatConditionalAdjustment(rule.conditional_discount_below)} | >₹${Number(rule.conditional_threshold || 0).toFixed(0)}: ${formatConditionalAdjustment(rule.conditional_discount_above_equal)}`
                 : `× ${rule.price_rule_value}`,
       "Final Price": `₹${calculateFinalPrice(rule).toFixed(2)}`,
       Notes: rule.notes || "",
@@ -560,17 +569,11 @@ export function ClientPricingTable({
                       `+ ₹${Number(rule.price_rule_value || 0).toFixed(2)}`}
                     {rule.price_rule_type === "conditional_discount" && (
                       <span className="text-orange-600">
-                        &le;₹
-                        {Number(rule.conditional_threshold || 0).toFixed(0)}: -₹
-                        {Number(rule.conditional_discount_below || 0).toFixed(
-                          0,
-                        )}
+                        &le;₹{Number(rule.conditional_threshold || 0).toFixed(0)}:{" "}
+                        {formatConditionalAdjustment(rule.conditional_discount_below)}
                         {" | "}
-                        {'>'}₹{Number(rule.conditional_threshold || 0).toFixed(0)}:
-                        -₹
-                        {Number(
-                          rule.conditional_discount_above_equal || 0,
-                        ).toFixed(0)}
+                        &gt;₹{Number(rule.conditional_threshold || 0).toFixed(0)}:{" "}
+                        {formatConditionalAdjustment(rule.conditional_discount_above_equal)}
                       </span>
                     )}
                   </TableCell>

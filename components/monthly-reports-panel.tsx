@@ -277,7 +277,7 @@ function SalesStatementPanel(props: SalesStatementPanelProps) {
       { key: "sale", label: "Sale" },
       { key: "dayTotal", label: "Day Total" },
       { key: "payment", label: "Payment" },
-      { key: "outstanding", label: "Outstanding" },
+      { key: "outstanding", label: "Pending Amount" },
     ]
 
     const data = displayRows.map((r) => ({
@@ -381,7 +381,7 @@ function SalesStatementPanel(props: SalesStatementPanelProps) {
         { id: "sale", label: "Sale", widthFrac: 0.12, align: "right" },
         { id: "dayTotal", label: "Day Total", widthFrac: 0.12, align: "right" },
         { id: "payment", label: "Payment", widthFrac: 0.12, align: "right" },
-        { id: "outstanding", label: "Outstanding", widthFrac: 0.23, align: "right" },
+        { id: "outstanding", label: "Pending Amount", widthFrac: 0.23, align: "right" },
       ]
 
       const colLayout = buildPdfColumnLayout(columns, margin, tableWidth, cellPad)
@@ -525,7 +525,9 @@ function SalesStatementPanel(props: SalesStatementPanelProps) {
         }
 
         drawRight(r.payment > 0 ? fmtMoney(r.payment) : "", "payment", textTop)
+        pdf.setFont("helvetica", "bold")
         drawRight(fmtMoney(r.outstanding), "outstanding", textTop)
+        pdf.setFont("helvetica", "normal")
 
         const rowBottom = rowTop + dynamicRowH
         pdf.setDrawColor(235, 235, 235)
@@ -552,7 +554,7 @@ function SalesStatementPanel(props: SalesStatementPanelProps) {
         ["Total Sale", fmtMoney(summary.totalSale)],
         ["Total Payment", fmtMoney(summary.totalPayment)],
         [
-          "Outstanding on date of Statement",
+          "Total Pending Amount",
           fmtMoney(summary.closingOutstanding),
         ],
       ]
@@ -696,7 +698,7 @@ function SalesStatementPanel(props: SalesStatementPanelProps) {
                 Payment
               </TableHead>
               <TableHead className="px-3 py-2.5 text-right whitespace-nowrap align-bottom">
-                Outstanding
+                Pending Amount
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -770,7 +772,7 @@ function SalesStatementPanel(props: SalesStatementPanelProps) {
                   <TableCell className="px-3 py-2.5 text-right align-top text-green-700 tabular-nums">
                     {r.payment > 0 ? `₹${fmtMoney(r.payment)}` : ""}
                   </TableCell>
-                  <TableCell className="px-3 py-2.5 text-right align-top font-semibold text-orange-800 tabular-nums">
+                  <TableCell className="px-3 py-2.5 text-right align-top font-bold text-orange-800 tabular-nums">
                     ₹{fmtMoney(r.outstanding)}
                   </TableCell>
                 </TableRow>
@@ -797,7 +799,7 @@ function SalesStatementPanel(props: SalesStatementPanelProps) {
             </span>
           </div>
           <div className="flex justify-between gap-4 border-t pt-2 mt-2 font-semibold">
-            <span>Outstanding on date of Statement</span>
+            <span>Total Pending Amount</span>
             <span className="text-orange-800">
               ₹{fmtMoney(summary.closingOutstanding)}
             </span>

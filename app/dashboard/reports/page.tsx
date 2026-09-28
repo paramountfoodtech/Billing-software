@@ -73,42 +73,31 @@ export default async function ReportsPage({
     params.to || (todayDate < monthEnd ? todayDate : monthEnd)
 
   // Fetch all required data in parallel for the selected period
-  const [
-    clientsResult,
-    periodInvoicesResult,
-    allUnpaidInvoicesResult,
-    periodPaymentsResult,
-  ] = await Promise.all([
-    supabase.from("clients").select("id, name, credit_balance").order("name", { ascending: true }),
+  const [clientsResult, allInvoicesResult, allPaymentsResult] =
+    await Promise.all([
+      supabase
+        .from("clients")
+        .select("id, name, credit_balance")
+        .order("name", { ascending: true }),
 
-    supabase
-      .from("invoices")
-      .select(
-        "id, client_id, issue_date, total_amount, status, invoice_items(product_id, description, quantity, line_total)",
-      )
-      .neq("status", "cancelled")
-      .gte("issue_date", periodStart)
-      .lte("issue_date", periodEnd),
+      supabase
+        .from("invoices")
+        .select(
+          "id, client_id, issue_date, total_amount, status, invoice_items(product_id, description, quantity, line_total)",
+        )
+        .neq("status", "cancelled")
+        .lte("issue_date", periodEnd),
 
-    supabase
-      .from("invoices")
-      .select("client_id, total_amount, amount_paid, issue_date")
-      .neq("status", "cancelled")
-      .neq("status", "paid")
-      .lte("issue_date", periodEnd),
-
-    supabase
-      .from("payments")
-      .select("amount, client_id")
-      .eq("status", "completed")
-      .gte("payment_date", periodStart)
-      .lte("payment_date", periodEnd),
-  ])
+      supabase
+        .from("payments")
+        .select("amount, client_id, payment_date")
+        .eq("status", "completed")
+        .lte("payment_date", periodEnd),
+    ])
 
   const clients = clientsResult.data || []
-  const periodInvoices = periodInvoicesResult.data || []
-  const allUnpaidInvoices = allUnpaidInvoicesResult.data || []
-  const periodPayments = periodPaymentsResult.data || []
+  const allInvoices = allInvoicesResult.data || []
+  const allPayments = allPaymentsResult.data || []
 
   type ClientRow = {
     id: string
@@ -139,45 +128,54 @@ export default async function ReportsPage({
     })
   }
 
-  for (const invoice of periodInvoices) {
-    const row = clientMap.get(invoice.client_id)
-    if (!row) continue
-    row.sale += Number(invoice.total_amount)
-    type ClientInvoiceItem = {
-      quantity: string | number | null
-    }
-    const items = (invoice.invoice_items as ClientInvoiceItem[] | null) ?? []
-    const invoiceQty = items.reduce((sum, item) => {
-      return sum + Number(item.quantity || 0)
-    }, 0)
-    row.saleKgs += invoiceQty
-    if (invoice.issue_date === todayDate) {
-      row.todaySaleQty += invoiceQty
-      row.todaySaleValue += Number(invoice.total_amount || 0)
-    }
-  }
+  const periodInvoices: typeof allInvoices = []
 
-  for (const invoice of allUnpaidInvoices) {
-    const balance = Number(invoice.total_amount) - Number(invoice.amount_paid)
-    if (balance <= 0) continue
+  for (const invoice of allInvoices) {
     const row = clientMap.get(invoice.client_id)
-    if (!row) continue
-    row.outstanding += balance
+    const amt = Number(invoice.total_amount || 0)
+
     if (invoice.issue_date < periodStart) {
-      row.oldBal += balance
+      if (row) row.oldBal += amt
+    } else {
+      periodInvoices.push(invoice)
+      if (row) {
+        row.sale += amt
+        type ClientInvoiceItem = {
+          quantity: string | number | null
+        }
+        const items = (invoice.invoice_items as ClientInvoiceItem[] | null) ?? []
+        const invoiceQty = items.reduce((sum, item) => {
+          return sum + Number(item.quantity || 0)
+        }, 0)
+        row.saleKgs += invoiceQty
+        if (invoice.issue_date === todayDate) {
+          row.todaySaleQty += invoiceQty
+          row.todaySaleValue += amt
+        }
+      }
     }
   }
 
-  for (const payment of periodPayments) {
+  for (const payment of allPayments) {
     const clientId = payment.client_id
     if (!clientId) continue
     const row = clientMap.get(clientId)
     if (!row) continue
-    row.payments += Number(payment.amount)
+    const amt = Number(payment.amount || 0)
+    if (payment.payment_date < periodStart) {
+      row.oldBal -= amt
+    } else {
+      row.payments += amt
+    }
+  }
+
+  for (const row of clientMap.values()) {
+    // Statement of Account identity: Old Balance + Period Sale - Period Payments = Total Pending Amount
+    row.outstanding = row.oldBal + row.sale - row.payments
   }
 
   const rows = Array.from(clientMap.values()).filter(
-    (r) => r.sale > 0 || r.payments > 0 || r.outstanding > 0 || r.oldBal > 0,
+    (r) => r.sale !== 0 || r.payments !== 0 || r.outstanding !== 0 || r.oldBal !== 0,
   )
 
   type ProductRow = {

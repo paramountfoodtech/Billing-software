@@ -173,6 +173,17 @@ export function ReportsTable({
   const fmt = (n: number) =>
     n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+  const fmtCurrency = (n: number) => {
+    if (Math.abs(n) < 0.005) return "—"
+    if (n < 0) return `-₹${fmt(Math.abs(n))}`
+    return `₹${fmt(n)}`
+  }
+
+  const fmtTotalCurrency = (n: number) => {
+    if (n < 0) return `-₹${fmt(Math.abs(n))}`
+    return `₹${fmt(n)}`
+  }
+
   const handleExportCSV = () => {
     const columns: ExportColumn[] = [
       { key: "name", label: "Client" },
@@ -213,7 +224,7 @@ export function ReportsTable({
       },
       {
         key: "outstanding",
-        label: "Outstanding",
+        label: "Pending Amount",
         formatter: (value) => Number(value || 0).toFixed(2),
       },
     ]
@@ -248,7 +259,7 @@ export function ReportsTable({
       { key: "saleKgsFmt", label: "Total Sale in KGs", widthFrac: 0.09, align: "right" },
       { key: "avgQtyFmt", label: "Average Quantity per Day", widthFrac: 0.11, align: "right" },
       { key: "paymentsFmt", label: "Payments", widthFrac: 0.1, align: "right" },
-      { key: "outstandingFmt", label: "Outstanding", widthFrac: 0.11, align: "right" },
+      { key: "outstandingFmt", label: "Pending Amount", widthFrac: 0.11, align: "right" },
     ]
 
     await exportToPDF(
@@ -483,7 +494,9 @@ export function ReportsTable({
         })
         drawRight(row.debit > 0 ? fmt(row.debit) : "-", "debit", textTop)
         drawRight(row.credit > 0 ? fmt(row.credit) : "-", "credit", textTop)
+        pdf.setFont("helvetica", "bold")
         drawRight(fmt(row.outstanding), "outstanding", textTop)
+        pdf.setFont("helvetica", "normal")
 
         const rowBottom = rowTop + dynamicRowH
         pdf.setDrawColor(230, 230, 230)
@@ -616,7 +629,7 @@ export function ReportsTable({
                 className="text-right px-2 sm:px-4 py-2 sm:py-3 cursor-pointer hover:bg-muted/50"
                 onClick={() => handleSort("outstanding")}
               >
-                Outstanding <SortIcon column="outstanding" />
+                Pending Amount <SortIcon column="outstanding" />
               </TableHead>
               <TableHead className="text-center px-2 sm:px-4 py-2 sm:py-3">
                 Statement
@@ -634,7 +647,7 @@ export function ReportsTable({
                 />
               </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
-                Outstanding - Current month Sale
+                Old balance (before period)
               </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
                 Current month sale
@@ -657,7 +670,7 @@ export function ReportsTable({
                 Current month payments
               </TableHead>
               <TableHead className="text-right px-2 sm:px-4 py-1.5 font-normal text-muted-foreground text-xs">
-                Total outstanding
+                Total pending amount
               </TableHead>
               <TableHead className="px-2 sm:px-4 py-1.5"></TableHead>
             </TableRow>
@@ -682,7 +695,7 @@ export function ReportsTable({
                     {row.name}
                   </TableCell>
                   <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                    {row.oldBal > 0 ? `₹${fmt(row.oldBal)}` : "—"}
+                    {fmtCurrency(row.oldBal)}
                   </TableCell>
                   <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                     {row.sale > 0 ? `₹${fmt(row.sale)}` : "—"}
@@ -709,8 +722,8 @@ export function ReportsTable({
                   <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-green-700">
                     {row.payments > 0 ? `₹${fmt(row.payments)}` : "—"}
                   </TableCell>
-                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 font-semibold text-orange-700">
-                    {row.outstanding > 0 ? `₹${fmt(row.outstanding)}` : "—"}
+                  <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 font-bold text-orange-700">
+                    {fmtCurrency(row.outstanding)}
                   </TableCell>
                   <TableCell className="px-2 sm:px-4 py-2 sm:py-3 text-center">
                     <Button
@@ -735,7 +748,7 @@ export function ReportsTable({
                   Total Sale
                 </TableCell>
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
-                  ₹{fmt(totals.oldBal)}
+                  {fmtTotalCurrency(totals.oldBal)}
                 </TableCell>
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3">
                   ₹{fmt(totals.sale)}
@@ -756,7 +769,7 @@ export function ReportsTable({
                   ₹{fmt(totals.payments)}
                 </TableCell>
                 <TableCell className="text-right px-2 sm:px-4 py-2 sm:py-3 text-orange-700">
-                  ₹{fmt(totals.outstanding)}
+                  {fmtTotalCurrency(totals.outstanding)}
                 </TableCell>
                 <TableCell className="px-2 sm:px-4 py-2 sm:py-3 text-center text-muted-foreground">
                   —
