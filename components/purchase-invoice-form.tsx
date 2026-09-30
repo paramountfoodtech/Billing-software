@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
+import { Badge } from "@/components/ui/badge";
 import { FormBusyOverlay } from "@/components/form-busy-overlay";
 import {
   Popover,
@@ -50,6 +51,7 @@ interface Purchaser {
   name: string;
   purchaser_code?: string;
   is_default?: boolean | null;
+  credit_balance?: number | string | null;
 }
 
 interface ChallanOption {
@@ -77,6 +79,7 @@ interface PurchaseInvoiceInitial {
   discount_amount?: string | number | null;
   total_amount: string | number;
   amount_paid: string | number;
+  credit_applied?: string | number | null;
   status: string;
   notes?: string | null;
 }
@@ -152,6 +155,46 @@ export function PurchaseInvoiceForm({
       purchasers.find((p) => p.is_default)?.id ||
       "",
   );
+  const [purchaserCreditBalance, setPurchaserCreditBalance] = useState(
+    Number(
+      purchasers.find(
+        (p) =>
+          p.id ===
+          (initialInvoice?.purchaser_id ||
+            firstSeedChallan?.purchaser_id ||
+            purchasers.find((d) => d.is_default)?.id ||
+            ""),
+      )?.credit_balance || 0,
+    ),
+  );
+
+  // Fetch purchaser credit balance when purchaser changes
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchCreditBalance = async () => {
+      if (!purchaserId) {
+        setPurchaserCreditBalance(0);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("purchasers")
+        .select("credit_balance")
+        .eq("id", purchaserId)
+        .maybeSingle();
+
+      if (!isActive) return;
+      setPurchaserCreditBalance(Number(data?.credit_balance || 0));
+    };
+
+    void fetchCreditBalance();
+
+    return () => {
+      isActive = false;
+    };
+  }, [purchaserId, supabase]);
+
   const [selectedChallanIds, setSelectedChallanIds] = useState<string[]>(
     seedChallanIds,
   );
@@ -490,7 +533,8 @@ export function PurchaseInvoiceForm({
     }
 
     setIsLoading(true);
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    // Ensure React commits state and browser repaints the loading overlay/spinner before heavy DB operations start.
+    await new Promise((resolve) => setTimeout(resolve, 30));
 
     try {
       const {
@@ -631,6 +675,16 @@ export function PurchaseInvoiceForm({
             ? `Updated (purchase challans ${challanLabel})`
             : "Updated purchase invoice",
         });
+
+        // Apply/re-apply purchaser credit via the server-side recalculation engine.
+        // This handles backdated invoices correctly since it replays all invoices old-to-new.
+        if (purchaserId) {
+          const { error: recalcError } = await supabase.rpc(
+            "recalculate_purchaser_credit",
+            { p_purchaser_id: purchaserId },
+          );
+          if (recalcError) throw recalcError;
+        }
       } else {
         const { data: invoice, error: invoiceError } = await supabase
           .from("purchase_invoices")
@@ -693,6 +747,16 @@ export function PurchaseInvoiceForm({
               ? `From purchase challans ${challanLabel}`
               : "Purchase invoice (no challan)",
           });
+
+          // Apply/re-apply purchaser credit via the server-side recalculation engine.
+          // This distributes any existing credit balance to this new invoice automatically.
+          if (purchaserId) {
+            const { error: recalcError } = await supabase.rpc(
+              "recalculate_purchaser_credit",
+              { p_purchaser_id: purchaserId },
+            );
+            if (recalcError) throw recalcError;
+          }
         }
       }
 
@@ -704,8 +768,13 @@ export function PurchaseInvoiceForm({
           : `Purchase invoice ${invoiceNumber} created successfully.`,
       });
 
+      // Keep spinner visible until navigation completes (component unmounts).
+      // Do NOT call setIsLoading(false) here — router.push() is async and the
+      // component is still mounted until the new page renders. Dismissing the
+      // spinner here makes users think the save failed and they click again.
       router.push(`/dashboard/purchase-invoices/${invoiceId}`);
       router.refresh();
+      // (spinner clears on unmount — no setIsLoading(false) on success path)
     } catch (error: unknown) {
       toast({
         variant: "destructive",
@@ -717,23 +786,23 @@ export function PurchaseInvoiceForm({
               ? "Failed to update invoice."
               : "Failed to create invoice.",
       });
-    } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Card className="relative overflow-hidden">
+    <div className="relative">
       <FormBusyOverlay
         active={isLoading}
         label={isEditMode ? "Updating purchase invoice…" : "Creating purchase invoice…"}
       />
-      <CardContent className="pt-6">
-        <form
-          onSubmit={handleSubmit}
-          className={`space-y-6 ${isLoading ? "pointer-events-none select-none" : ""}`}
-          aria-busy={isLoading}
-        >
+      <Card>
+        <CardContent className="pt-6">
+          <form
+            onSubmit={handleSubmit}
+            className={`space-y-6 ${isLoading ? "pointer-events-none select-none" : ""}`}
+            aria-busy={isLoading}
+          >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="issue_date">Issue Date</Label>
@@ -789,6 +858,14 @@ export function PurchaseInvoiceForm({
                 placeholder="Select purchaser"
                 disabled={lockedFromQuery || hasLinkedChallans}
               />
+              {purchaserCreditBalance > 0 && (
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-purple-700 font-medium">
+                  <Badge variant="secondary" className="bg-purple-100 text-purple-700 text-[10px] px-1.5 py-0">
+                    Credit
+                  </Badge>
+                  <span>Available Credit: ₹{purchaserCreditBalance.toFixed(2)}</span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2 sm:col-span-2">
@@ -1133,6 +1210,57 @@ export function PurchaseInvoiceForm({
             )}
           </div>
 
+          {/* Credit balance info banner for new invoices */}
+          {!isEditMode && purchaserCreditBalance > 0 && finalTotal > 0 && (
+            <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
+              <h4 className="font-semibold text-purple-900 text-sm flex items-center gap-1">
+                💰 Purchaser Credit Available
+              </h4>
+              <div className="flex justify-between text-sm">
+                <span className="text-purple-700">Available Credit:</span>
+                <span className="font-medium text-purple-600">
+                  ₹{purchaserCreditBalance.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-purple-700">Credit to apply:</span>
+                <span className="font-medium text-purple-600">
+                  ₹{Math.min(purchaserCreditBalance, finalTotal).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm font-bold border-t border-purple-200 pt-2">
+                <span className="text-purple-900">Net outstanding after credit:</span>
+                <span
+                  className={
+                    finalTotal - Math.min(purchaserCreditBalance, finalTotal) <= 0
+                      ? "text-green-600"
+                      : "text-orange-600"
+                  }
+                >
+                  ₹{Math.max(0, finalTotal - purchaserCreditBalance).toFixed(2)}
+                </span>
+              </div>
+              {purchaserCreditBalance >= finalTotal ? (
+                <p className="text-xs text-green-600 font-medium">
+                  ✓ This invoice will be fully paid from credit balance
+                </p>
+              ) : (
+                <p className="text-xs text-orange-600 font-medium">
+                  ⚠ Invoice will be partially paid from credit (₹
+                  {Math.max(0, finalTotal - purchaserCreditBalance).toFixed(2)} remaining)
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Show credit applied on existing invoices */}
+          {isEditMode && Number(initialInvoice?.amount_paid || 0) > 0 && (
+            <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex justify-between text-sm text-green-800">
+              <span className="font-medium">Amount Paid (incl. credit):</span>
+              <span className="font-bold">₹{Number(initialInvoice?.amount_paid || 0).toFixed(2)}</span>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-3 justify-end">
             <Button
               type="button"
@@ -1170,5 +1298,6 @@ export function PurchaseInvoiceForm({
         </form>
       </CardContent>
     </Card>
+    </div>
   );
 }

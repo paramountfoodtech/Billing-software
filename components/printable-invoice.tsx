@@ -139,12 +139,14 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
           left: 0;
           top: 0;
           width: 100%;
+          padding: 1cm;
+          box-sizing: border-box;
         }
         .no-print {
           display: none !important;
         }
         @page {
-          margin: 1cm;
+          margin: 0;
         }
       }
     `;
@@ -183,6 +185,7 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
         <CardContent className="p-5 md:p-6 text-sm">
           {/* Header */}
           <div className="flex justify-between items-start mb-5">
+            {/* Left column: logo, company info, then secondary invoice metadata */}
             <div>
               {logoSrc && (
                 <img
@@ -197,26 +200,11 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
                 <p>Phone: {activeTemplate.company_phone}</p>
                 <p>Email: {activeTemplate.company_email}</p>
               </div>
-            </div>
-            <div className="text-right">
-              <h2 className="text-2xl font-bold mb-1.5">INVOICE</h2>
-              <div className="text-xs">
-                <p className="font-semibold">
-                  Invoice #: {invoice.invoice_number}
-                </p>
+              {/* Remaining invoice metadata moved to left */}
+              <div className="text-xs text-muted-foreground mt-3 space-y-0.5">
                 {invoice.reference_number && (
-                  <p className="text-gray-600">
-                    Ref: {invoice.reference_number}
-                  </p>
+                  <p>Ref: {invoice.reference_number}</p>
                 )}
-                <p>
-                  Date:{" "}
-                  {formatIndianDate(invoice.issue_date, {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </p>
                 <p>
                   Due Date:{" "}
                   {invoice.due_days_type === "end_of_month"
@@ -229,13 +217,54 @@ export function PrintableInvoice({ invoice, template }: PrintableInvoiceProps) {
                 </p>
               </div>
             </div>
+
+            {/* Right column: INVOICE heading + highlighted key fields */}
+            <div className="text-right">
+              <h2 className="text-2xl font-bold tracking-widest mb-3">INVOICE</h2>
+              {/* Professional bordered key-fields table */}
+              <div className="border border-gray-300 rounded overflow-hidden inline-block text-left min-w-[220px]">
+                <div className="border-t-4 border-gray-800" />
+                <table className="w-full text-xs">
+                  <tbody>
+                    <tr className="border-b border-gray-200">
+                      <td className="px-3 py-2 uppercase tracking-widest text-muted-foreground font-semibold whitespace-nowrap bg-gray-50">
+                        Inv No
+                      </td>
+                      <td className="px-3 py-2 font-bold text-gray-900 text-right">
+                        #{invoice.invoice_number}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-gray-200">
+                      <td className="px-3 py-2 uppercase tracking-widest text-muted-foreground font-semibold whitespace-nowrap bg-gray-50">
+                        Inv Date
+                      </td>
+                      <td className="px-3 py-2 font-bold text-gray-900 text-right">
+                        {formatIndianDate(invoice.issue_date, {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2 uppercase tracking-widest text-muted-foreground font-semibold whitespace-nowrap bg-gray-50">
+                        Client
+                      </td>
+                      <td className="px-3 py-2 font-bold text-gray-900 text-right">
+                        {invoice.clients.name}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
           {/* Bill To */}
           <div className="mb-5">
             <h3 className="font-semibold mb-1.5">Bill To:</h3>
             <div className="text-xs">
-              <p className="font-medium">{invoice.clients.name}</p>
+              <p className="font-semibold text-sm">{invoice.clients.name}</p>
               {invoice.clients.address && <p>{invoice.clients.address}</p>}
               {invoice.clients.city && invoice.clients.state && (
                 <p>

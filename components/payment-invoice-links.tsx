@@ -92,12 +92,83 @@ export function getPaymentLinkedInvoices(
   }));
 }
 
+export interface PurchasePaymentWithAllocations {
+  purchase_invoices?: { id: string; invoice_number: string } | null;
+  purchase_payment_allocations?: Array<{
+    amount: string | number;
+    allocation_type: string;
+    purchase_invoices: InvoiceRef | InvoiceRef[] | null;
+  }> | null;
+}
+
+export function getPurchasePaymentLinkedInvoices(
+  payment: PurchasePaymentWithAllocations,
+): LinkedInvoice[] {
+  const byId = new Map<
+    string,
+    LinkedInvoice & { issue_date: string }
+  >();
+
+  for (const allocation of payment.purchase_payment_allocations ?? []) {
+    if (allocation.allocation_type !== "payment") continue;
+    const invoice = Array.isArray(allocation.purchase_invoices)
+      ? allocation.purchase_invoices[0]
+      : allocation.purchase_invoices;
+    if (!invoice) continue;
+
+    const existing = byId.get(invoice.id);
+    const amount = Number(allocation.amount || 0);
+    if (existing) {
+      existing.amount = (existing.amount ?? 0) + amount;
+    } else {
+      byId.set(invoice.id, {
+        id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        amount,
+        issue_date: invoice.issue_date || "",
+      });
+    }
+  }
+
+  const linked = Array.from(byId.values()).sort(
+    (a, b) =>
+      a.issue_date.localeCompare(b.issue_date) ||
+      a.invoice_number.localeCompare(b.invoice_number, undefined, {
+        numeric: true,
+      }),
+  );
+
+  const direct = payment.purchase_invoices;
+  if (direct) {
+    const directIndex = linked.findIndex((inv) => inv.id === direct.id);
+    if (directIndex > 0) {
+      const [entry] = linked.splice(directIndex, 1);
+      linked.unshift(entry);
+    } else if (directIndex === -1 && linked.length === 0) {
+      linked.push({
+        id: direct.id,
+        invoice_number: direct.invoice_number,
+        amount: null,
+        issue_date: "",
+      });
+    }
+  }
+
+  return linked.map(({ id, invoice_number, amount }) => ({
+    id,
+    invoice_number,
+    amount,
+  }));
+}
+
 const CLOSE_DELAY_MS = 150;
 
 export function PaymentInvoiceLinks({
   invoices,
+  basePath = "/dashboard/invoices",
 }: {
   invoices: LinkedInvoice[];
+  basePath?: string;
 }) {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -123,7 +194,7 @@ export function PaymentInvoiceLinks({
   const [first, ...rest] = invoices;
   const firstLink = (
     <Link
-      href={`/dashboard/invoices/${first.id}`}
+      href={`${basePath}/${first.id}`}
       className="font-medium hover:underline text-blue-600 max-w-[100px] sm:max-w-none truncate block text-xs"
     >
       {first.invoice_number}
@@ -183,7 +254,7 @@ export function PaymentInvoiceLinks({
           {invoices.map((invoice) => (
             <li key={invoice.id}>
               <Link
-                href={`/dashboard/invoices/${invoice.id}`}
+                href={`${basePath}/${invoice.id}`}
                 className="flex items-center justify-between gap-3 rounded px-2 py-2 text-xs hover:bg-muted"
               >
                 <span className="font-medium text-blue-600 truncate">

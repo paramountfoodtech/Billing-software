@@ -38,7 +38,7 @@ export function measurePdfTextBlockHeight(
   lineHeightFactor = 1.25,
 ): number {
   if (lines.length === 0) return singleLineH
-  const blockH = pdf.getTextDimensions(lines.join("\n"), { lineHeightFactor }).h
+  const blockH = pdf.getTextDimensions(lines.join("\n"), { lineHeightFactor } as any).h
   return Math.max(singleLineH, blockH)
 }
 

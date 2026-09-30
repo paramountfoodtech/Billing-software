@@ -6,7 +6,7 @@ export async function generateInvoicePdfFromElement(
   const { jsPDF } = await import("jspdf");
 
   const canvas = await html2canvas(element, {
-    scale: 2,
+    scale: 1.5,
     useCORS: true,
     logging: false,
     backgroundColor: "#ffffff",

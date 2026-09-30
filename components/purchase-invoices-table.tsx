@@ -67,6 +67,7 @@ interface PurchaseInvoice {
   price_per_kg: string;
   total_amount: string;
   amount_paid: string;
+  credit_applied?: string | number | null;
   status: string;
   created_at: string;
   purchasers: { name: string; purchaser_code: string } | null;
@@ -774,10 +775,19 @@ export function PurchaseInvoicesTable({
                       })}
                     </TableCell>
                     <TableCell className="hidden md:table-cell px-2 sm:px-4 py-2 sm:py-3">
-                      ₹
-                      {Number(invoice.amount_paid).toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                      })}
+                      <div className="flex items-center gap-1 text-green-600">
+                        <span>
+                          ₹
+                          {Number(invoice.amount_paid).toLocaleString("en-IN", {
+                            minimumFractionDigits: 2,
+                          })}
+                        </span>
+                        {Number(invoice.credit_applied || 0) > 0 && (
+                          <Badge variant="secondary" className="bg-purple-100 text-purple-700 text-[10px] px-1 py-0">
+                            Credit
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell px-2 sm:px-4 py-2 sm:py-3 text-red-600">
                       ₹{due.toFixed(2)}

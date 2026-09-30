@@ -31,7 +31,9 @@ export default async function PurchasePaymentsPage() {
           `
           *,
           purchase_invoices(id, invoice_number, total_amount, amount_paid, status, purchaser_id, purchasers(name)),
-          profiles!purchase_payments_created_by_fkey(full_name)
+          purchaser:purchaser_id(name),
+          profiles!purchase_payments_created_by_fkey(full_name),
+          purchase_payment_allocations(amount, allocation_type, purchase_invoices(id, invoice_number, issue_date))
         `,
         )
         .order("created_at", { ascending: false }),

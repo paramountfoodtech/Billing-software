@@ -36,7 +36,7 @@ export default async function NewPurchaseInvoicePage({
   ] = await Promise.all([
     supabase
       .from("purchasers")
-      .select("id, name, purchaser_code, is_default")
+      .select("id, name, purchaser_code, is_default, credit_balance")
       .eq("organization_id", organizationId)
       .order("name"),
     supabase

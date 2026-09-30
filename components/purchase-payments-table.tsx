@@ -44,15 +44,20 @@ import { IconTooltip } from "@/components/icon-tooltip";
 import { TableRowActions } from "@/components/table-row-actions";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { canDelete } from "@/lib/permissions";
+import {
+  PaymentInvoiceLinks,
+  getPurchasePaymentLinkedInvoices,
+} from "@/components/payment-invoice-links";
 
 interface PurchasePayment {
   id: string;
-  purchase_invoice_id: string;
+  purchase_invoice_id: string | null;
   amount: string;
   payment_date: string;
   payment_method: string;
   reference_number: string | null;
   status: string;
+  credit_generated?: string | number | null;
   created_at?: string;
   profiles?: { full_name: string } | null;
   purchase_invoices: {
@@ -62,7 +67,15 @@ interface PurchasePayment {
     amount_paid: string;
     purchaser_id?: string;
     purchasers: { name: string };
-  };
+  } | null;
+  purchaser?: {
+    name: string;
+  } | null;
+  purchase_payment_allocations?: Array<{
+    amount: string | number;
+    allocation_type: string;
+    purchase_invoices: { id: string; invoice_number: string; issue_date?: string | null } | null;
+  }> | null;
 }
 
 interface PurchasePaymentsTableProps {
@@ -119,14 +132,16 @@ export function PurchasePaymentsTable({
 
     if (filters.invoice) {
       filtered = filtered.filter((p) =>
-        p.purchase_invoices.invoice_number
+        getPurchasePaymentLinkedInvoices(p)
+          .map((inv) => inv.invoice_number)
+          .join(" ")
           .toLowerCase()
           .includes(filters.invoice.toLowerCase()),
       );
     }
     if (filters.purchaser) {
       filtered = filtered.filter((p) =>
-        p.purchase_invoices.purchasers.name
+        (p.purchase_invoices?.purchasers?.name || p.purchaser?.name || "")
           .toLowerCase()
           .includes(filters.purchaser.toLowerCase()),
       );
@@ -147,12 +162,12 @@ export function PurchasePaymentsTable({
             bVal = new Date(b.payment_date).getTime();
             break;
           case "invoice":
-            aVal = a.purchase_invoices.invoice_number;
-            bVal = b.purchase_invoices.invoice_number;
+            aVal = getPurchasePaymentLinkedInvoices(a)[0]?.invoice_number || "";
+            bVal = getPurchasePaymentLinkedInvoices(b)[0]?.invoice_number || "";
             break;
           case "purchaser":
-            aVal = a.purchase_invoices.purchasers.name;
-            bVal = b.purchase_invoices.purchasers.name;
+            aVal = a.purchase_invoices?.purchasers?.name || a.purchaser?.name || "";
+            bVal = b.purchase_invoices?.purchasers?.name || b.purchaser?.name || "";
             break;
           case "amount":
             aVal = Number(a.amount);
@@ -204,48 +219,17 @@ export function PurchasePaymentsTable({
     const supabase = createClient();
 
     try {
-      const { data: payment, error: fetchError } = await supabase
-        .from("purchase_payments")
-        .select("purchase_invoice_id, amount")
-        .eq("id", id)
-        .maybeSingle();
+      const { error: rpcError } = await supabase.rpc("delete_purchaser_payment", {
+        p_payment_id: id,
+      });
 
-      if (fetchError || !payment) throw new Error("Payment not found");
-
-      const { data: invoice, error: invoiceFetchError } = await supabase
-        .from("purchase_invoices")
-        .select("amount_paid, total_amount")
-        .eq("id", payment.purchase_invoice_id)
-        .maybeSingle();
-
-      if (invoiceFetchError || !invoice) throw new Error("Invoice not found");
-
-      const newAmountPaid = Math.max(
-        0,
-        Number(invoice.amount_paid) - Number(payment.amount),
-      );
-      const totalAmount = Number(invoice.total_amount);
-      let newStatus = "recorded";
-      if (newAmountPaid >= totalAmount - 0.01) newStatus = "paid";
-      else if (newAmountPaid > 0) newStatus = "partially_paid";
-
-      const { error: deleteError } = await supabase
-        .from("purchase_payments")
-        .delete()
-        .eq("id", id);
-      if (deleteError) throw deleteError;
-
-      const { error: updateError } = await supabase
-        .from("purchase_invoices")
-        .update({ amount_paid: newAmountPaid, status: newStatus })
-        .eq("id", payment.purchase_invoice_id);
-      if (updateError) throw updateError;
+      if (rpcError) throw rpcError;
 
       toast({
         variant: "success",
         title: "Payment deleted",
         description:
-          "The payment has been deleted and the invoice status updated.",
+          "The payment has been deleted and invoice statuses recalculated.",
       });
       router.refresh();
     } catch (error: unknown) {
@@ -263,14 +247,12 @@ export function PurchasePaymentsTable({
   const handleExport = () => {
     const columns: ExportColumn[] = [
       {
-        key: "purchase_invoices",
+        key: "invoice_numbers",
         label: "Invoice Number",
-        formatter: (inv) => inv?.invoice_number || "",
       },
       {
-        key: "purchase_invoices",
+        key: "purchaser_name",
         label: "Purchaser",
-        formatter: (inv) => inv?.purchasers?.name || "",
       },
       {
         key: "amount",
@@ -297,8 +279,18 @@ export function PurchasePaymentsTable({
       },
     ];
 
+    const csvRows = processedPayments.map((p) => ({
+      ...p,
+      invoice_numbers:
+        getPurchasePaymentLinkedInvoices(p)
+          .map((inv) => inv.invoice_number)
+          .join(", ") || "-",
+      purchaser_name:
+        p.purchase_invoices?.purchasers?.name || p.purchaser?.name || "",
+    }));
+
     exportToCSV(
-      processedPayments,
+      csvRows,
       columns,
       `purchase-payments-${getTimestamp()}.csv`,
     );
@@ -311,8 +303,12 @@ export function PurchasePaymentsTable({
 
   const handleExportPDF = async () => {
     const enriched = processedPayments.map((p) => ({
-      invoice_number: p.purchase_invoices.invoice_number,
-      purchaser_name: p.purchase_invoices.purchasers.name,
+      invoice_number:
+        getPurchasePaymentLinkedInvoices(p)
+          .map((inv) => inv.invoice_number)
+          .join(", ") || "-",
+      purchaser_name:
+        p.purchase_invoices?.purchasers?.name || p.purchaser?.name || "—",
       amount_fmt: `Rs.${Number(p.amount).toFixed(2)}`,
       payment_date_fmt: formatIndianDate(p.payment_date, {
         year: "numeric",
@@ -486,20 +482,41 @@ export function PurchasePaymentsTable({
                   statusConfig.completed;
                 return (
                   <TableRow key={payment.id}>
-                    <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
-                      {formatIndianDate(payment.payment_date)}
-                    </TableCell>
-                    <TableCell className="font-mono px-2 sm:px-4 py-2 sm:py-3">
-                      {payment.purchase_invoices.invoice_number}
-                    </TableCell>
-                    <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
-                      {payment.purchase_invoices.purchasers.name}
-                    </TableCell>
-                    <TableCell className="px-2 sm:px-4 py-2 sm:py-3 font-medium text-green-700">
-                      ₹
-                      {Number(payment.amount).toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
+                    <TableCell className="px-2 sm:px-4 py-2 sm:py-3 text-xs">
+                      {formatIndianDate(payment.payment_date, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
                       })}
+                    </TableCell>
+                    <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
+                      <PaymentInvoiceLinks
+                        invoices={getPurchasePaymentLinkedInvoices(payment)}
+                        basePath="/dashboard/purchase-invoices"
+                      />
+                    </TableCell>
+                    <TableCell className="px-2 sm:px-4 py-2 sm:py-3 text-xs">
+                      {payment.purchase_invoices?.purchasers?.name || payment.purchaser?.name || "—"}
+                    </TableCell>
+                    <TableCell className="font-semibold text-green-600 px-2 sm:px-4 py-2 sm:py-3 text-xs">
+                      <div className="flex items-center gap-1">
+                        <span>
+                          ₹
+                          {Number(payment.amount).toLocaleString("en-IN", {
+                            minimumFractionDigits: 2,
+                          })}
+                        </span>
+                        {payment.status === "completed" &&
+                          Number(payment.credit_generated || 0) > 0 && (
+                            <Badge
+                              variant="secondary"
+                              title={`₹${Number(payment.credit_generated).toFixed(2)} added as purchaser credit`}
+                              className="bg-purple-100 text-purple-700 text-[10px] px-1 py-0"
+                            >
+                              Credit
+                            </Badge>
+                          )}
+                      </div>
                     </TableCell>
                     <TableCell className="hidden md:table-cell capitalize px-2 sm:px-4 py-2 sm:py-3">
                       {payment.payment_method.replace("_", " ")}

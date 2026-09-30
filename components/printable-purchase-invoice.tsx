@@ -35,6 +35,7 @@ interface PurchaseInvoice {
   total_amount: string;
   discount_amount?: string;
   amount_paid: string;
+  credit_applied?: string | number | null;
   status: string;
   notes: string | null;
   purchasers?: {
@@ -148,12 +149,14 @@ export function PrintablePurchaseInvoice({
           left: 0;
           top: 0;
           width: 100%;
+          padding: 1cm;
+          box-sizing: border-box;
         }
         .no-print {
           display: none !important;
         }
         @page {
-          margin: 1cm;
+          margin: 0;
         }
       }
     `;
@@ -207,41 +210,25 @@ export function PrintablePurchaseInvoice({
                 <p>Phone: {activeTemplate.company_phone}</p>
                 <p>Email: {activeTemplate.company_email}</p>
               </div>
-            </div>
-            <div className="text-right">
-              <h2 className="text-2xl font-bold mb-1.5">PURCHASE INVOICE</h2>
-              <div className="text-xs">
-                <p className="font-semibold">
-                  Invoice #: {invoice.invoice_number}
-                </p>
+              {/* Remaining invoice metadata moved to left */}
+              <div className="text-xs text-muted-foreground mt-3 space-y-0.5">
                 {invoice.purchaser_invoice_number && (
-                  <p className="font-semibold">
-                    Purchaser Invoice #: {invoice.purchaser_invoice_number}
-                  </p>
+                  <p>Purchaser Inv #: {invoice.purchaser_invoice_number}</p>
                 )}
-                <p>
-                  Date:{" "}
-                  {formatIndianDate(invoice.issue_date, {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </p>
                 {hasChallan && (
                   <>
-                    <p className="text-gray-600">
-                      Purchase challan
-                      {linkedChallans.length > 1 ? "s" : ""}:{" "}
+                    <p>
+                      Purchase challan{linkedChallans.length > 1 ? "s" : ""}:{" "}
                       {linkedChallans.length > 0
                         ? linkedChallans.map((c) => c.challan_number).join(", ")
-                        : invoice.challans!.challan_number}
+                        : invoice.challans?.challan_number}
                     </p>
                     {linkedChallans.length <= 1 && (
-                      <p className="text-gray-600">
+                      <p>
                         Purchase challan date:{" "}
                         {formatIndianDate(
                           linkedChallans[0]?.challan_date ||
-                            invoice.challans!.challan_date,
+                            invoice.challans?.challan_date,
                           {
                             year: "numeric",
                             month: "long",
@@ -252,6 +239,47 @@ export function PrintablePurchaseInvoice({
                     )}
                   </>
                 )}
+              </div>
+            </div>
+
+            {/* Right column: PURCHASE INVOICE heading + highlighted key fields */}
+            <div className="text-right">
+              <h2 className="text-2xl font-bold tracking-widest mb-3">PURCHASE INVOICE</h2>
+              {/* Professional bordered key-fields table */}
+              <div className="border border-gray-300 rounded overflow-hidden inline-block text-left min-w-[220px]">
+                <div className="border-t-4 border-gray-800" />
+                <table className="w-full text-xs">
+                  <tbody>
+                    <tr className="border-b border-gray-200">
+                      <td className="px-3 py-2 uppercase tracking-widest text-muted-foreground font-semibold whitespace-nowrap bg-gray-50">
+                        Inv No
+                      </td>
+                      <td className="px-3 py-2 font-bold text-gray-900 text-right">
+                        #{invoice.invoice_number}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-gray-200">
+                      <td className="px-3 py-2 uppercase tracking-widest text-muted-foreground font-semibold whitespace-nowrap bg-gray-50">
+                        Inv Date
+                      </td>
+                      <td className="px-3 py-2 font-bold text-gray-900 text-right">
+                        {formatIndianDate(invoice.issue_date, {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-3 py-2 uppercase tracking-widest text-muted-foreground font-semibold whitespace-nowrap bg-gray-50">
+                        Purchaser
+                      </td>
+                      <td className="px-3 py-2 font-bold text-gray-900 text-right">
+                        {invoice.purchasers?.name || "—"}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -405,6 +433,12 @@ export function PrintablePurchaseInvoice({
               </div>
               {Number(invoice.amount_paid) > 0 && (
                 <>
+                  {Number(invoice.credit_applied || 0) > 0 && (
+                    <div className="flex justify-between py-1 text-purple-600">
+                      <span>Credit Applied:</span>
+                      <span>₹{Number(invoice.credit_applied).toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between py-1 text-green-600">
                     <span>Amount Paid:</span>
                     <span>₹{Number(invoice.amount_paid).toFixed(2)}</span>
