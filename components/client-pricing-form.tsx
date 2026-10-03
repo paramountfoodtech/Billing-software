@@ -117,6 +117,7 @@ export function ClientPricingForm({
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [effectiveFrom, setEffectiveFrom] = useState<string>("");
   const [categories, setCategories] = useState<PriceCategory[]>([]);
   const [history, setHistory] = useState<
     Array<{
@@ -126,6 +127,11 @@ export function ClientPricingForm({
     }>
   >(priceHistory);
   const today = getIndianToday();
+
+  // Initialise effectiveFrom to today once getIndianToday() resolves
+  useEffect(() => {
+    if (!effectiveFrom) setEffectiveFrom(today);
+  }, [today]);
 
   const [selectedClient, setSelectedClient] = useState(
     existingRule?.client_id || existingRules?.[0]?.client_id || "",
@@ -330,6 +336,8 @@ export function ClientPricingForm({
     try {
       const userName = await getProfileDisplayName(supabase, user.id);
 
+      const effectiveDateToUse = effectiveFrom || today;
+
       const recordPricingHistory = async (
         pricingId: string,
         clientId: string,
@@ -345,6 +353,7 @@ export function ClientPricingForm({
             productId,
             ruleData,
             user.id,
+            effectiveDateToUse,
           ),
         );
       };
@@ -924,6 +933,34 @@ export function ClientPricingForm({
               {error}
             </div>
           )}
+
+          {/* Effective From date picker */}
+          <div className="border rounded-lg p-4 bg-blue-50 border-blue-200 space-y-2">
+            <Label htmlFor="effective_from" className="text-blue-900 font-semibold">
+              Effective From
+            </Label>
+            <p className="text-xs text-blue-700">
+              Pricing rules will apply to invoices dated on or after this date.
+              Change this to a past date to backdate the rule (e.g. to apply it to yesterday&apos;s invoices).
+            </p>
+            <Input
+              id="effective_from"
+              type="date"
+              value={effectiveFrom}
+              onChange={(e) => setEffectiveFrom(e.target.value)}
+              className="max-w-xs bg-white"
+            />
+            {effectiveFrom && effectiveFrom < today && (
+              <p className="text-xs font-medium text-amber-700">
+                ⚠ Backdated — this rule will apply to invoices from {effectiveFrom} onwards.
+              </p>
+            )}
+            {effectiveFrom && effectiveFrom > today && (
+              <p className="text-xs font-medium text-blue-700">
+                ℹ Future-dated — invoices before {effectiveFrom} will still use the previous rule.
+              </p>
+            )}
+          </div>
 
           <div className="flex gap-4">
             <Button

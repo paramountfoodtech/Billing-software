@@ -852,6 +852,24 @@ export function InvoiceForm({
     );
   };
 
+  // Count items whose stored unit_price differs from the current computed price.
+  // Used to decide whether to show the Refresh Prices button.
+  const staleItemCount = useMemo(() => {
+    if (!formData.client_id || !initialInvoice) return 0;
+    return items.filter((item) => {
+      if (!item.product_id || item.unit_price == null) return false;
+      const computed = calculateClientPrice(
+        item.product_id,
+        formData.client_id,
+        formData.issue_date,
+        false,
+        1,
+      );
+      return Math.abs(computed - item.unit_price) > 0.005;
+    }).length;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, formData.client_id, formData.issue_date, clientPricingHistory, clientPricingRules, priceHistory]);
+
   const resolveSequenceForClient = async (client: Client | undefined) => {
     let orgId = organizationId;
     if (!orgId) {
@@ -1043,11 +1061,13 @@ export function InvoiceForm({
   };
 
   const confirmRefreshPrices = () => {
+    const changed = staleItemCount;
     recalculateAllItemPrices();
     setRefreshPricesDialogOpen(false);
     toast({
-      title: "Prices refreshed",
-      description: `Line prices updated for ${formData.issue_date}.`,
+      variant: "success",
+      title: "Prices recalculated",
+      description: `${changed} line item${changed !== 1 ? "s" : ""} updated to the latest pricing rules for ${formData.issue_date}.`,
     });
   };
 
@@ -2449,15 +2469,19 @@ export function InvoiceForm({
                   Add products to this invoice.
                 </p>
               </div>
-              {formData.client_id && items.length > 0 && (
+              {formData.client_id && items.length > 0 && staleItemCount > 0 && (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={handleRefreshPrices}
+                  className="border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100"
                 >
                   <RefreshCw className="mr-2 h-4 w-4" />
                   Refresh prices
+                  <span className="ml-2 inline-flex items-center rounded-full bg-amber-200 px-1.5 py-0.5 text-xs font-semibold text-amber-900">
+                    {staleItemCount}
+                  </span>
                 </Button>
               )}
             </CardHeader>
@@ -3041,17 +3065,17 @@ export function InvoiceForm({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Refresh line prices?</AlertDialogTitle>
+            <AlertDialogTitle>Recalculate prices?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will recalculate all line prices using pricing rules and
-              category prices for {formData.issue_date}. Saved unit prices will
-              be overwritten.
+              {staleItemCount} line item{staleItemCount !== 1 ? "s have" : " has"} a unit price that differs from what the current pricing rules and market prices would produce for{" "}
+              <span className="font-medium">{formData.issue_date}</span>. This can happen when a pricing rule was updated or when the daily category price changed.
+              Recalculating will overwrite those saved prices.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmRefreshPrices}>
-              Refresh prices
+              Yes, recalculate
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
