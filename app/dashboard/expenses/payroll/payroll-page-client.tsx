@@ -9,6 +9,7 @@ import { SalaryTab } from "@/components/hr/salary-tab";
 import { AdvancesTab } from "@/components/hr/advances-tab";
 import { Users, CalendarDays, Banknote, HandCoins } from "lucide-react";
 import { canAccessPayroll } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
 
 /* ---------- shared types ---------- */
 
@@ -243,7 +244,12 @@ export function PayrollPageClient({
         onValueChange={handleTabChange}
         className="space-y-6"
       >
-        <TabsList className="flex w-full flex-wrap justify-start sm:w-auto h-auto">
+        <TabsList
+          className={cn(
+            "flex w-full flex-wrap justify-start sm:w-auto h-auto",
+            visibleTabs.length === 1 && "hidden",
+          )}
+        >
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;
             return (

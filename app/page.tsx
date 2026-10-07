@@ -25,23 +25,28 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 text-slate-900">
       <nav className="sticky top-0 z-50 border-b border-white/70 bg-white/80 backdrop-blur-xl">
-        <div className="container mx-auto flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:py-4">
-          <div className="flex items-center gap-2">
+        <div className="container mx-auto flex h-14 items-center justify-between gap-3 px-4 sm:h-[72px]">
+          <div className="flex min-w-0 items-center gap-2">
             <Image
               src="/PFT logo.png"
               alt="Paramount Food Tech logo"
               width={36}
               height={36}
-              className="h-9 w-9 rounded-md object-cover"
+              className="h-9 w-9 shrink-0 rounded-md object-cover"
               priority
             />
-            <span className="text-xl font-bold text-slate-900">Paramount Food Tech</span>
+            <span className="truncate text-base font-bold text-slate-900 sm:text-xl">
+              Paramount<span className="hidden min-[400px]:inline"> Food Tech</span>
+            </span>
           </div>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Button variant="ghost" size="sm" asChild>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+            <Button variant="ghost" size="sm" className="hidden sm:inline-flex" asChild>
               <Link href="/auth/login">Sign In</Link>
             </Button>
-            <Button size="sm" asChild>
+            <Button size="sm" className="sm:hidden" asChild>
+              <Link href="/auth/login">Sign In</Link>
+            </Button>
+            <Button size="sm" className="hidden sm:inline-flex" asChild>
               <Link href="/auth/login">Get Started</Link>
             </Button>
           </div>
@@ -55,7 +60,7 @@ export default function HomePage() {
             alt="Paramount Food Tech processing facility"
             width={1800}
             height={950}
-            className="h-[calc(100svh-69px)] min-h-[500px] w-full object-cover sm:h-[calc(100svh-73px)] sm:min-h-[560px]"
+            className="h-[calc(100svh-57px)] min-h-[500px] w-full object-cover sm:h-[calc(100svh-73px)] sm:min-h-[560px]"
             priority
           />
           <div className="absolute inset-0 bg-gradient-to-r from-slate-900/80 via-slate-900/65 to-blue-900/35" />
@@ -113,7 +118,7 @@ export default function HomePage() {
         </section>
 
         <section className="container mx-auto grid gap-6 px-4 pb-6 sm:gap-8 sm:pb-8 md:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-7 shadow-sm backdrop-blur-sm transition-all duration-300 hover:shadow-lg">
+          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm sm:p-7 backdrop-blur-sm transition-all duration-300 hover:shadow-lg">
             <h2 className="mb-3 text-2xl font-semibold text-slate-900">About Us</h2>
             <p className="text-slate-700">
               At Paramount Food Tech, we believe in turning innovation into tradition. Our leadership has stood at the forefront of food processing, delivering uncompromising quality and reliability to every customer segment.
@@ -125,22 +130,22 @@ export default function HomePage() {
               alt="Fresh poultry quality process"
               width={1200}
               height={700}
-              className="h-full min-h-[220px] w-full object-cover transition-transform duration-500 hover:scale-105 sm:min-h-[260px]"
+              className="aspect-[4/3] h-full w-full object-cover transition-transform duration-500 hover:scale-105 md:aspect-auto md:min-h-[260px]"
             />
           </div>
         </section>
 
         <section className="container mx-auto grid gap-6 px-4 py-6 sm:gap-8 sm:py-8 md:grid-cols-2">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:shadow-lg">
+          <div className="order-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:shadow-lg md:order-1">
             <Image
               src="/brochure/4.png"
               alt="Hygienic egg sorting and packing"
               width={1200}
               height={700}
-              className="h-full min-h-[220px] w-full object-cover transition-transform duration-500 hover:scale-105 sm:min-h-[260px]"
+              className="aspect-[4/3] h-full w-full object-cover transition-transform duration-500 hover:scale-105 md:aspect-auto md:min-h-[260px]"
             />
           </div>
-          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-7 shadow-sm backdrop-blur-sm transition-all duration-300 hover:shadow-lg">
+          <div className="order-1 rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm backdrop-blur-sm transition-all duration-300 hover:shadow-lg sm:p-7 md:order-2">
             <h2 className="mb-3 text-2xl font-semibold text-slate-900">What We Do</h2>
             <p className="text-slate-700">
               We specialize in procurement and processing of poultry meat for wholesale buyers, restaurants, hyper stores, online grocery platforms, and ready-to-cook consumers. Our quality systems focus on efficiency, hygiene, and sustainability.
@@ -154,7 +159,7 @@ export default function HomePage() {
         </section>
 
         <section className="container mx-auto px-4 py-6 sm:py-8">
-          <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50 p-7 shadow-sm transition-all duration-300 hover:shadow-lg">
+          <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50 p-5 shadow-sm sm:p-7 transition-all duration-300 hover:shadow-lg">
             <h2 className="mb-4 text-2xl font-semibold text-slate-900">Our Mission and Vision</h2>
             <div className="grid gap-6 md:grid-cols-2">
               <p className="text-slate-700">
@@ -168,7 +173,7 @@ export default function HomePage() {
         </section>
 
         <section className="container mx-auto px-4 py-6 sm:py-8">
-          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-7 shadow-sm backdrop-blur-sm transition-all duration-300 hover:shadow-lg">
+          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm sm:p-7 backdrop-blur-sm transition-all duration-300 hover:shadow-lg">
             <h2 className="mb-4 text-2xl font-semibold text-slate-900">Why Choose Paramount Food Tech</h2>
             <div className="grid gap-3 text-slate-700 md:grid-cols-2">
               <p>A. Commitment to Promises</p>
@@ -181,7 +186,7 @@ export default function HomePage() {
         </section>
 
         <section className="container mx-auto items-stretch grid gap-6 px-4 py-6 sm:gap-8 sm:py-8 md:grid-cols-[1.1fr_1fr]">
-          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-7 shadow-sm backdrop-blur-sm transition-all duration-300 hover:shadow-lg">
+          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm sm:p-7 backdrop-blur-sm transition-all duration-300 hover:shadow-lg">
             <h2 className="mb-4 text-2xl font-semibold text-slate-900">Our Range of Cuts</h2>
             <div className="grid gap-2 text-slate-700 sm:grid-cols-2">
               {cuts.map((cut) => (
@@ -195,22 +200,22 @@ export default function HomePage() {
               alt="Premium poultry cuts display"
               width={1200}
               height={900}
-              className="h-full w-full object-cover min-h-[240px] transition-transform duration-500 hover:scale-105 md:min-h-0"
+              className="aspect-[4/3] h-full w-full object-cover transition-transform duration-500 hover:scale-105 md:aspect-auto"
             />
           </div>
         </section>
 
         <section className="container mx-auto grid gap-6 px-4 py-6 sm:gap-8 sm:py-8 md:grid-cols-2">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:shadow-lg">
+          <div className="order-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:shadow-lg md:order-1">
             <Image
               src="/brochure/3.png"
               alt="Farm fresh eggs in hygienic trays"
               width={1200}
               height={900}
-              className="h-full min-h-[230px] w-full object-cover transition-transform duration-500 hover:scale-105 sm:min-h-[300px]"
+              className="aspect-[4/3] h-full w-full object-cover transition-transform duration-500 hover:scale-105 md:aspect-auto md:min-h-[300px]"
             />
           </div>
-          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-7 shadow-sm backdrop-blur-sm transition-all duration-300 hover:shadow-lg">
+          <div className="order-1 rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm backdrop-blur-sm transition-all duration-300 hover:shadow-lg sm:p-7 md:order-2">
             <h2 className="mb-4 text-2xl font-semibold text-slate-900">Egg Supply and Nutrition Focus</h2>
             <div className="space-y-3 text-slate-700">
               <p>Farm-fresh and locally sourced eggs with strict quality checks, hygienic handling, and reliable distribution.</p>
@@ -221,12 +226,12 @@ export default function HomePage() {
         </section>
 
         <section className="container mx-auto px-4 py-8 sm:py-12">
-          <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50 p-8 text-center shadow-sm transition-all duration-300 hover:shadow-lg">
+          <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50 p-5 text-center shadow-sm transition-all duration-300 hover:shadow-lg sm:p-8">
             <h2 className="text-3xl font-bold text-slate-900">Our Commitment</h2>
             <p className="mx-auto mt-4 max-w-3xl text-slate-700">
               We do not just deliver products, we build lasting relationships through quality, reliability, and service excellence.
             </p>
-            <div className="mt-6 space-y-1 text-sm text-slate-700">
+            <div className="mt-6 space-y-1 break-words text-sm text-slate-700">
               <p>Ph/W: +91-9177 69 2345 | +91-98702 11940</p>
               <p>Email: paramountfoodtech@gmail.com</p>
               <p>Website: www.paramountfoodtech.com</p>

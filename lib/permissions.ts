@@ -130,3 +130,12 @@ export function canAccessAttendance(role?: string | null): boolean {
 export function canUnlockAttendance(role?: string | null): boolean {
   return isSuperAdmin(role);
 }
+
+/**
+ * All roles that can access attendance can request past-date edit mode.
+ * Past-day editing is opt-in (via Enable Edit toggle) for everyone,
+ * including Super Admin, to prevent accidental data corruption.
+ */
+export function canEnablePastEditMode(role?: string | null): boolean {
+  return canAccessAttendance(role);
+}

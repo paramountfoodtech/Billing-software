@@ -30,7 +30,7 @@ export function DashboardLayoutClient({ profile, children }: DashboardLayoutClie
   return (
     <div className="flex min-h-screen bg-slate-50">
       <DashboardNav profile={profile} />
-      <main 
+      <main
         className={cn(
           "flex-1 flex flex-col bg-slate-50 transition-all duration-300 h-screen overflow-hidden",
           mounted && (!isSidebarCollapsed ? "lg:pl-64" : "lg:pl-20")

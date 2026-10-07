@@ -31,8 +31,16 @@ import {
   rollupDailyAttendance,
   calculateSalary,
 } from "@/lib/hr-calculations";
-import { canUnlockAttendance, isSuperAdmin } from "@/lib/permissions";
+import { canUnlockAttendance, canEnablePastEditMode } from "@/lib/permissions";
 import { IconTooltip } from "@/components/icon-tooltip";
+import {
+  type AttendanceEdit,
+  type DayMap,
+  STATUS_LABEL,
+  STATUS_CLASS_EDITABLE,
+  STATUS_CLASS_LOCKED,
+} from "@/components/hr/attendance-shared";
+import { AttendanceMobile } from "@/components/hr/attendance-mobile";
 import { cn } from "@/lib/utils";
 import type {
   EmployeeRow,
@@ -50,23 +58,6 @@ interface AttendanceTabProps {
   organizationId: string;
 }
 
-type DayMap = Record<string, DayAttendanceMark>; // date -> status
-
-type AttendanceEdit = {
-  employeeId: string;
-  employeeName: string;
-  employeeCode: string;
-  existingId: string | null;
-  days: DayMap;
-  workingDays: number;
-  daysPresent: number;
-  casualLeave: number;
-  lop: number;
-  status: "draft" | "finalized";
-  maxCL: number;
-  isPaid: boolean;
-};
-
 type SortCol =
   | "employeeCode"
   | "employeeName"
@@ -74,37 +65,6 @@ type SortCol =
   | "casualLeave"
   | "lop"
   | "status";
-
-const STATUS_LABEL: Record<DayAttendanceMark, string> = {
-  empty: "",
-  present: "P",
-  half_day: "HL",
-  absent: "A",
-  casual_leave: "CL",
-};
-
-/** Status colors when the day is editable. */
-const STATUS_CLASS_EDITABLE: Record<DayAttendanceMark, string> = {
-  empty:
-    "bg-white text-slate-500 border-2 border-blue-400 hover:bg-blue-50 hover:border-blue-600 shadow-sm",
-  present:
-    "bg-green-500 text-white border-2 border-green-600 hover:bg-green-600 shadow-sm",
-  half_day:
-    "bg-orange-500 text-white border-2 border-orange-600 hover:bg-orange-600 shadow-sm",
-  absent:
-    "bg-red-500 text-white border-2 border-red-600 hover:bg-red-600 shadow-sm",
-  casual_leave:
-    "bg-amber-500 text-white border-2 border-amber-600 hover:bg-amber-600 shadow-sm",
-};
-
-/** Status colors when the day is locked / not editable. */
-const STATUS_CLASS_LOCKED: Record<DayAttendanceMark, string> = {
-  empty: "bg-slate-100 text-slate-300 border border-slate-200",
-  present: "bg-green-100/70 text-green-700/50 border border-green-200/60",
-  half_day: "bg-orange-100/70 text-orange-700/50 border border-orange-200/60",
-  absent: "bg-red-100/70 text-red-700/50 border border-red-200/60",
-  casual_leave: "bg-amber-100/70 text-amber-700/50 border border-amber-200/60",
-};
 
 function monthDateRange(monthKey: string) {
   const n = daysInMonth(monthKey);
@@ -132,9 +92,9 @@ export function AttendanceTab({
   const monthLabel = useMemo(() => {
     return selectedMonth
       ? new Date(`${selectedMonth}-01`).toLocaleDateString("en-IN", {
-          month: "long",
-          year: "numeric",
-        })
+        month: "long",
+        year: "numeric",
+      })
       : "";
   }, [selectedMonth]);
 
@@ -146,12 +106,13 @@ export function AttendanceTab({
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
+  const [pastEditModeEnabled, setPastEditModeEnabled] = useState(false);
   const [finalizeDialogOpen, setFinalizeDialogOpen] = useState(false);
 
   const [filters, setFilters] = useState({ name: "", status: "" });
   const [sortColumn, setSortColumn] = useState<SortCol | null>("employeeCode");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
 
   const attendanceStatusOptions = [
     { value: "draft", label: "Draft" },
@@ -206,6 +167,7 @@ export function AttendanceTab({
   );
 
   useEffect(() => {
+    setPastEditModeEnabled(false);
     const current = getIndianCurrentMonth();
     if (selectedMonth === current) {
       setDayRecords(initialAttendanceDays);
@@ -263,45 +225,37 @@ export function AttendanceTab({
     setRows(buildRows());
   }, [buildRows]);
 
-  const cycleDayStatus = (
+  const notifyDayLocked = (date: string) => {
+    if (date > today) {
+      toast({
+        variant: "destructive",
+        title: "Future dates locked",
+        description: "Attendance cannot be marked for future dates.",
+      });
+    } else if (!allowPastDateEdits && date < today) {
+      toast({
+        variant: "destructive",
+        title: "Past dates locked",
+        description: "Enable Edit to change past dates.",
+      });
+    }
+  };
+
+  /** Set one day's status explicitly (used by the mobile picker and by cycling). */
+  const setDayStatus = (
     employeeId: string,
     date: string,
+    requested: DayAttendanceMark,
   ) => {
     const row = rows.find((r) => r.employeeId === employeeId);
     if (!row) return;
 
     if (!canEditDay(date, row)) {
-      if (date > today) {
-        toast({
-          variant: "destructive",
-          title: "Future dates locked",
-          description: "Attendance cannot be marked for future dates.",
-        });
-      } else if (!allowPastDateEdits && date < today) {
-        toast({
-          variant: "destructive",
-          title: "Past dates locked",
-          description:
-            "Only Super Admin can add or edit attendance for previous dates.",
-        });
-      }
+      notifyDayLocked(date);
       return;
     }
 
-    const statusCycle: DayAttendanceMark[] =
-      row.maxCL > 0
-        ? ["empty", "present", "half_day", "absent", "casual_leave"]
-        : ["empty", "present", "half_day", "absent"];
-
-    const current = row.days[date] || "empty";
-    // If CL was marked but employee has no CL entitlement, treat as empty for cycling
-    const normalizedCurrent =
-      current === "casual_leave" && row.maxCL <= 0 ? "empty" : current;
-    const currentIndex = statusCycle.indexOf(normalizedCurrent);
-    let next =
-      statusCycle[
-        (currentIndex >= 0 ? currentIndex + 1 : 0) % statusCycle.length
-      ];
+    let next = requested;
 
     if (next === "casual_leave") {
       // Half Day Leave draws 0.5 from the same CL pool, so it counts here too.
@@ -338,6 +292,31 @@ export function AttendanceTab({
       };
       return updated;
     });
+  };
+
+  const cycleDayStatus = (
+    employeeId: string,
+    date: string,
+  ) => {
+    const row = rows.find((r) => r.employeeId === employeeId);
+    if (!row) return;
+
+    const statusCycle: DayAttendanceMark[] =
+      row.maxCL > 0
+        ? ["empty", "present", "half_day", "absent", "casual_leave"]
+        : ["empty", "present", "half_day", "absent"];
+
+    const current = row.days[date] || "empty";
+    // If CL was marked but employee has no CL entitlement, treat as empty for cycling
+    const normalizedCurrent =
+      current === "casual_leave" && row.maxCL <= 0 ? "empty" : current;
+    const currentIndex = statusCycle.indexOf(normalizedCurrent);
+    const next =
+      statusCycle[
+      (currentIndex >= 0 ? currentIndex + 1 : 0) % statusCycle.length
+      ];
+
+    setDayStatus(employeeId, date, next);
   };
 
   const handleSort = (col: SortCol) => {
@@ -431,7 +410,7 @@ export function AttendanceTab({
     (r) => r.status === "finalized" && !r.isPaid,
   );
   const today = getIndianToday();
-  const allowPastDateEdits = isSuperAdmin(userRole);
+  const allowPastDateEdits = pastEditModeEnabled;
 
   const canEditDay = (date: string, row: AttendanceEdit) => {
     if (row.isPaid || row.status === "finalized") return false;
@@ -739,7 +718,44 @@ export function AttendanceTab({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border bg-white p-4 space-y-3">
+      <div className="md:hidden">
+        <AttendanceMobile
+          rows={pagination.paginatedItems}
+          allRows={rows}
+          selectedMonth={selectedMonth}
+          monthLabel={monthLabel}
+          today={today}
+          isLoadingDays={isLoadingDays}
+          filters={filters}
+          onFiltersChange={setFilters}
+          onMonthChange={setSelectedMonth}
+          statusOptions={attendanceStatusOptions}
+          canEditDay={canEditDay}
+          onSetDayStatus={setDayStatus}
+          showPastEditToggle={canEnablePastEditMode(userRole) && !allFinalized}
+          pastEditModeEnabled={pastEditModeEnabled}
+          onTogglePastEdit={() => setPastEditModeEnabled((v) => !v)}
+          onSaveDraft={handleSaveDraft}
+          onFinalize={() => setFinalizeDialogOpen(true)}
+          showUnlock={canUnlock && hasFinalizedToUnlock}
+          onUnlock={() => setUnlockDialogOpen(true)}
+          isSaving={isSaving}
+          isFinalizing={isFinalizing}
+          isUnlocking={isUnlocking}
+          allFinalized={allFinalized}
+        >
+          <TablePagination
+            currentPage={pagination.currentPage}
+            totalPages={pagination.totalPages}
+            itemsPerPage={itemsPerPage}
+            totalItems={processedRows.length}
+            onPageChange={pagination.goToPage}
+            onItemsPerPageChange={setItemsPerPage}
+          />
+        </AttendanceMobile>
+      </div>
+
+      <div className="hidden rounded-lg border bg-white p-4 space-y-3 md:block">
         <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="space-y-1.5">
@@ -780,6 +796,33 @@ export function AttendanceTab({
             </div>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
+            {canEnablePastEditMode(userRole) && !allFinalized && (
+              <IconTooltip
+                label={
+                  pastEditModeEnabled
+                    ? "Past dates are editable — click to lock again"
+                    : "Enable editing of previous days' attendance"
+                }
+              >
+                <Button
+                  variant={pastEditModeEnabled ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setPastEditModeEnabled((v) => !v)}
+                >
+                  {pastEditModeEnabled ? (
+                    <>
+                      <Unlock className="h-4 w-4 mr-2" />
+                      Editing On
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-4 w-4 mr-2" />
+                      Enable Edit
+                    </>
+                  )}
+                </Button>
+              </IconTooltip>
+            )}
             <IconTooltip label="Save attendance as draft">
               <Button
                 variant="outline"
@@ -832,7 +875,7 @@ export function AttendanceTab({
           <span className="inline-flex flex-wrap items-center gap-x-1">
             Click editable days to cycle: empty →
             <Badge className="bg-green-500 text-white">P</Badge> Present
-            <Badge className="bg-orange-500 text-white">HL</Badge> Half Day Leave
+            <Badge className="bg-purple-500 text-white">HL</Badge> Half Day Leave
             <Badge className="bg-red-500 text-white">A</Badge> Absent
             <Badge className="bg-amber-500 text-white">CL</Badge> Casual Leave
           </span>
@@ -848,18 +891,18 @@ export function AttendanceTab({
           </span>
           {!allowPastDateEdits && (
             <span className="inline-flex items-center leading-none">
-              Today only · Past: Super Admin · Future: locked
+              Today editable · Past: click Enable Edit · Future: locked
             </span>
           )}
           {allowPastDateEdits && (
             <span className="inline-flex items-center leading-none">
-              Past + today editable · Future locked
+              Today + past dates editable · Future: locked
             </span>
           )}
         </div>
       </div>
 
-      <div>
+      <div className="hidden md:block">
         <h2 className="mb-3 text-lg font-semibold">
           Daily Attendance — {monthLabel}
           {isLoadingDays && (
@@ -995,21 +1038,21 @@ export function AttendanceTab({
                                 "h-7 w-7 rounded text-[10px] font-bold transition-all",
                                 dayEditable
                                   ? cn(
-                                      "cursor-pointer ring-offset-1 hover:ring-2 hover:ring-blue-300",
-                                      STATUS_CLASS_EDITABLE[status],
-                                    )
+                                    "cursor-pointer ring-offset-1 hover:ring-2 hover:ring-blue-300",
+                                    STATUS_CLASS_EDITABLE[status],
+                                  )
                                   : cn(
-                                      "cursor-not-allowed",
-                                      STATUS_CLASS_LOCKED[status],
-                                    ),
+                                    "cursor-not-allowed",
+                                    STATUS_CLASS_LOCKED[status],
+                                  ),
                               )}
                               title={
                                 date > today
                                   ? `${date}: future date (locked)`
                                   : !dayEditable &&
-                                      !rowLocked &&
-                                      date < today
-                                    ? `${date}: past date (Super Admin only)`
+                                    !rowLocked &&
+                                    date < today
+                                    ? `${date}: past date (enable edit to change)`
                                     : dayEditable
                                       ? `${date}: ${status === "empty" ? "unmarked — click to mark" : status + " — click to change"}`
                                       : `${date}: ${status === "empty" ? "unmarked" : status} (locked)`

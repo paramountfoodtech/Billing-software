@@ -20,7 +20,7 @@ export function DashboardHeader({ userId }: DashboardHeaderProps) {
   }, [])
 
   return (
-    <header 
+    <header
       className={cn(
         "fixed top-0 left-0 right-0 z-30 h-16 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between px-4 sm:px-6 transition-all duration-300",
         mounted && (!isSidebarCollapsed ? "lg:pl-64" : "lg:pl-20")

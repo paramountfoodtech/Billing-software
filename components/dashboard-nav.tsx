@@ -390,60 +390,60 @@ export function DashboardNav({ profile }: DashboardNavProps) {
           {navGroups.map((group, groupIndex) => {
             const groupHrefs = group.items.map((item) => item.href);
             return (
-            <div key={group.id} className="space-y-1">
-              {showGroupLabels ? (
-                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  {group.label}
-                </p>
-              ) : (
-                groupIndex > 0 && (
-                  <div className="hidden lg:block mx-2 border-t border-slate-200" />
-                )
-              )}
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const isExact = pathname === item.href;
-                const isPrefixMatch =
-                  item.href !== "/dashboard" &&
-                  pathname.startsWith(`${item.href}/`);
-                // Prefer a more specific sibling (e.g. /expenses/reports over /expenses)
-                const hasMoreSpecificMatch = groupHrefs.some(
-                  (other) =>
-                    other !== item.href &&
-                    other.startsWith(`${item.href}/`) &&
-                    (pathname === other || pathname.startsWith(`${other}/`)),
-                );
-                const isActive =
-                  isExact || (isPrefixMatch && !hasMoreSpecificMatch);
-                const link = (
-                  <Link
-                    href={item.href}
-                    onClick={handleNavigation}
-                    prefetch
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                      isSidebarCollapsed && "lg:justify-center",
-                      isActive
-                        ? "bg-blue-50 text-blue-700"
-                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                    )}
-                  >
-                    <Icon className="h-5 w-5 flex-shrink-0" />
-                    {!isSidebarCollapsed && <span>{item.label}</span>}
-                  </Link>
-                );
-
-                if (isSidebarCollapsed) {
-                  return (
-                    <IconTooltip key={item.href} label={item.label} side="right">
-                      {link}
-                    </IconTooltip>
+              <div key={group.id} className="space-y-1">
+                {showGroupLabels ? (
+                  <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    {group.label}
+                  </p>
+                ) : (
+                  groupIndex > 0 && (
+                    <div className="hidden lg:block mx-2 border-t border-slate-200" />
+                  )
+                )}
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isExact = pathname === item.href;
+                  const isPrefixMatch =
+                    item.href !== "/dashboard" &&
+                    pathname.startsWith(`${item.href}/`);
+                  // Prefer a more specific sibling (e.g. /expenses/reports over /expenses)
+                  const hasMoreSpecificMatch = groupHrefs.some(
+                    (other) =>
+                      other !== item.href &&
+                      other.startsWith(`${item.href}/`) &&
+                      (pathname === other || pathname.startsWith(`${other}/`)),
                   );
-                }
+                  const isActive =
+                    isExact || (isPrefixMatch && !hasMoreSpecificMatch);
+                  const link = (
+                    <Link
+                      href={item.href}
+                      onClick={handleNavigation}
+                      prefetch
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                        isSidebarCollapsed && "lg:justify-center",
+                        isActive
+                          ? "bg-blue-50 text-blue-700"
+                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                      )}
+                    >
+                      <Icon className="h-5 w-5 flex-shrink-0" />
+                      {!isSidebarCollapsed && <span>{item.label}</span>}
+                    </Link>
+                  );
 
-                return <div key={item.href}>{link}</div>;
-              })}
-            </div>
+                  if (isSidebarCollapsed) {
+                    return (
+                      <IconTooltip key={item.href} label={item.label} side="right">
+                        {link}
+                      </IconTooltip>
+                    );
+                  }
+
+                  return <div key={item.href}>{link}</div>;
+                })}
+              </div>
             );
           })}
         </nav>

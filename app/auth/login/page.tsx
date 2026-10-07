@@ -81,11 +81,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="flex min-h-svh w-full items-center justify-center p-4 sm:p-6 md:p-10 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Loading Spinner Overlay */}
       {isLoading && <LoadingOverlay />}
       <div className="w-full max-w-sm">
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-6 sm:gap-8">
           <div className="flex flex-col items-center gap-4">
             <Image
               src="/PFT logo.png"
@@ -96,8 +96,8 @@ export default function LoginPage() {
               priority
             />
             <div className="text-center">
-              <h1 className="text-4xl font-bold tracking-tight text-slate-900">Paramount Food Tech</h1>
-              <p className="text-sm text-slate-600 mt-2">Pioneering excellence in food processing</p>
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Paramount Food Tech</h1>
+              <p className="mt-2 px-2 text-sm text-slate-600">Pioneering excellence in food processing</p>
             </div>
           </div>
           <Card className="border-slate-200 shadow-lg">
@@ -160,13 +160,13 @@ export default function LoginPage() {
                     )}
                   </Button>
                 </div>
-                <div className="mt-6 text-center text-sm text-muted-foreground">
-                  Don't have an account?{" "}
-                  <Link href="#" className="text-blue-600 hover:underline font-medium">
-                    Contact your administrator
-                  </Link>
-                </div>
               </form>
+              <div className="mt-6 flex flex-col items-center gap-0.5 text-center text-sm text-muted-foreground sm:flex-row sm:justify-center sm:gap-1.5">
+                <span>Don't have an account?</span>
+                <Link href="#" className="py-1.5 font-medium text-blue-600 hover:underline">
+                  Contact your administrator
+                </Link>
+              </div>
             </CardContent>
           </Card>
         </div>
