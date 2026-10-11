@@ -7,11 +7,21 @@ export type MortalityTrackerConfig = {
   updated_at: string
 }
 
+export type MortalityVehicleEntry = {
+  id?: string
+  vehicle_number?: string
+  birds: number | string
+  kg: number | string
+}
+
 export type MortalityTrackerEntry = {
   id: string
   organization_id: string
   entry_date: string
-  vehicle_number: string
+  vehicle_number?: string | null
+  vehicle_mortality_birds?: number
+  vehicle_mortality_kg?: number | string
+  vehicle_entries?: MortalityVehicleEntry[] | null
   opening_birds: number
   opening_kg: number | string
   afternoon_birds: number
@@ -35,6 +45,14 @@ export type MortalityDailyGroup = {
   date: string
   entries: MortalityTrackerEntry[]
   consolidated: {
+    vehicle_mortality_birds: number
+    vehicle_mortality_kg: number
+    opening_birds: number
+    opening_kg: number
+    afternoon_birds: number
+    afternoon_kg: number
+    closing_birds: number
+    closing_kg: number
     total_birds: number
     total_kg: number
     live_paper_rate: number | null
@@ -61,8 +79,26 @@ export function groupEntriesByDate(
 
   const groups: MortalityDailyGroup[] = []
   for (const [date, dayEntries] of byDate.entries()) {
-    const total_birds = dayEntries.reduce((s, e) => s + (Number(e.total_birds) || 0), 0)
-    const total_kg = dayEntries.reduce((s, e) => s + (Number(e.total_kg) || 0), 0)
+    const vehicle_mortality_birds = dayEntries.reduce((s, e) => s + (Number(e.vehicle_mortality_birds) || 0), 0)
+    const vehicle_mortality_kg = dayEntries.reduce((s, e) => s + (Number(e.vehicle_mortality_kg) || 0), 0)
+    const opening_birds = dayEntries.reduce((s, e) => s + (Number(e.opening_birds) || 0), 0)
+    const opening_kg = dayEntries.reduce((s, e) => s + (Number(e.opening_kg) || 0), 0)
+    const afternoon_birds = dayEntries.reduce((s, e) => s + (Number(e.afternoon_birds) || 0), 0)
+    const afternoon_kg = dayEntries.reduce((s, e) => s + (Number(e.afternoon_kg) || 0), 0)
+    const closing_birds = dayEntries.reduce((s, e) => s + (Number(e.closing_birds) || 0), 0)
+    const closing_kg = dayEntries.reduce((s, e) => s + (Number(e.closing_kg) || 0), 0)
+
+    const total_birds = dayEntries.reduce((s, e) => {
+      if (e.total_birds != null) return s + Number(e.total_birds)
+      const sub = (Number(e.vehicle_mortality_birds) || 0) + (Number(e.opening_birds) || 0) + (Number(e.afternoon_birds) || 0) + (Number(e.closing_birds) || 0)
+      return s + sub
+    }, 0)
+
+    const total_kg = dayEntries.reduce((s, e) => {
+      if (e.total_kg != null) return s + Number(e.total_kg)
+      const sub = (Number(e.vehicle_mortality_kg) || 0) + (Number(e.opening_kg) || 0) + (Number(e.afternoon_kg) || 0) + (Number(e.closing_kg) || 0)
+      return s + sub
+    }, 0)
 
     // Rate priority:
     // 1. Live rate from price_category_history for this date
@@ -81,10 +117,17 @@ export function groupEntriesByDate(
     // Enrich rows with active rate so each row can display its rate and value
     const enrichedEntries = dayEntries.map((e) => {
       const rowRate = dynamicRate != null ? dynamicRate : (e.live_paper_rate != null ? Number(e.live_paper_rate) : null)
-      const rowTotalKg = Number(e.total_kg || 0)
+      const rowBirds = e.total_birds != null ? Number(e.total_birds) : (
+        (Number(e.vehicle_mortality_birds) || 0) + (Number(e.opening_birds) || 0) + (Number(e.afternoon_birds) || 0) + (Number(e.closing_birds) || 0)
+      )
+      const rowTotalKg = e.total_kg != null ? Number(e.total_kg) : (
+        (Number(e.vehicle_mortality_kg) || 0) + (Number(e.opening_kg) || 0) + (Number(e.afternoon_kg) || 0) + (Number(e.closing_kg) || 0)
+      )
       const rowVal = rowRate != null ? +(rowTotalKg * rowRate).toFixed(2) : (e.total_value != null ? Number(e.total_value) : null)
       return {
         ...e,
+        total_birds: rowBirds,
+        total_kg: rowTotalKg,
         live_paper_rate: rowRate,
         total_value: rowVal,
       }
@@ -93,7 +136,21 @@ export function groupEntriesByDate(
     groups.push({
       date,
       entries: enrichedEntries,
-      consolidated: { total_birds, total_kg, live_paper_rate, total_value, category_name },
+      consolidated: {
+        vehicle_mortality_birds,
+        vehicle_mortality_kg,
+        opening_birds,
+        opening_kg,
+        afternoon_birds,
+        afternoon_kg,
+        closing_birds,
+        closing_kg,
+        total_birds,
+        total_kg,
+        live_paper_rate,
+        total_value,
+        category_name,
+      },
     })
   }
 

@@ -3,12 +3,17 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Printer } from "lucide-react";
+import { Pencil, Printer, CheckCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatIndianDate } from "@/lib/date-time";
 import { IconTooltip } from "@/components/icon-tooltip";
 import { canEditChallan } from "@/lib/permissions";
+import { createClient } from "@/lib/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Spinner } from "@/components/ui/spinner";
+import { getProfileDisplayName, logEntryHistory } from "@/lib/entry-history";
 
 interface InvoiceTemplate {
   company_name: string;
@@ -26,6 +31,8 @@ interface Challan {
   num_boxes: number;
   total_weight_kg: string;
   total_birds?: number;
+  mortality_birds?: number;
+  mortality_weight_kg?: string | number;
   status: string;
   notes: string | null;
   purchasers: {
@@ -60,14 +67,80 @@ export function PrintableChallan({
   userRole,
   invoiceAmountPaid = null,
 }: PrintableChallanProps) {
+  const router = useRouter();
+  const { toast } = useToast();
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const boxes = challan.challan_boxes || [];
   const totalBirds =
     challan.total_birds ??
     boxes.reduce((sum, box) => sum + Number(box.num_birds || 0), 0);
+  const mortalityBirds = Math.max(0, Number(challan.mortality_birds || 0));
+  const mortalityWeightKg = Math.max(0, Number(challan.mortality_weight_kg || 0));
+  const netDeliveredBirds = Math.max(0, totalBirds - mortalityBirds);
+  const netDeliveredWeightKg = Math.max(
+    0,
+    Math.round((Number(challan.total_weight_kg || 0) - mortalityWeightKg + Number.EPSILON) * 100) / 100
+  );
   const statusInfo = statusConfig[challan.status] || {
     label: challan.status,
     className: "bg-gray-100 text-gray-800",
+  };
+
+  const handleFinalize = async () => {
+    setIsFinalizing(true);
+    const supabase = createClient();
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Authentication required");
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.organization_id) throw new Error("Organization not found");
+
+      const { error } = await supabase
+        .from("challans")
+        .update({
+          status: "final",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", challan.id);
+
+      if (error) throw error;
+
+      const userName = await getProfileDisplayName(supabase, user.id);
+      await logEntryHistory(supabase, {
+        organizationId: profile.organization_id,
+        entityType: "challan",
+        entityId: challan.id,
+        action: "updated",
+        userId: user.id,
+        userName,
+        summary: "Finalized purchase challan",
+      });
+
+      toast({
+        variant: "success",
+        title: "Purchase challan finalized",
+        description: "Status is now Final. Challan is ready for invoice generation.",
+      });
+
+      router.refresh();
+    } catch (err: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Finalization failed",
+        description: err instanceof Error ? err.message : "Failed to finalize purchase challan.",
+      });
+    } finally {
+      setIsFinalizing(false);
+    }
   };
 
   const defaultTemplate: InvoiceTemplate = {
@@ -128,6 +201,20 @@ export function PrintableChallan({
           <Link href="/dashboard/challans">Back</Link>
         </Button>
         <div className="flex items-center gap-2">
+          {challan.status === "draft" && (
+            <Button
+              onClick={handleFinalize}
+              disabled={isFinalizing}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+            >
+              {isFinalizing ? (
+                <Spinner className="h-4 w-4 mr-2" />
+              ) : (
+                <CheckCircle className="h-4 w-4 mr-2" />
+              )}
+              Finalise Challan
+            </Button>
+          )}
           {canEditChallan(userRole, challan.status, invoiceAmountPaid) && (
             <IconTooltip label="Edit">
               <Button asChild variant="outline">
@@ -250,15 +337,45 @@ export function PrintableChallan({
           )}
 
           <div className="flex justify-end mb-5">
-            <div className="w-64">
-              <div className="flex justify-between py-2 font-bold text-lg border-t-2 border-gray-300">
-                <span>Total Weight:</span>
-                <span>{Number(challan.total_weight_kg).toFixed(3)} KG</span>
+            <div className="w-80 sm:w-96">
+              <div className="flex justify-between py-1.5 text-sm">
+                <span className="text-muted-foreground">Gross Weight (Loaded):</span>
+                <span className="font-semibold">{Number(challan.total_weight_kg).toFixed(3)} KG</span>
               </div>
-              <div className="flex justify-between py-2 font-bold border-t border-gray-200">
-                <span>Total Birds:</span>
-                <span>{totalBirds}</span>
+              <div className="flex justify-between py-1.5 text-sm border-t border-gray-100">
+                <span className="text-muted-foreground">Gross Birds (Loaded):</span>
+                <span className="font-semibold">{totalBirds}</span>
               </div>
+              {(mortalityBirds > 0 || mortalityWeightKg > 0) && (
+                <>
+                  <div className="flex justify-between py-1.5 text-sm border-t border-gray-100 text-rose-700">
+                    <span>Less: Transit Mortality (Weight):</span>
+                    <span className="font-semibold">
+                      -{mortalityWeightKg.toFixed(3)} KG
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 text-sm text-rose-700">
+                    <span>Less: Transit Mortality (Birds):</span>
+                    <span className="font-semibold">
+                      -{mortalityBirds} birds
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-2 font-bold text-base border-t-2 border-gray-300">
+                    <span>Net Delivered Weight:</span>
+                    <span>{netDeliveredWeightKg.toFixed(3)} KG</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 font-bold text-sm">
+                    <span>Net Delivered Birds:</span>
+                    <span>{netDeliveredBirds}</span>
+                  </div>
+                </>
+              )}
+              {mortalityBirds === 0 && mortalityWeightKg === 0 && (
+                <div className="flex justify-between py-2 font-bold text-lg border-t-2 border-gray-300">
+                  <span>Total Weight:</span>
+                  <span>{Number(challan.total_weight_kg).toFixed(3)} KG</span>
+                </div>
+              )}
             </div>
           </div>
 

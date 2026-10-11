@@ -19,7 +19,7 @@ export default async function NewPurchaseInvoicePage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("organization_id")
+    .select("role, organization_id")
     .eq("id", user.id)
     .single();
 
@@ -48,6 +48,8 @@ export default async function NewPurchaseInvoicePage({
         purchaser_id,
         total_weight_kg,
         total_birds,
+        mortality_birds,
+        mortality_weight_kg,
         challan_date,
         status,
         purchasers(name)
@@ -111,6 +113,7 @@ export default async function NewPurchaseInvoicePage({
         initialChallanId={challanId}
         liveCategoryId={liveCategory?.id}
         priceHistory={priceHistoryResult.data || []}
+        userRole={profile.role}
       />
     </div>
   );

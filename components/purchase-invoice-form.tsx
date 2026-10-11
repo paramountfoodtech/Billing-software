@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { FormBusyOverlay } from "@/components/form-busy-overlay";
@@ -44,6 +45,7 @@ import {
 import {
   canEditPurchaseInvoice,
   hasRecordedPayment,
+  isSuperAdmin,
 } from "@/lib/permissions";
 
 interface Purchaser {
@@ -60,6 +62,8 @@ interface ChallanOption {
   purchaser_id: string;
   total_weight_kg: string;
   total_birds?: number | null;
+  mortality_birds?: number | null;
+  mortality_weight_kg?: string | number | null;
   challan_date?: string | null;
   status: string;
   purchase_invoice_id?: string | null;
@@ -82,6 +86,14 @@ interface PurchaseInvoiceInitial {
   credit_applied?: string | number | null;
   status: string;
   notes?: string | null;
+  is_mortality_accepted?: boolean | null;
+  mortality_birds?: number | null;
+  mortality_weight_kg?: string | number | null;
+  mortality_loss_amount?: string | number | null;
+  has_discrepancy?: boolean | null;
+  discrepancy_birds?: number | null;
+  discrepancy_weight_kg?: string | number | null;
+  discrepancy_notes?: string | null;
 }
 
 interface PurchaseInvoiceFormProps {
@@ -95,6 +107,7 @@ interface PurchaseInvoiceFormProps {
   liveCategoryId?: string;
   priceHistory?: PriceCategoryHistoryEntry[];
   initialInvoice?: PurchaseInvoiceInitial;
+  userRole?: string | null;
 }
 
 export function PurchaseInvoiceForm({
@@ -106,6 +119,7 @@ export function PurchaseInvoiceForm({
   liveCategoryId,
   priceHistory = [],
   initialInvoice,
+  userRole,
 }: PurchaseInvoiceFormProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -245,6 +259,31 @@ export function PurchaseInvoiceForm({
   const [isChallanPickerOpen, setIsChallanPickerOpen] = useState(false);
   const [challanSearch, setChallanSearch] = useState("");
 
+  // Mortality handling: Accept or neglect mortality deduction
+  const [isMortalityAccepted, setIsMortalityAccepted] = useState(() =>
+    initialInvoice?.is_mortality_accepted != null
+      ? Boolean(initialInvoice.is_mortality_accepted)
+      : true,
+  );
+
+  // Super Admin discrepancy adjustment
+  const [hasDiscrepancy, setHasDiscrepancy] = useState(
+    Boolean(initialInvoice?.has_discrepancy),
+  );
+  const [discrepancyBirds, setDiscrepancyBirds] = useState(
+    initialInvoice?.discrepancy_birds != null
+      ? String(initialInvoice.discrepancy_birds)
+      : "",
+  );
+  const [discrepancyWeight, setDiscrepancyWeight] = useState(
+    initialInvoice?.discrepancy_weight_kg != null
+      ? String(initialInvoice.discrepancy_weight_kg)
+      : "",
+  );
+  const [discrepancyNotes, setDiscrepancyNotes] = useState(
+    initialInvoice?.discrepancy_notes || "",
+  );
+
   useEffect(() => {
     let isActive = true;
     const loadOrganization = async () => {
@@ -362,6 +401,49 @@ export function PurchaseInvoiceForm({
 
   const skipInitialChallanSync = useRef(isEditMode);
 
+  // Computed totals from selected challans including mortality & discrepancy adjustments
+  const grossChallanWeight = sumChallanWeightKg(selectedChallans);
+  const grossChallanBirds = sumChallanBirds(selectedChallans);
+  const totalChallanMortalityWeight = selectedChallans.reduce(
+    (sum, c) => sum + (Number(c.mortality_weight_kg) || 0),
+    0,
+  );
+  const totalChallanMortalityBirds = selectedChallans.reduce(
+    (sum, c) => sum + (Number(c.mortality_birds) || 0),
+    0,
+  );
+
+  const effectiveMortalityDeductWeight = isMortalityAccepted
+    ? totalChallanMortalityWeight
+    : 0;
+  const effectiveMortalityDeductBirds = isMortalityAccepted
+    ? totalChallanMortalityBirds
+    : 0;
+
+  const discBirdsNum =
+    isSuperAdmin(userRole) && hasDiscrepancy
+      ? Math.max(0, Math.floor(Number(discrepancyBirds) || 0))
+      : 0;
+  const discWeightNum =
+    isSuperAdmin(userRole) && hasDiscrepancy
+      ? Math.max(0, Number(discrepancyWeight) || 0)
+      : 0;
+
+  const billableBirds = Math.max(
+    0,
+    grossChallanBirds - effectiveMortalityDeductBirds - discBirdsNum,
+  );
+  const billableWeight = Math.max(
+    0,
+    Math.round(
+      (grossChallanWeight -
+        effectiveMortalityDeductWeight -
+        discWeightNum +
+        Number.EPSILON) *
+        100,
+    ) / 100,
+  );
+
   useEffect(() => {
     if (skipInitialChallanSync.current) {
       skipInitialChallanSync.current = false;
@@ -369,9 +451,17 @@ export function PurchaseInvoiceForm({
     }
     if (selectedChallans.length === 0) return;
     setPurchaserId(selectedChallans[0].purchaser_id);
-    setTotalWeightInput(sumChallanWeightKg(selectedChallans).toFixed(2));
-    setTotalBirdsInput(String(sumChallanBirds(selectedChallans)));
-  }, [selectedChallans]);
+    setTotalWeightInput(billableWeight.toFixed(2));
+    setTotalBirdsInput(String(billableBirds));
+  }, [
+    selectedChallans,
+    isMortalityAccepted,
+    hasDiscrepancy,
+    discrepancyBirds,
+    discrepancyWeight,
+    billableWeight,
+    billableBirds,
+  ]);
 
   // Drop challans that no longer match the issue date (create mode only)
   useEffect(() => {
@@ -612,6 +702,15 @@ export function PurchaseInvoiceForm({
 
       let invoiceId = initialInvoice?.id;
 
+      const mortalityLossAmount =
+        !isMortalityAccepted && totalChallanMortalityWeight > 0
+          ? Math.round(
+              (totalChallanMortalityWeight * computedPricePerKg +
+                Number.EPSILON) *
+                100,
+            ) / 100
+          : 0;
+
       if (isEditMode && initialInvoice) {
         const { error: invoiceError } = await supabase
           .from("purchase_invoices")
@@ -627,6 +726,19 @@ export function PurchaseInvoiceForm({
             total_amount: finalTotal,
             status: nextStatus,
             notes: notes.trim() || null,
+            is_mortality_accepted: isMortalityAccepted,
+            mortality_birds: totalChallanMortalityBirds,
+            mortality_weight_kg: totalChallanMortalityWeight,
+            mortality_loss_amount: mortalityLossAmount,
+            has_discrepancy: isSuperAdmin(userRole) && hasDiscrepancy,
+            discrepancy_birds:
+              isSuperAdmin(userRole) && hasDiscrepancy ? discBirdsNum : 0,
+            discrepancy_weight_kg:
+              isSuperAdmin(userRole) && hasDiscrepancy ? discWeightNum : 0,
+            discrepancy_notes:
+              isSuperAdmin(userRole) && hasDiscrepancy
+                ? discrepancyNotes.trim() || null
+                : null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", initialInvoice.id);
@@ -712,6 +824,19 @@ export function PurchaseInvoiceForm({
             amount_paid: 0,
             status: "recorded",
             notes: notes.trim() || null,
+            is_mortality_accepted: isMortalityAccepted,
+            mortality_birds: totalChallanMortalityBirds,
+            mortality_weight_kg: totalChallanMortalityWeight,
+            mortality_loss_amount: mortalityLossAmount,
+            has_discrepancy: isSuperAdmin(userRole) && hasDiscrepancy,
+            discrepancy_birds:
+              isSuperAdmin(userRole) && hasDiscrepancy ? discBirdsNum : 0,
+            discrepancy_weight_kg:
+              isSuperAdmin(userRole) && hasDiscrepancy ? discWeightNum : 0,
+            discrepancy_notes:
+              isSuperAdmin(userRole) && hasDiscrepancy
+                ? discrepancyNotes.trim() || null
+                : null,
             organization_id: profile.organization_id,
             created_by: user.id,
           })
@@ -766,6 +891,51 @@ export function PurchaseInvoiceForm({
             );
             if (recalcError) throw recalcError;
           }
+        }
+      }
+
+      // Two-way sync: Update source challan when Super Admin enters discrepancies
+      if (
+        isSuperAdmin(userRole) &&
+        hasDiscrepancy &&
+        (discBirdsNum > 0 || discWeightNum > 0) &&
+        primaryChallanId
+      ) {
+        const origChallan = challans.find((c) => c.id === primaryChallanId);
+        if (origChallan) {
+          const updatedChallanBirds = Math.max(
+            0,
+            (origChallan.total_birds || 0) - discBirdsNum,
+          );
+          const updatedChallanWeight = Math.max(
+            0,
+            Math.round(
+              ((Number(origChallan.total_weight_kg) || 0) -
+                discWeightNum +
+                Number.EPSILON) *
+                1000,
+            ) / 1000,
+          );
+
+          await supabase
+            .from("challans")
+            .update({
+              total_birds: updatedChallanBirds,
+              total_weight_kg: updatedChallanWeight,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", primaryChallanId);
+
+          const userName = await getProfileDisplayName(supabase, user.id);
+          await logEntryHistory(supabase, {
+            organizationId: profile.organization_id,
+            entityType: "challan",
+            entityId: primaryChallanId,
+            action: "updated",
+            userId: user.id,
+            userName,
+            summary: `Discrepancy adjustment applied from purchase invoice: -${discBirdsNum} birds, -${discWeightNum.toFixed(3)} KG`,
+          });
         }
       }
 
@@ -1026,7 +1196,7 @@ export function PurchaseInvoiceForm({
                 onChange={(e) => setTotalBirdsInput(e.target.value)}
                 placeholder="0"
                 readOnly={hasLinkedChallans}
-                className={hasLinkedChallans ? "bg-muted" : undefined}
+                className={hasLinkedChallans ? "bg-muted font-medium" : undefined}
               />
             </div>
 
@@ -1041,9 +1211,142 @@ export function PurchaseInvoiceForm({
                 onChange={(e) => setTotalWeightInput(e.target.value)}
                 placeholder="0.00"
                 readOnly={hasLinkedChallans}
-                className={hasLinkedChallans ? "bg-muted" : undefined}
+                className={hasLinkedChallans ? "bg-muted font-medium font-mono" : undefined}
               />
             </div>
+
+            {/* Mortality Acceptance Toggle / Checkbox */}
+            {hasLinkedChallans &&
+              (totalChallanMortalityBirds > 0 ||
+                totalChallanMortalityWeight > 0) && (
+                <div
+                  className={`sm:col-span-2 p-3.5 rounded-lg border transition-colors ${
+                    isMortalityAccepted
+                      ? "bg-emerald-50/60 border-emerald-200"
+                      : "bg-slate-50 border-slate-200"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="accept_mortality"
+                      checked={isMortalityAccepted}
+                      onCheckedChange={(checked) =>
+                        setIsMortalityAccepted(Boolean(checked))
+                      }
+                      className="mt-0.5"
+                    />
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="accept_mortality"
+                        className="text-xs font-semibold cursor-pointer flex flex-wrap items-center gap-2 text-foreground"
+                      >
+                        Accept Mortality Deduction from Challan
+                        <Badge
+                          variant="secondary"
+                          className="text-[11px] font-normal"
+                        >
+                          -{totalChallanMortalityBirds} birds / -
+                          {totalChallanMortalityWeight.toFixed(3)} KG
+                        </Badge>
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {isMortalityAccepted
+                          ? "✓ Accepted: Mortality is deducted from billable weight & birds (Supplier absorbs loss)."
+                          : "✗ Neglected: Full loaded weight & birds are billed without deduction (Company absorbs loss)."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            {/* Super Admin Discrepancy Adjustment Toggle */}
+            {isSuperAdmin(userRole) && hasLinkedChallans && (
+              <div className="sm:col-span-2 p-3.5 rounded-lg border border-amber-200 bg-amber-50/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Label
+                        htmlFor="toggle-discrepancy"
+                        className="text-xs font-bold text-amber-950 cursor-pointer"
+                      >
+                        Add Discrepancy Adjustment
+                      </Label>
+                      <Badge
+                        variant="outline"
+                        className="border-amber-300 text-amber-800 text-[10px] bg-amber-100"
+                      >
+                        Super Admin Only
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-amber-700">
+                      Subtract discrepancies to minus birds & weight from
+                      original challan data. Invoice and challan will both update.
+                    </p>
+                  </div>
+                  <Switch
+                    id="toggle-discrepancy"
+                    checked={hasDiscrepancy}
+                    onCheckedChange={(checked) => setHasDiscrepancy(checked)}
+                  />
+                </div>
+
+                {hasDiscrepancy && (
+                  <div className="pt-2 border-t border-amber-200/80 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="disc_birds"
+                        className="text-xs text-amber-900"
+                      >
+                        Discrepancy Birds (to minus)
+                      </Label>
+                      <Input
+                        id="disc_birds"
+                        type="number"
+                        min={0}
+                        step={1}
+                        placeholder="0"
+                        value={discrepancyBirds}
+                        onChange={(e) => setDiscrepancyBirds(e.target.value)}
+                        className="h-8 text-xs bg-white border-amber-300"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="disc_weight"
+                        className="text-xs text-amber-900"
+                      >
+                        Discrepancy Weight (KG to minus)
+                      </Label>
+                      <Input
+                        id="disc_weight"
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        placeholder="0.00"
+                        value={discrepancyWeight}
+                        onChange={(e) => setDiscrepancyWeight(e.target.value)}
+                        className="h-8 text-xs bg-white border-amber-300 font-mono"
+                      />
+                    </div>
+                    <div className="sm:col-span-2 space-y-1">
+                      <Label
+                        htmlFor="disc_notes"
+                        className="text-xs text-amber-900"
+                      >
+                        Discrepancy Notes / Reason
+                      </Label>
+                      <Input
+                        id="disc_notes"
+                        placeholder="e.g. Weighbridge calibration difference, wet birds deduction"
+                        value={discrepancyNotes}
+                        onChange={(e) => setDiscrepancyNotes(e.target.value)}
+                        className="h-8 text-xs bg-white border-amber-300"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2 sm:col-span-2">
               <Label>Average (KG / bird)</Label>

@@ -11,6 +11,7 @@ import {
   PurchaseReportsTable,
   type PurchaserReportRow,
   type ChallanTrackingRow,
+  type MortalityReportRow,
 } from "@/components/purchase-reports-table";
 
 interface Purchaser {
@@ -26,6 +27,7 @@ interface PurchaseReportsPageClientProps {
   rangeEnd: string;
   purchaserRows: PurchaserReportRow[];
   challanRows: ChallanTrackingRow[];
+  mortalityRows?: MortalityReportRow[];
   purchasers: Purchaser[];
   initialPurchaserId?: string | null;
 }
@@ -38,13 +40,15 @@ export function PurchaseReportsPageClient({
   rangeEnd,
   purchaserRows,
   challanRows,
+  mortalityRows = [],
   purchasers,
   initialPurchaserId = null,
 }: PurchaseReportsPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeTab =
-    (searchParams.get("tab") as "purchaser" | "challan") || "purchaser";
+    (searchParams.get("tab") as "purchaser" | "challan" | "mortality") ||
+    "purchaser";
   const selectedPurchaserId =
     searchParams.get("purchaser") || initialPurchaserId || null;
 
@@ -85,6 +89,15 @@ export function PurchaseReportsPageClient({
         row.purchaser_name === selectedPurchaserName,
     );
   }, [challanRows, selectedPurchaserId, selectedPurchaserName]);
+
+  const filteredMortalityRows = useMemo(() => {
+    if (!selectedPurchaserId) return mortalityRows;
+    return mortalityRows.filter(
+      (row) =>
+        row.purchaser_id === selectedPurchaserId ||
+        row.purchaser_name === selectedPurchaserName,
+    );
+  }, [mortalityRows, selectedPurchaserId, selectedPurchaserName]);
 
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8">
@@ -147,6 +160,7 @@ export function PurchaseReportsPageClient({
         <TabsList className="flex w-full flex-wrap justify-start sm:w-auto">
           <TabsTrigger value="purchaser">Purchaser Report</TabsTrigger>
           <TabsTrigger value="challan">Purchase challan tracking</TabsTrigger>
+          <TabsTrigger value="mortality">Mortality & Loss Report</TabsTrigger>
         </TabsList>
 
         <TabsContent value="purchaser" className="space-y-8 outline-none">
@@ -157,6 +171,7 @@ export function PurchaseReportsPageClient({
             <PurchaseReportsTable
               purchaserRows={filteredPurchaserRows}
               challanRows={filteredChallanRows}
+              mortalityRows={filteredMortalityRows}
               monthLabel={rangeLabel}
               activeTab="purchaser"
               fromDate={rangeStart}
@@ -174,8 +189,23 @@ export function PurchaseReportsPageClient({
           <PurchaseReportsTable
             purchaserRows={filteredPurchaserRows}
             challanRows={filteredChallanRows}
+            mortalityRows={filteredMortalityRows}
             monthLabel={rangeLabel}
             activeTab="challan"
+            fromDate={rangeStart}
+            toDate={rangeEnd}
+            selectedPurchaserId={selectedPurchaserId}
+            selectedPurchaserName={selectedPurchaserName}
+          />
+        </TabsContent>
+
+        <TabsContent value="mortality" className="outline-none">
+          <PurchaseReportsTable
+            purchaserRows={filteredPurchaserRows}
+            challanRows={filteredChallanRows}
+            mortalityRows={filteredMortalityRows}
+            monthLabel={rangeLabel}
+            activeTab="mortality"
             fromDate={rangeStart}
             toDate={rangeEnd}
             selectedPurchaserId={selectedPurchaserId}

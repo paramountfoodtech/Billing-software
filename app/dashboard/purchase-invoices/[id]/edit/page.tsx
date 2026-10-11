@@ -64,6 +64,8 @@ export default async function EditPurchaseInvoicePage({
         purchaser_id,
         total_weight_kg,
         total_birds,
+        mortality_birds,
+        mortality_weight_kg,
         challan_date,
         status,
         purchase_invoice_id,
@@ -82,6 +84,8 @@ export default async function EditPurchaseInvoicePage({
         purchaser_id,
         total_weight_kg,
         total_birds,
+        mortality_birds,
+        mortality_weight_kg,
         challan_date,
         status,
         purchase_invoice_id,
@@ -124,6 +128,8 @@ export default async function EditPurchaseInvoicePage({
         purchaser_id,
         total_weight_kg,
         total_birds,
+        mortality_birds,
+        mortality_weight_kg,
         challan_date,
         status,
         purchase_invoice_id,
@@ -170,6 +176,7 @@ export default async function EditPurchaseInvoicePage({
         priceHistory={priceHistoryResult.data || []}
         initialInvoice={invoice}
         initialChallanIds={initialChallanIds}
+        userRole={profile.role}
       />
     </div>
   );

@@ -59,11 +59,38 @@ export interface ChallanTrackingRow {
   invoice_number: string | null;
 }
 
+export interface MortalityReportRow {
+  id: string;
+  invoice_id: string | null;
+  invoice_number: string | null;
+  purchaser_invoice_number?: string | null;
+  challan_number: string;
+  date: string;
+  purchaser_id?: string | null;
+  purchaser_name: string;
+  gross_birds: number;
+  gross_weight_kg: number;
+  mortality_birds: number;
+  mortality_weight_kg: number;
+  rate_per_kg: number;
+  is_mortality_accepted: boolean;
+  status: "accepted" | "neglected" | "pending";
+  billable_birds: number;
+  billable_weight_kg: number;
+  loss_amount: number;
+  deducted_amount: number;
+  has_discrepancy?: boolean;
+  discrepancy_birds?: number;
+  discrepancy_weight_kg?: number;
+  discrepancy_notes?: string | null;
+}
+
 interface PurchaseReportsTableProps {
   purchaserRows: PurchaserReportRow[];
   challanRows: ChallanTrackingRow[];
+  mortalityRows?: MortalityReportRow[];
   monthLabel: string;
-  activeTab: "purchaser" | "challan";
+  activeTab: "purchaser" | "challan" | "mortality";
   fromDate?: string;
   toDate?: string;
   selectedPurchaserId?: string | null;
@@ -73,6 +100,7 @@ interface PurchaseReportsTableProps {
 export function PurchaseReportsTable({
   purchaserRows,
   challanRows,
+  mortalityRows = [],
   monthLabel,
   activeTab,
   fromDate = "",
@@ -85,6 +113,10 @@ export function PurchaseReportsTable({
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [purchaserFilter, setPurchaserFilter] = useState("");
   const [challanFilter, setChallanFilter] = useState("");
+  const [mortalityFilter, setMortalityFilter] = useState("");
+  const [mortalityStatusFilter, setMortalityStatusFilter] = useState<
+    "all" | "accepted" | "neglected" | "pending"
+  >("all");
   const [isExporting, setIsExporting] = useState(false);
   const [generatingStatementFor, setGeneratingStatementFor] = useState<
     string | null
@@ -176,6 +208,143 @@ export function PurchaseReportsTable({
     }
     return filtered;
   }, [challanRows, challanFilter, sortColumn, sortDirection]);
+
+  const processedMortalityRows = useMemo(() => {
+    let filtered = [...(mortalityRows || [])];
+    if (selectedPurchaserId) {
+      filtered = filtered.filter(
+        (r) =>
+          r.purchaser_id === selectedPurchaserId ||
+          r.purchaser_name === selectedPurchaserName,
+      );
+    }
+    if (mortalityStatusFilter !== "all") {
+      filtered = filtered.filter((r) => r.status === mortalityStatusFilter);
+    }
+    if (mortalityFilter) {
+      const q = mortalityFilter.toLowerCase();
+      filtered = filtered.filter(
+        (r) =>
+          r.purchaser_name.toLowerCase().includes(q) ||
+          (r.challan_number || "").toLowerCase().includes(q) ||
+          (r.invoice_number || "").toLowerCase().includes(q) ||
+          (r.purchaser_invoice_number || "").toLowerCase().includes(q),
+      );
+    }
+    if (sortColumn) {
+      filtered.sort((a, b) => {
+        let aVal: string | number = "";
+        let bVal: string | number = "";
+        switch (sortColumn) {
+          case "date":
+            aVal = a.date;
+            bVal = b.date;
+            break;
+          case "purchaser_name":
+            aVal = a.purchaser_name;
+            bVal = b.purchaser_name;
+            break;
+          case "challan_number":
+            aVal = a.challan_number;
+            bVal = b.challan_number;
+            break;
+          case "gross_weight_kg":
+            aVal = a.gross_weight_kg;
+            bVal = b.gross_weight_kg;
+            break;
+          case "mortality_weight_kg":
+            aVal = a.mortality_weight_kg;
+            bVal = b.mortality_weight_kg;
+            break;
+          case "mortality_birds":
+            aVal = a.mortality_birds;
+            bVal = b.mortality_birds;
+            break;
+          case "status":
+            aVal = a.status;
+            bVal = b.status;
+            break;
+          case "rate_per_kg":
+            aVal = a.rate_per_kg;
+            bVal = b.rate_per_kg;
+            break;
+          case "loss_amount":
+            aVal = a.loss_amount;
+            bVal = b.loss_amount;
+            break;
+          case "deducted_amount":
+            aVal = a.deducted_amount;
+            bVal = b.deducted_amount;
+            break;
+          default:
+            aVal = (a as unknown as Record<string, unknown>)[sortColumn] as
+              | string
+              | number
+              | "";
+            bVal = (b as unknown as Record<string, unknown>)[sortColumn] as
+              | string
+              | number
+              | "";
+        }
+        if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+        if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+    return filtered;
+  }, [
+    mortalityRows,
+    selectedPurchaserId,
+    selectedPurchaserName,
+    mortalityStatusFilter,
+    mortalityFilter,
+    sortColumn,
+    sortDirection,
+  ]);
+
+  const mortalityTotals = useMemo(() => {
+    return processedMortalityRows.reduce(
+      (acc, r) => {
+        acc.totalGrossBirds += r.gross_birds;
+        acc.totalGrossWeight += r.gross_weight_kg;
+        acc.totalMortalityBirds += r.mortality_birds;
+        acc.totalMortalityWeight += r.mortality_weight_kg;
+        if (r.status === "accepted") {
+          acc.acceptedBirds += r.mortality_birds;
+          acc.acceptedWeight += r.mortality_weight_kg;
+          acc.totalDeductedAmount += r.deducted_amount;
+        } else if (r.status === "neglected") {
+          acc.neglectedBirds += r.mortality_birds;
+          acc.neglectedWeight += r.mortality_weight_kg;
+          acc.totalLossAmount += r.loss_amount;
+        } else {
+          acc.pendingBirds += r.mortality_birds;
+          acc.pendingWeight += r.mortality_weight_kg;
+        }
+        if (r.has_discrepancy) {
+          acc.discrepancyBirds += r.discrepancy_birds || 0;
+          acc.discrepancyWeight += r.discrepancy_weight_kg || 0;
+        }
+        return acc;
+      },
+      {
+        totalGrossBirds: 0,
+        totalGrossWeight: 0,
+        totalMortalityBirds: 0,
+        totalMortalityWeight: 0,
+        acceptedBirds: 0,
+        acceptedWeight: 0,
+        totalDeductedAmount: 0,
+        neglectedBirds: 0,
+        neglectedWeight: 0,
+        totalLossAmount: 0,
+        pendingBirds: 0,
+        pendingWeight: 0,
+        discrepancyBirds: 0,
+        discrepancyWeight: 0,
+      },
+    );
+  }, [processedMortalityRows]);
 
   const fetchExportInvoices = async () => {
     const supabase = createClient();
@@ -988,14 +1157,165 @@ export function PurchaseReportsTable({
     }
   };
 
-  const exportButtons = (tab: "purchaser" | "challan") => (
+  const handleExportMortalityCSV = async () => {
+    setIsExporting(true);
+    try {
+      const columns: ExportColumn[] = [
+        { key: "date", label: "Date" },
+        { key: "purchaser_name", label: "Purchaser" },
+        { key: "challan_number", label: "Challan #" },
+        { key: "invoice_number", label: "Invoice #" },
+        {
+          key: "gross_birds",
+          label: "Gross Birds",
+          formatter: (v) => String(Number(v || 0)),
+        },
+        {
+          key: "gross_weight_kg",
+          label: "Gross Weight (KG)",
+          formatter: (v) => Number(v || 0).toFixed(3),
+        },
+        {
+          key: "mortality_birds",
+          label: "Mortality Birds",
+          formatter: (v) => String(Number(v || 0)),
+        },
+        {
+          key: "mortality_weight_kg",
+          label: "Mortality Weight (KG)",
+          formatter: (v) => Number(v || 0).toFixed(3),
+        },
+        {
+          key: "rate_per_kg",
+          label: "Rate (₹/KG)",
+          formatter: (v) => Number(v || 0).toFixed(2),
+        },
+        { key: "status_label", label: "Status" },
+        {
+          key: "billable_birds",
+          label: "Billed Birds",
+          formatter: (v) => String(Number(v || 0)),
+        },
+        {
+          key: "billable_weight_kg",
+          label: "Billed Weight (KG)",
+          formatter: (v) => Number(v || 0).toFixed(3),
+        },
+        {
+          key: "loss_amount",
+          label: "Company Loss (₹)",
+          formatter: (v) => Number(v || 0).toFixed(2),
+        },
+        {
+          key: "deducted_amount",
+          label: "Amount Saved (₹)",
+          formatter: (v) => Number(v || 0).toFixed(2),
+        },
+        { key: "discrepancy_info", label: "Discrepancy Adjustment" },
+      ];
+
+      const rows = processedMortalityRows.map((r) => ({
+        ...r,
+        invoice_number:
+          r.purchaser_invoice_number?.trim() || r.invoice_number || "—",
+        status_label:
+          r.status === "accepted"
+            ? "Accepted (Deducted)"
+            : r.status === "neglected"
+              ? "Neglected (Company Loss)"
+              : "Pending Invoice",
+        discrepancy_info: r.has_discrepancy
+          ? `-${r.discrepancy_birds || 0} birds, -${Number(r.discrepancy_weight_kg || 0).toFixed(3)} KG`
+          : "—",
+      }));
+
+      exportToCSV(rows, columns, `mortality-loss-report-${getTimestamp()}.csv`);
+      toast({
+        variant: "success",
+        title: "Exported",
+        description: "Mortality & Loss report exported to CSV.",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to export CSV.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportMortalityPDF = async () => {
+    setIsExporting(true);
+    try {
+      const enriched = processedMortalityRows.map((r) => ({
+        date: r.date,
+        purchaser: r.purchaser_name,
+        reference: `${r.challan_number || ""}${r.invoice_number ? ` / Inv #${r.invoice_number}` : ""}`,
+        mortality_fmt: `${r.mortality_birds}b / ${r.mortality_weight_kg.toFixed(3)}kg`,
+        status_fmt:
+          r.status === "accepted"
+            ? "Accepted"
+            : r.status === "neglected"
+              ? "Neglected"
+              : "Pending",
+        rate_fmt: r.rate_per_kg > 0 ? `₹${r.rate_per_kg.toFixed(2)}` : "—",
+        loss_fmt: r.loss_amount > 0 ? `₹${r.loss_amount.toFixed(2)}` : "—",
+        saved_fmt:
+          r.deducted_amount > 0 ? `₹${r.deducted_amount.toFixed(2)}` : "—",
+      }));
+
+      await exportToPDF(
+        enriched,
+        [
+          { key: "date", label: "Date", widthFrac: 0.11 },
+          { key: "purchaser", label: "Purchaser", widthFrac: 0.2 },
+          { key: "reference", label: "Challan / Invoice", widthFrac: 0.22 },
+          {
+            key: "mortality_fmt",
+            label: "Mortality",
+            widthFrac: 0.15,
+            align: "right",
+          },
+          { key: "status_fmt", label: "Status", widthFrac: 0.1 },
+          { key: "rate_fmt", label: "Rate", widthFrac: 0.08, align: "right" },
+          { key: "loss_fmt", label: "Loss (₹)", widthFrac: 0.1, align: "right" },
+          {
+            key: "saved_fmt",
+            label: "Saved (₹)",
+            widthFrac: 0.1,
+            align: "right",
+          },
+        ],
+        `Purchase Mortality & Loss Report — ${monthLabel}`,
+        `mortality-loss-report-${getTimestamp()}.pdf`,
+      );
+      toast({
+        variant: "success",
+        title: "Exported",
+        description: "Report exported to PDF.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportButtons = (tab: "purchaser" | "challan" | "mortality") => (
     <div className="flex gap-2">
       <IconTooltip label="Export to CSV">
         <Button
           variant="outline"
           size="sm"
           disabled={isExporting}
-          onClick={tab === "purchaser" ? handleExportPurchaserCSV : handleExportChallanCSV}
+          onClick={
+            tab === "purchaser"
+              ? handleExportPurchaserCSV
+              : tab === "challan"
+                ? handleExportChallanCSV
+                : handleExportMortalityCSV
+          }
         >
           <Download className="h-4 w-4 mr-2" />
           CSV
@@ -1006,25 +1326,345 @@ export function PurchaseReportsTable({
           variant="outline"
           size="sm"
           disabled={isExporting}
-          onClick={tab === "purchaser" ? handleExportPurchaserPDF : handleExportChallanPDF}
+          onClick={
+            tab === "purchaser"
+              ? handleExportPurchaserPDF
+              : tab === "challan"
+                ? handleExportChallanPDF
+                : handleExportMortalityPDF
+          }
         >
           <FileText className="h-4 w-4 mr-2" />
           PDF
         </Button>
       </IconTooltip>
-      <IconTooltip label="Export consolidated PDF">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isExporting}
-          onClick={handleExportConsolidated}
-        >
-          <Files className="h-4 w-4 mr-2" />
-          Consolidated
-        </Button>
-      </IconTooltip>
+      {tab !== "mortality" && (
+        <IconTooltip label="Export consolidated PDF">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isExporting}
+            onClick={handleExportConsolidated}
+          >
+            <Files className="h-4 w-4 mr-2" />
+            Consolidated
+          </Button>
+        </IconTooltip>
+      )}
     </div>
   );
+
+  if (activeTab === "mortality") {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-semibold text-base">
+            Transit Mortality & Financial Loss Report — {monthLabel}
+          </h3>
+          {exportButtons("mortality")}
+        </div>
+
+        {/* Aesthetic KPI summary cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="rounded-xl border bg-card p-4 shadow-xs">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Total Mortality Recorded
+            </div>
+            <div className="mt-2 text-2xl font-bold text-foreground">
+              {mortalityTotals.totalMortalityWeight.toFixed(3)}{" "}
+              <span className="text-sm font-normal text-muted-foreground">
+                KG
+              </span>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {mortalityTotals.totalMortalityBirds.toLocaleString("en-IN")}{" "}
+              dead birds ({processedMortalityRows.length} record(s))
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-xs">
+            <div className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">
+              Accepted (Deducted)
+            </div>
+            <div className="mt-2 text-2xl font-bold text-emerald-950">
+              ₹
+              {mortalityTotals.totalDeductedAmount.toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </div>
+            <div className="mt-1 text-xs text-emerald-800">
+              {mortalityTotals.acceptedBirds} birds |{" "}
+              {mortalityTotals.acceptedWeight.toFixed(3)} KG deducted from bill
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 shadow-xs">
+            <div className="text-xs font-semibold text-rose-800 uppercase tracking-wider">
+              Neglected (Company Loss)
+            </div>
+            <div className="mt-2 text-2xl font-bold text-rose-950">
+              ₹
+              {mortalityTotals.totalLossAmount.toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </div>
+            <div className="mt-1 text-xs text-rose-800">
+              {mortalityTotals.neglectedBirds} birds |{" "}
+              {mortalityTotals.neglectedWeight.toFixed(3)} KG paid by company
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 shadow-xs">
+            <div className="text-xs font-semibold text-amber-800 uppercase tracking-wider">
+              Discrepancy Adjustments
+            </div>
+            <div className="mt-2 text-2xl font-bold text-amber-950">
+              -{mortalityTotals.discrepancyWeight.toFixed(3)}{" "}
+              <span className="text-sm font-normal text-amber-700">KG</span>
+            </div>
+            <div className="mt-1 text-xs text-amber-800">
+              -{mortalityTotals.discrepancyBirds} birds adjusted by Super Admin
+            </div>
+          </div>
+        </div>
+
+        {/* Filter bar with search and status pills */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Input
+            placeholder="Filter by purchaser, challan, or invoice..."
+            value={mortalityFilter}
+            onChange={(e) => setMortalityFilter(e.target.value)}
+            className="h-8 text-xs max-w-sm"
+          />
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground mr-1">Status:</span>
+            {(
+              [
+                { id: "all", label: "All" },
+                { id: "accepted", label: "Accepted" },
+                { id: "neglected", label: "Neglected" },
+                { id: "pending", label: "Pending" },
+              ] as const
+            ).map((s) => (
+              <Button
+                key={s.id}
+                type="button"
+                variant={mortalityStatusFilter === s.id ? "default" : "outline"}
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setMortalityStatusFilter(s.id)}
+              >
+                {s.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Data Table */}
+        <div className="rounded-lg border bg-white overflow-x-auto">
+          <Table className="text-xs sm:text-sm">
+            <TableHeader>
+              <TableRow>
+                <TableHead
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort("date")}
+                >
+                  Date <SortIcon column="date" />
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort("purchaser_name")}
+                >
+                  Purchaser <SortIcon column="purchaser_name" />
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort("challan_number")}
+                >
+                  Challan / Inv <SortIcon column="challan_number" />
+                </TableHead>
+                <TableHead
+                  className="text-right cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort("gross_weight_kg")}
+                >
+                  Gross (Birds/KG) <SortIcon column="gross_weight_kg" />
+                </TableHead>
+                <TableHead
+                  className="text-right cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort("mortality_weight_kg")}
+                >
+                  Mortality <SortIcon column="mortality_weight_kg" />
+                </TableHead>
+                <TableHead
+                  className="cursor-pointer hover:bg-muted/50 text-center"
+                  onClick={() => handleSort("status")}
+                >
+                  Status <SortIcon column="status" />
+                </TableHead>
+                <TableHead
+                  className="text-right cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort("rate_per_kg")}
+                >
+                  Rate <SortIcon column="rate_per_kg" />
+                </TableHead>
+                <TableHead
+                  className="text-right cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort("loss_amount")}
+                >
+                  Company Loss (₹) <SortIcon column="loss_amount" />
+                </TableHead>
+                <TableHead
+                  className="text-right cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleSort("deducted_amount")}
+                >
+                  Saved (₹) <SortIcon column="deducted_amount" />
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {processedMortalityRows.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={9}
+                    className="text-center py-8 text-muted-foreground"
+                  >
+                    No mortality records match the selected filters.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                <>
+                  {processedMortalityRows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="whitespace-nowrap">
+                        {row.date}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {row.purchaser_name}
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-mono text-xs">
+                          {row.challan_number}
+                        </div>
+                        {row.invoice_number && (
+                          <div className="text-[11px] text-muted-foreground">
+                            Inv: #
+                            {row.purchaser_invoice_number || row.invoice_number}
+                          </div>
+                        )}
+                        {row.has_discrepancy && (
+                          <div className="text-[10px] text-amber-700 bg-amber-50 px-1 py-0.5 rounded mt-0.5 inline-block">
+                            Disc: -{row.discrepancy_birds}b / -
+                            {Number(row.discrepancy_weight_kg || 0).toFixed(3)}kg
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div>{row.gross_weight_kg.toFixed(3)} KG</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {row.gross_birds.toLocaleString("en-IN")} birds
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        <div>{row.mortality_weight_kg.toFixed(3)} KG</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {row.mortality_birds} dead
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {row.status === "accepted" ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            Accepted (Deducted)
+                          </span>
+                        ) : row.status === "neglected" ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200">
+                            Neglected (Loss)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                            Pending Invoice
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {row.rate_per_kg > 0
+                          ? `₹${row.rate_per_kg.toFixed(2)}`
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-rose-600">
+                        {row.loss_amount > 0
+                          ? `₹${row.loss_amount.toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}`
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-emerald-600">
+                        {row.deducted_amount > 0
+                          ? `₹${row.deducted_amount.toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}`
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="font-bold bg-slate-50">
+                    <TableCell colSpan={3}>
+                      Total ({processedMortalityRows.length} record(s))
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div>
+                        {mortalityTotals.totalGrossWeight.toFixed(3)} KG
+                      </div>
+                      <div className="text-[11px] text-muted-foreground font-normal">
+                        {mortalityTotals.totalGrossBirds.toLocaleString("en-IN")}{" "}
+                        birds
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div>
+                        {mortalityTotals.totalMortalityWeight.toFixed(3)} KG
+                      </div>
+                      <div className="text-[11px] text-muted-foreground font-normal">
+                        {mortalityTotals.totalMortalityBirds.toLocaleString(
+                          "en-IN",
+                        )}{" "}
+                        birds
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center font-normal text-xs text-muted-foreground">
+                      {mortalityTotals.acceptedBirds} acc /{" "}
+                      {mortalityTotals.neglectedBirds} neg
+                    </TableCell>
+                    <TableCell />
+                    <TableCell className="text-right text-rose-600 font-bold">
+                      ₹
+                      {mortalityTotals.totalLossAmount.toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </TableCell>
+                    <TableCell className="text-right text-emerald-600 font-bold">
+                      ₹
+                      {mortalityTotals.totalDeductedAmount.toLocaleString(
+                        "en-IN",
+                        {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        },
+                      )}
+                    </TableCell>
+                  </TableRow>
+                </>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    );
+  }
 
   if (activeTab === "challan") {
     return (

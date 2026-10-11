@@ -21,7 +21,8 @@ import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
 import { Trash2 } from "lucide-react";
 import { IconTooltip } from "@/components/icon-tooltip";
-import { canEditChallan, hasRecordedPayment } from "@/lib/permissions";
+import { canEditChallan, hasRecordedPayment, isSuperAdmin } from "@/lib/permissions";
+import { Badge } from "@/components/ui/badge";
 
 function useBoxGridColumns() {
   const [cols, setCols] = useState(1);
@@ -64,6 +65,8 @@ interface Challan {
   num_boxes: number;
   total_weight_kg: string;
   total_birds?: number;
+  mortality_birds?: number;
+  mortality_weight_kg?: string | number;
   status: string;
   notes: string | null;
   challan_boxes?: { box_number: number; weight_kg: string; num_birds?: number }[];
@@ -125,7 +128,12 @@ export function ChallanForm({
     purchaser_id: challan?.purchaser_id || "",
     challan_date: challan?.challan_date || getIndianToday(),
     notes: challan?.notes || "",
+    mortality_birds: challan?.mortality_birds != null ? String(challan.mortality_birds) : "",
+    mortality_weight_kg: challan?.mortality_weight_kg != null ? String(challan.mortality_weight_kg) : "",
   });
+
+  const mortalityBirds = Math.max(0, Math.floor(Number(formData.mortality_birds) || 0));
+  const mortalityWeightKg = Math.max(0, Number(formData.mortality_weight_kg) || 0);
 
   const isEditable =
     !challan || canEditChallan(userRole, challan.status, invoiceAmountPaid);
@@ -144,6 +152,9 @@ export function ChallanForm({
   const totalBirds = useMemo(() => {
     return boxes.reduce((sum, b) => sum + (Number(b.num_birds) || 0), 0);
   }, [boxes]);
+
+  const netBirds = Math.max(0, totalBirds - mortalityBirds);
+  const netWeight = Math.max(0, Math.round((totalWeight - mortalityWeightKg + Number.EPSILON) * 100) / 100);
 
   const setSummaries = useMemo(() => {
     const map = new Map<
@@ -329,6 +340,24 @@ export function ChallanForm({
       return;
     }
 
+    if (mortalityBirds > totalBirds && totalBirds > 0) {
+      toast({
+        variant: "destructive",
+        title: "Invalid mortality birds",
+        description: `Mortality birds (${mortalityBirds}) cannot exceed total loaded birds (${totalBirds}).`,
+      });
+      return;
+    }
+
+    if (mortalityWeightKg > totalWeight && totalWeight > 0) {
+      toast({
+        variant: "destructive",
+        title: "Invalid mortality weight",
+        description: `Mortality weight (${mortalityWeightKg.toFixed(3)} KG) cannot exceed total loaded weight (${totalWeight.toFixed(3)} KG).`,
+      });
+      return;
+    }
+
     setIsLoading(true);
     await new Promise((resolve) => requestAnimationFrame(resolve));
     const supabase = createClient();
@@ -371,6 +400,8 @@ export function ChallanForm({
         num_boxes: boxes.length,
         total_weight_kg: totalWeight,
         total_birds: totalBirds,
+        mortality_birds: mortalityBirds,
+        mortality_weight_kg: mortalityWeightKg,
         status: nextStatus,
         notes: formData.notes || null,
         updated_at: new Date().toISOString(),
@@ -458,7 +489,7 @@ export function ChallanForm({
             : "Purchase challan saved as draft.",
       });
 
-      router.push("/dashboard/challans");
+      router.push(`/dashboard/challans/${challanId}`);
       router.refresh();
     } catch (error: unknown) {
       toast({
@@ -739,17 +770,91 @@ export function ChallanForm({
               </div>
             )}
 
+            {/* Transit Mortality Section */}
+            <div className="p-4 bg-purple-50/50 rounded-lg border border-purple-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-semibold text-purple-900">Mortality in Transit</h4>
+                  <p className="text-xs text-purple-600">Record dead birds and weight lost during transport</p>
+                </div>
+                {(mortalityBirds > 0 || mortalityWeightKg > 0) && (
+                  <Badge variant="secondary" className="bg-purple-100 text-purple-800 text-xs font-mono">
+                    Loss: {mortalityBirds} birds | {mortalityWeightKg.toFixed(3)} KG
+                  </Badge>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1">
+                  <Label htmlFor="mortality_birds" className="text-xs text-slate-700">
+                    Mortality Birds
+                  </Label>
+                  <Input
+                    id="mortality_birds"
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="0"
+                    value={formData.mortality_birds}
+                    onChange={(e) =>
+                      setFormData({ ...formData, mortality_birds: e.target.value })
+                    }
+                    disabled={!isEditable}
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="mortality_weight_kg" className="text-xs text-slate-700">
+                    Mortality Weight (KG)
+                  </Label>
+                  <Input
+                    id="mortality_weight_kg"
+                    type="number"
+                    min={0}
+                    step={0.001}
+                    placeholder="0.000"
+                    value={formData.mortality_weight_kg}
+                    onChange={(e) =>
+                      setFormData({ ...formData, mortality_weight_kg: e.target.value })
+                    }
+                    disabled={!isEditable}
+                    className="h-8 text-xs bg-white font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Total / Net Summary Breakdown */}
             <div className="p-4 bg-slate-50 rounded-lg border space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="font-medium">Total Weight</span>
-                <span className="text-lg font-bold">
-                  {totalWeight.toFixed(3)} KG
-                </span>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Gross Weight (Loaded)</span>
+                <span className="font-semibold">{totalWeight.toFixed(3)} KG</span>
               </div>
-              <div className="flex justify-between items-center border-t pt-2">
-                <span className="font-medium">Total Birds</span>
-                <span className="text-lg font-bold">{totalBirds}</span>
+              <div className="flex justify-between items-center text-sm border-t pt-1.5">
+                <span className="text-muted-foreground">Gross Birds (Loaded)</span>
+                <span className="font-semibold">{totalBirds}</span>
               </div>
+              {(mortalityBirds > 0 || mortalityWeightKg > 0) && (
+                <>
+                  <div className="flex justify-between items-center text-sm text-rose-700 border-t pt-1.5">
+                    <span>Less: Transit Mortality (Weight)</span>
+                    <span className="font-semibold">
+                      -{mortalityWeightKg.toFixed(3)} KG
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm text-rose-700">
+                    <span>Less: Transit Mortality (Birds)</span>
+                    <span className="font-semibold">-{mortalityBirds} birds</span>
+                  </div>
+                  <div className="flex justify-between items-center border-t-2 border-slate-300 pt-2 text-base font-bold text-slate-900">
+                    <span>Net Delivered Weight</span>
+                    <span>{netWeight.toFixed(3)} KG</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm font-bold text-slate-800">
+                    <span>Net Delivered Birds</span>
+                    <span>{netBirds}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -768,32 +873,41 @@ export function ChallanForm({
 
           {isEditable && (
             <div className="flex flex-wrap gap-3">
-              <Button type="submit" disabled={isLoading || !canFinalize}>
-                {isLoading && <Spinner className="mr-2 h-4 w-4" />}
-                {isLoading
-                  ? "Saving..."
-                  : challan?.status === "invoiced"
-                    ? "Update Challan"
-                    : "Save & Finalize"}
-              </Button>
-              {challan?.status !== "invoiced" && (
+              {/* If user is Super Admin OR editing an existing invoiced challan: */}
+              {isSuperAdmin(userRole) || challan?.status === "invoiced" ? (
+                <>
+                  <Button type="submit" disabled={isLoading || !canFinalize}>
+                    {isLoading && <Spinner className="mr-2 h-4 w-4" />}
+                    {isLoading
+                      ? "Saving..."
+                      : challan?.status === "invoiced"
+                        ? "Update Challan"
+                        : "Save & Finalize"}
+                  </Button>
+                  {challan?.status !== "invoiced" && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={isLoading}
+                      onClick={() => saveChallan("draft")}
+                    >
+                      {isLoading && <Spinner className="mr-2 h-4 w-4" />}
+                      {isLoading ? "Saving..." : "Save as Draft"}
+                    </Button>
+                  )}
+                </>
+              ) : (
+                /* For accounts & admin: Only Save Draft is available */
                 <Button
                   type="button"
-                  variant="secondary"
                   disabled={isLoading}
                   onClick={() => saveChallan("draft")}
                 >
                   {isLoading && <Spinner className="mr-2 h-4 w-4" />}
-                  {isLoading ? "Saving..." : "Save as Draft"}
+                  {isLoading ? "Saving..." : challan ? "Update Draft" : "Save Draft"}
                 </Button>
               )}
-              {!canFinalize && (
-                <p className="w-full text-xs text-muted-foreground">
-                  {boxes.length === 0
-                    ? "Add a set, then enter weights to enable Save & Finalize."
-                    : "Enter weight for every box to enable Save & Finalize."}
-                </p>
-              )}
+
               <Button
                 type="button"
                 variant="outline"
@@ -801,6 +915,12 @@ export function ChallanForm({
               >
                 Cancel
               </Button>
+
+              {!isSuperAdmin(userRole) && !challan && (
+                <p className="w-full text-xs text-muted-foreground">
+                  Challan will be saved as Draft. You can review the final form and finalize on the next screen.
+                </p>
+              )}
             </div>
           )}
 

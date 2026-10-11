@@ -59,6 +59,8 @@ interface Challan {
   num_boxes: number;
   total_weight_kg: string;
   total_birds?: number | null;
+  mortality_birds?: number | null;
+  mortality_weight_kg?: string | number | null;
   status: string;
   purchase_invoice_id: string | null;
   created_at: string;
@@ -250,6 +252,16 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
         formatter: (val) => (val != null ? String(Number(val)) : "0"),
       },
       {
+        key: "mortality_birds",
+        label: "Mortality Birds",
+        formatter: (val) => (val != null ? String(Number(val)) : "0"),
+      },
+      {
+        key: "mortality_weight_kg",
+        label: "Mortality Weight (KG)",
+        formatter: (val) => (val != null ? Number(val).toFixed(3) : "0.000"),
+      },
+      {
         key: "status",
         label: "Status",
         formatter: (status) =>
@@ -326,6 +338,9 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
                 Birds
                 <SortIcon column="total_birds" />
               </TableHead>
+              <TableHead className="px-2 sm:px-4 py-2 sm:py-3">
+                Mortality
+              </TableHead>
               <TableHead
                 className="cursor-pointer hover:bg-muted/50 px-2 sm:px-4 py-2 sm:py-3"
                 onClick={() => handleSort("status")}
@@ -377,7 +392,7 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
             {paginatedItems.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={9}
                   className="text-center text-muted-foreground py-12"
                 >
                   No purchase challans found for the selected filters.
@@ -413,6 +428,15 @@ export function ChallansTable({ challans, userRole }: ChallansTableProps) {
                     </TableCell>
                     <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
                       {Number(challan.total_birds || 0).toLocaleString("en-IN")}
+                    </TableCell>
+                    <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
+                      {Number(challan.mortality_birds || 0) > 0 || Number(challan.mortality_weight_kg || 0) > 0 ? (
+                        <span className="text-purple-700 font-medium whitespace-nowrap text-xs">
+                          {Number(challan.mortality_birds || 0)} b / {Number(challan.mortality_weight_kg || 0).toFixed(3)} kg
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
                       <Badge variant="secondary" className={statusInfo.className}>

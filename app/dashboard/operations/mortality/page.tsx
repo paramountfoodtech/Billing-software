@@ -26,7 +26,7 @@ export default async function MortalityTrackerPage() {
   if (!profile) redirect("/auth/login")
 
   const userRole = profile.role || "accountant"
-  const canWrite = userRole === "super_admin" || userRole === "admin"
+  const canWrite = Boolean(profile.organization_id)
 
   const [entriesResult, configResult, categoriesResult] = await Promise.all([
     supabase

@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Printer } from "lucide-react";
+import { Pencil, Plus, Printer } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatIndianDate } from "@/lib/date-time";
@@ -38,6 +38,14 @@ interface PurchaseInvoice {
   credit_applied?: string | number | null;
   status: string;
   notes: string | null;
+  is_mortality_accepted?: boolean | null;
+  mortality_birds?: number | null;
+  mortality_weight_kg?: string | number | null;
+  mortality_loss_amount?: string | number | null;
+  has_discrepancy?: boolean | null;
+  discrepancy_birds?: number | null;
+  discrepancy_weight_kg?: string | number | null;
+  discrepancy_notes?: string | null;
   purchasers?: {
     name: string;
     purchaser_code: string;
@@ -173,6 +181,12 @@ export function PrintablePurchaseInvoice({
           <Link href="/dashboard/purchase-invoices">Back</Link>
         </Button>
         <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href={`/dashboard/purchase-invoices/${invoice.id}/edit`}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Edit
+            </Link>
+          </Button>
           <InvoiceShareActions
             invoiceType="purchase"
             invoiceId={invoice.id}
@@ -361,6 +375,40 @@ export function PrintablePurchaseInvoice({
                   <td></td>
                   <td></td>
                   <td></td>
+                </tr>
+              )}
+              {Number(invoice.mortality_weight_kg || 0) > 0 && (
+                <tr className="border-t border-gray-200 text-xs bg-slate-50">
+                  <td className="py-2 font-medium text-slate-700">
+                    Transit Mortality:
+                  </td>
+                  <td className="text-right font-medium text-slate-700">
+                    {Number(invoice.mortality_weight_kg).toFixed(3)} KG ({invoice.mortality_birds || 0} birds)
+                  </td>
+                  <td colSpan={3} className="text-right py-2">
+                    {invoice.is_mortality_accepted ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">
+                        Accepted (Deducted from invoice)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">
+                        Neglected (Company Loss: ₹{Number(invoice.mortality_loss_amount || 0).toFixed(2)})
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              )}
+              {Boolean(invoice.has_discrepancy) && (
+                <tr className="border-t border-gray-200 text-xs bg-amber-50/60">
+                  <td className="py-2 font-medium text-amber-900">
+                    Discrepancy Deduction:
+                  </td>
+                  <td className="text-right font-medium text-amber-900">
+                    -{Number(invoice.discrepancy_weight_kg || 0).toFixed(3)} KG (-{invoice.discrepancy_birds || 0} birds)
+                  </td>
+                  <td colSpan={3} className="text-right py-2 text-amber-800 italic">
+                    {invoice.discrepancy_notes ? `Note: ${invoice.discrepancy_notes}` : "Adjusted by Super Admin"}
+                  </td>
                 </tr>
               )}
             </tfoot>

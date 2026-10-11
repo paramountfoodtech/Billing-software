@@ -26,7 +26,7 @@ export default async function NewMortalityEntryPage() {
   if (!profile) redirect("/auth/login")
 
   const userRole = profile.role || "accountant"
-  const canWrite = userRole === "super_admin" || userRole === "admin"
+  const canWrite = Boolean(profile.organization_id)
   if (!canWrite) redirect("/dashboard/operations/mortality")
 
   const [configResult, categoriesResult] = await Promise.all([
