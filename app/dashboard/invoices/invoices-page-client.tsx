@@ -8,6 +8,7 @@ import {
   getFinancialYear,
   getFinancialYearDateRange,
 } from "@/components/financial-year-selector";
+import { getIndianToday } from "@/lib/date-time";
 
 interface Client {
   id: string;
@@ -84,6 +85,7 @@ export function InvoicesPageClient({
             <span className="text-sm font-medium text-muted-foreground">From:</span>
             <input
               type="date"
+              max={getIndianToday()}
               className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
@@ -91,6 +93,7 @@ export function InvoicesPageClient({
             <span className="text-sm font-medium text-muted-foreground">To:</span>
             <input
               type="date"
+              max={getIndianToday()}
               className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}

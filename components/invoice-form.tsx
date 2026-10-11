@@ -1717,6 +1717,10 @@ export function InvoiceForm({
         throw new Error("User must belong to an organization");
       }
 
+      if (formData.issue_date > today) {
+        throw new Error("Future dates are not allowed for invoice issue date.");
+      }
+
       if (
         isEditMode &&
         initialInvoice &&

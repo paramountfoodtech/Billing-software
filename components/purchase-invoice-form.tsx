@@ -552,6 +552,15 @@ export function PurchaseInvoiceForm({
         throw new Error("User must belong to an organization");
       }
 
+      if (!issueDate) {
+        throw new Error("Issue date is required");
+      }
+
+      const today = getIndianToday();
+      if (issueDate > today) {
+        throw new Error("Future dates are not allowed for purchase invoices. Please select today or a past date.");
+      }
+
       if (
         isEditMode &&
         initialInvoice &&
@@ -810,7 +819,21 @@ export function PurchaseInvoiceForm({
                 id="issue_date"
                 type="date"
                 value={issueDate}
-                onChange={(e) => setIssueDate(e.target.value)}
+                max={getIndianToday()}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const today = getIndianToday();
+                  if (val > today) {
+                    toast({
+                      variant: "destructive",
+                      title: "Future dates not allowed",
+                      description: "Purchase invoice date cannot be in the future.",
+                    });
+                    setIssueDate(today);
+                    return;
+                  }
+                  setIssueDate(val);
+                }}
                 required
               />
             </div>

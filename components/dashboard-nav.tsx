@@ -32,6 +32,7 @@ import {
   Boxes,
   ArrowLeftRight,
   UserCog,
+  HeartCrack,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -261,6 +262,12 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             href: "/dashboard/operations/processing",
             label: "Processing",
             icon: Factory,
+            roles: ["super_admin", "admin", "accountant"],
+          },
+          {
+            href: "/dashboard/operations/mortality",
+            label: "Mortality Tracker",
+            icon: HeartCrack,
             roles: ["super_admin", "admin", "accountant"],
           },
           {

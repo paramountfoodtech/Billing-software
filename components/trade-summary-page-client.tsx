@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { getIndianToday } from "@/lib/date-time"
 import type { ReportPeriodMode } from "@/lib/report-period"
 
 export type LinkedPartyOption = {
@@ -269,7 +270,7 @@ export function TradeSummaryPageClient({
                 <Input
                   type="date"
                   value={periodStart}
-                  max={periodEnd}
+                  max={periodEnd || getIndianToday()}
                   onChange={(e) =>
                     pushParams((next) => {
                       next.set("period", "range")
@@ -285,6 +286,7 @@ export function TradeSummaryPageClient({
                   type="date"
                   value={periodEnd}
                   min={periodStart}
+                  max={getIndianToday()}
                   onChange={(e) =>
                     pushParams((next) => {
                       next.set("period", "range")

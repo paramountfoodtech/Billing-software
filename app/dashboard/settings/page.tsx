@@ -5,6 +5,7 @@ import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper"
 import { SettingsForm } from "@/components/settings-form"
 import { InvoiceTemplateForm } from "@/components/invoice-template-form"
 import { AutomatedReportsSettings } from "@/components/automated-reports-settings"
+import { MortalityTrackerConfig } from "@/components/mortality-tracker-config"
 
 async function InvoiceTemplateSection({ organizationId }: { organizationId: string }) {
   const supabase = await createClient()
@@ -44,6 +45,22 @@ export default async function SettingsPage() {
     .select("*")
     .eq("id", profile.organization_id)
     .single()
+
+  // Fetch mortality tracker config and price categories (super_admin only)
+  const [mortalityConfigResult, priceCategoriesResult] = profile.role === "super_admin"
+    ? await Promise.all([
+        supabase
+          .from("mortality_tracker_config")
+          .select("*")
+          .eq("organization_id", profile.organization_id)
+          .maybeSingle(),
+        supabase
+          .from("price_categories")
+          .select("id, name, description, is_active")
+          .eq("organization_id", profile.organization_id)
+          .order("name"),
+      ])
+    : [{ data: null }, { data: [] }]
 
   return (
     <DashboardPageWrapper title="System Settings">
@@ -87,6 +104,15 @@ export default async function SettingsPage() {
               {await InvoiceTemplateSection({ organizationId: profile.organization_id })}
             </CardContent>
           </Card>
+
+          {/* Mortality Tracker config — super_admin only */}
+          {profile.role === "super_admin" && (
+            <MortalityTrackerConfig
+              config={mortalityConfigResult.data}
+              priceCategories={priceCategoriesResult.data ?? []}
+              organizationId={profile.organization_id}
+            />
+          )}
 
           <div className={isManagerViewOnly ? "pointer-events-none opacity-60" : ""}>
             <AutomatedReportsSettings organization={organization} />

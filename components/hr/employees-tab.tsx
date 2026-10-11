@@ -702,16 +702,24 @@ export function EmployeesTab({
                 <Label>Date of Joining <span className="text-red-500">*</span></Label>
                 <Input
                   type="date"
+                  max={getIndianToday()}
                   value={form.date_of_joining}
-                  onChange={(e) => setForm((f) => ({ ...f, date_of_joining: e.target.value }))}
+                  onChange={(e) => {
+                    const val = e.target.value > getIndianToday() ? getIndianToday() : e.target.value
+                    setForm((f) => ({ ...f, date_of_joining: val }))
+                  }}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Date of Leaving</Label>
                 <Input
                   type="date"
+                  max={getIndianToday()}
                   value={form.date_of_leaving}
-                  onChange={(e) => setForm((f) => ({ ...f, date_of_leaving: e.target.value }))}
+                  onChange={(e) => {
+                    const val = e.target.value > getIndianToday() ? getIndianToday() : e.target.value
+                    setForm((f) => ({ ...f, date_of_leaving: val }))
+                  }}
                 />
               </div>
               <div className="space-y-2">

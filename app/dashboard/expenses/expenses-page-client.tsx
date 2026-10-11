@@ -9,6 +9,7 @@ import {
 } from "@/components/financial-year-selector";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getIndianToday } from "@/lib/date-time";
 import type { ExpenseEntryRow } from "@/components/expenses-table";
 
 interface ExpensesPageClientProps {
@@ -55,6 +56,7 @@ export function ExpensesPageClient({
             <Input
               id="from_date"
               type="date"
+              max={getIndianToday()}
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
               className="w-auto h-9"
@@ -67,6 +69,7 @@ export function ExpensesPageClient({
             <Input
               id="to_date"
               type="date"
+              max={getIndianToday()}
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
               className="w-auto h-9"

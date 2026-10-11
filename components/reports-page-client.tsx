@@ -14,7 +14,7 @@ import { FinancialYearSelector } from "@/components/financial-year-selector"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { formatIndianStatementDate } from "@/lib/date-time"
+import { formatIndianStatementDate, getIndianToday } from "@/lib/date-time"
 import type { ReportPeriodMode } from "@/lib/report-period"
 import { DataTableShimmer } from "@/components/page-shimmers"
 import { PendingSummaryTable } from "@/components/pending-summary-table"
@@ -168,23 +168,20 @@ export function ReportsPageClient({
 
   const setPeriodMode = (mode: string) => {
     pushParams((next) => {
+      next.set("tab", "overview")
       if (mode === "month") {
         next.delete("period")
         next.delete("months")
         next.delete("fy")
-        if (tab === "overview") {
-          next.delete("from")
-          next.delete("to")
-        }
+        next.delete("from")
+        next.delete("to")
       } else {
         next.set("period", mode)
         if (mode === "multi") {
           if (!next.get("months")) next.set("months", String(multiMonths))
           next.delete("fy")
-          if (tab === "overview") {
-            next.delete("from")
-            next.delete("to")
-          }
+          next.delete("from")
+          next.delete("to")
         } else if (mode === "range") {
           next.delete("months")
           next.delete("fy")
@@ -193,10 +190,8 @@ export function ReportsPageClient({
         } else if (mode === "fy") {
           next.delete("months")
           next.set("fy", fy)
-          if (tab === "overview") {
-            next.delete("from")
-            next.delete("to")
-          }
+          next.delete("from")
+          next.delete("to")
         }
       }
     })
@@ -204,6 +199,7 @@ export function ReportsPageClient({
 
   const setMultiMonths = (value: string) => {
     pushParams((next) => {
+      next.set("tab", "overview")
       next.set("period", "multi")
       next.set("months", value)
     })
@@ -211,6 +207,7 @@ export function ReportsPageClient({
 
   const setFy = (value: string) => {
     pushParams((next) => {
+      next.set("tab", "overview")
       next.set("period", "fy")
       next.set("fy", value)
     })
@@ -218,10 +215,10 @@ export function ReportsPageClient({
 
   const setOverviewRange = (from: string, to: string) => {
     pushParams((next) => {
+      next.set("tab", "overview")
       next.set("period", "range")
       next.set("from", from)
       next.set("to", to)
-      next.delete("tab")
     })
   }
 
@@ -358,7 +355,7 @@ export function ReportsPageClient({
                       id="client-report-from"
                       type="date"
                       value={overviewRangeFrom}
-                      max={overviewRangeTo}
+                      max={overviewRangeTo || getIndianToday()}
                       onChange={(e) =>
                         setOverviewRange(e.target.value, overviewRangeTo)
                       }
@@ -374,6 +371,7 @@ export function ReportsPageClient({
                       type="date"
                       value={overviewRangeTo}
                       min={overviewRangeFrom}
+                      max={getIndianToday()}
                       onChange={(e) =>
                         setOverviewRange(overviewRangeFrom, e.target.value)
                       }

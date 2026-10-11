@@ -6,6 +6,7 @@ import { MonthYearPicker } from "@/components/month-year-picker";
 import { PurchaserSelector } from "@/components/purchaser-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
+import { getIndianToday } from "@/lib/date-time";
 import {
   PurchaseReportsTable,
   type PurchaserReportRow,
@@ -120,6 +121,7 @@ export function PurchaseReportsPageClient({
             <input
               id="report_from"
               type="date"
+              max={getIndianToday()}
               className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               value={rangeStart}
               onChange={(e) => updateParams({ from: e.target.value || null })}
@@ -132,6 +134,7 @@ export function PurchaseReportsPageClient({
             <input
               id="report_to"
               type="date"
+              max={getIndianToday()}
               className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
               value={rangeEnd}
               onChange={(e) => updateParams({ to: e.target.value || null })}

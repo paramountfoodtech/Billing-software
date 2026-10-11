@@ -337,6 +337,10 @@ export function ExpenseEntryForm({
         throw new Error("User must belong to an organization");
       }
 
+      if (issueDate > today) {
+        throw new Error("Future dates are not allowed for expense date.");
+      }
+
       if (paymentMethod !== "cash" && !referenceNumber.trim()) {
         toast({
           variant: "destructive",

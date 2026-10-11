@@ -334,6 +334,16 @@ export function PaymentForm({
       return;
     }
 
+    const today = getIndianToday();
+    if (formData.payment_date > today) {
+      toast({
+        variant: "destructive",
+        title: "Future dates not allowed",
+        description: "Payment date cannot be in the future.",
+      });
+      return;
+    }
+
     const paymentAmount = Number(formData.amount);
     if (!(paymentAmount > 0)) {
       toast({
@@ -819,9 +829,20 @@ export function PaymentForm({
                 required
                 max={getIndianToday()}
                 value={formData.payment_date}
-                onChange={(e) =>
-                  setFormData({ ...formData, payment_date: e.target.value })
-                }
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const today = getIndianToday();
+                  if (val > today) {
+                    toast({
+                      variant: "destructive",
+                      title: "Future dates not allowed",
+                      description: "Payment date cannot be in the future.",
+                    });
+                    setFormData({ ...formData, payment_date: today });
+                    return;
+                  }
+                  setFormData({ ...formData, payment_date: val });
+                }}
               />
             </div>
 

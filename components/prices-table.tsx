@@ -563,18 +563,26 @@ export function PricesTable({
                 <label className="text-sm font-medium block mb-1">From date</label>
                 <input
                   type="date"
+                  max={toDate && toDate < getIndianToday() ? toDate : getIndianToday()}
                   className="px-3 py-2 border rounded-md w-full sm:w-auto"
                   value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value > getIndianToday() ? getIndianToday() : e.target.value
+                    setFromDate(val)
+                  }}
                 />
               </div>
               <div className="w-full sm:w-auto">
                 <label className="text-sm font-medium block mb-1">To date</label>
                 <input
                   type="date"
+                  max={getIndianToday()}
                   className="px-3 py-2 border rounded-md w-full sm:w-auto"
                   value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value > getIndianToday() ? getIndianToday() : e.target.value
+                    setToDate(val)
+                  }}
                 />
               </div>
             </div>

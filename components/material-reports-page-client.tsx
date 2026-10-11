@@ -416,11 +416,12 @@ export function MaterialReportsPageClient({
                   id="range-start"
                   type="date"
                   className="min-w-[140px]"
-                  max={rangeEnd || undefined}
+                  max={rangeEnd && rangeEnd < today ? rangeEnd : today}
                   value={rangeStart}
                   onChange={(e) => {
-                    setRangeStart(e.target.value)
-                    if (e.target.value && rangeEnd) handleDateRangeChange(e.target.value, rangeEnd)
+                    const val = e.target.value > today ? today : e.target.value
+                    setRangeStart(val)
+                    if (val && rangeEnd) handleDateRangeChange(val, rangeEnd)
                   }}
                 />
               </div>
@@ -431,10 +432,12 @@ export function MaterialReportsPageClient({
                   type="date"
                   className="min-w-[140px]"
                   min={rangeStart || undefined}
+                  max={today}
                   value={rangeEnd}
                   onChange={(e) => {
-                    setRangeEnd(e.target.value)
-                    if (rangeStart && e.target.value) handleDateRangeChange(rangeStart, e.target.value)
+                    const val = e.target.value > today ? today : e.target.value
+                    setRangeEnd(val)
+                    if (rangeStart && val) handleDateRangeChange(rangeStart, val)
                   }}
                 />
               </div>

@@ -337,6 +337,11 @@ export function ClientPricingForm({
       const userName = await getProfileDisplayName(supabase, user.id);
 
       const effectiveDateToUse = effectiveFrom || today;
+      if (effectiveDateToUse > today) {
+        setError("Future dates are not allowed.");
+        setIsLoading(false);
+        return;
+      }
 
       const recordPricingHistory = async (
         pricingId: string,
@@ -946,18 +951,17 @@ export function ClientPricingForm({
             <Input
               id="effective_from"
               type="date"
+              max={today}
               value={effectiveFrom}
-              onChange={(e) => setEffectiveFrom(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setEffectiveFrom(val > today ? today : val);
+              }}
               className="max-w-xs bg-white"
             />
             {effectiveFrom && effectiveFrom < today && (
               <p className="text-xs font-medium text-amber-700">
                 ⚠ Backdated — this rule will apply to invoices from {effectiveFrom} onwards.
-              </p>
-            )}
-            {effectiveFrom && effectiveFrom > today && (
-              <p className="text-xs font-medium text-blue-700">
-                ℹ Future-dated — invoices before {effectiveFrom} will still use the previous rule.
               </p>
             )}
           </div>

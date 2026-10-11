@@ -319,6 +319,16 @@ export function ChallanForm({
       return;
     }
 
+    const today = getIndianToday();
+    if (formData.challan_date > today) {
+      toast({
+        variant: "destructive",
+        title: "Future dates not allowed",
+        description: "Challan date cannot be in the future.",
+      });
+      return;
+    }
+
     setIsLoading(true);
     await new Promise((resolve) => requestAnimationFrame(resolve));
     const supabase = createClient();
@@ -504,10 +514,22 @@ export function ChallanForm({
                 id="challan_date"
                 type="date"
                 required
+                max={getIndianToday()}
                 value={formData.challan_date}
-                onChange={(e) =>
-                  setFormData({ ...formData, challan_date: e.target.value })
-                }
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const today = getIndianToday();
+                  if (val > today) {
+                    toast({
+                      variant: "destructive",
+                      title: "Future dates not allowed",
+                      description: "Challan date cannot be in the future.",
+                    });
+                    setFormData({ ...formData, challan_date: today });
+                    return;
+                  }
+                  setFormData({ ...formData, challan_date: val });
+                }}
                 disabled={!isEditable}
               />
             </div>

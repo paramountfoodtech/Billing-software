@@ -28,6 +28,7 @@ import {
   type DisplayLedgerRow,
 } from "@/lib/ledger-report"
 import { FileDown, FileText } from "lucide-react"
+import { getIndianToday } from "@/lib/date-time"
 import { formatIndianStatementDate } from "@/lib/date-time"
 import { IconTooltip } from "@/components/icon-tooltip"
 
@@ -613,8 +614,11 @@ function SalesStatementPanel(props: SalesStatementPanelProps) {
                 className="flex h-9 w-full min-w-[140px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
                 value={fromDate}
                 min={isMonthly ? monthStart : undefined}
-                max={isMonthly ? toDate || monthEnd : toDate || undefined}
-                onChange={(e) => updateFromDate(e.target.value)}
+                max={toDate && toDate < getIndianToday() ? toDate : (isMonthly && monthEnd < getIndianToday() ? monthEnd : getIndianToday())}
+                onChange={(e) => {
+                  const val = e.target.value > getIndianToday() ? getIndianToday() : e.target.value
+                  updateFromDate(val)
+                }}
               />
             </div>
             <div className="space-y-2">
@@ -626,8 +630,11 @@ function SalesStatementPanel(props: SalesStatementPanelProps) {
                 className="flex h-9 w-full min-w-[140px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
                 value={toDate}
                 min={isMonthly ? fromDate || monthStart : fromDate || undefined}
-                max={isMonthly ? monthEnd : undefined}
-                onChange={(e) => updateToDate(e.target.value)}
+                max={isMonthly && monthEnd < getIndianToday() ? monthEnd : getIndianToday()}
+                onChange={(e) => {
+                  const val = e.target.value > getIndianToday() ? getIndianToday() : e.target.value
+                  updateToDate(val)
+                }}
               />
             </div>
           </div>
