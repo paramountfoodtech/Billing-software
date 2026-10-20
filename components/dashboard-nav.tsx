@@ -115,6 +115,12 @@ export function DashboardNav({ profile }: DashboardNavProps) {
             roles: ["super_admin", "admin"],
           },
           {
+            href: "/dashboard/dar",
+            label: "Daily Activity Report",
+            icon: ClipboardList,
+            roles: ["super_admin", "admin", "accountant"],
+          },
+          {
             href: "/dashboard/users",
             label: "Team",
             icon: Users,

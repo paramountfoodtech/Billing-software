@@ -1,44 +1,34 @@
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPages } from "@/lib/supabase/fetch-all";
 import { redirect } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import {
-  Users,
-  FileText,
-  DollarSign,
-  AlertCircle,
-  CheckCircle,
-  Clock,
   TrendingUp,
   ShoppingCart,
   Receipt,
   Scale,
   Wallet,
+  Users,
+  Inbox,
+  FileText,
+  ArrowDownLeft,
 } from "lucide-react";
 import { DashboardCharts } from "@/components/dashboard-charts";
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper";
-import { DashboardClient } from "./dashboard-client";
 import { DashboardRefresh } from "@/components/dashboard-refresh";
 import { DashboardMonthlyHeader } from "@/components/dashboard-monthly-header";
 import { Suspense } from "react";
 import { PageLoadingFallback } from "@/components/page-loading-fallback";
 import { MaterialDashboardWidgets } from "@/components/material-dashboard-widgets";
-import { KpiValue } from "@/components/kpi-value";
+import { BiAvatar, BiEmpty, BiIcon, BiKpi, BiPanel } from "@/components/bi-ui";
+import { formatIndianDate, getIndianCurrentMonth } from "@/lib/date-time";
 import {
   buildExpenseAmountsForKpi,
   dedupeExpenseEntriesById,
   resolveReportMonthYear,
 } from "@/lib/expense-report-aggregation";
+import { buildFyMonthlyRows } from "@/lib/dashboard-monthly";
+import { FyMonthlyTable } from "@/components/fy-monthly-table";
 
 // Prevent caching to ensure fresh data on every request
 export const revalidate = 0;
@@ -49,6 +39,15 @@ function formatINR(amount: number) {
     maximumFractionDigits: 2,
   });
 }
+
+const inrAmount = (amount: number | string) => `₹${formatINR(Number(amount))}`;
+
+const shortDate = (value: string) =>
+  formatIndianDate(value, { day: "2-digit", month: "short", year: "numeric" });
+
+const statusLabel = (status: string | null | undefined) =>
+  (status ?? "—").replace(/_/g, " ");
+
 
 function getCurrentFinancialYearRange() {
   const today = new Date();
@@ -100,104 +99,100 @@ function computeFinancialKpis(input: {
 function FinancialKpiCards({
   kpis,
   periodHint,
+  trends,
+  trendLabel,
+  layout = "row",
+  indexOffset = 0,
 }: {
   kpis: ReturnType<typeof computeFinancialKpis>;
   periodHint: string;
+  /** Optional month-by-month series (FY view) drawn as sparklines. */
+  trends?: {
+    sale: number[];
+    purchase: number[];
+    expenses: number[];
+    gross: number[];
+    net: number[];
+  };
+  /** Caption for the sparkline period, e.g. "Apr – Oct 2026". */
+  trendLabel?: string;
+  /** "bento": tall Net hero beside a 2×2 grid; "row": five across. */
+  layout?: "bento" | "row";
+  indexOffset?: number;
 }) {
-  const sale = `₹${formatINR(kpis.totalSale)}`;
-  const purchase = `₹${formatINR(kpis.totalPurchase)}`;
-  const expenses = `₹${formatINR(kpis.totalExpenses)}`;
-  const gross = `₹${formatINR(kpis.grossAmount)}`;
-  const net = `₹${formatINR(kpis.netAmount)}`;
+  const fmt = (n: number) => `₹${formatINR(n)}`;
+  const bento = layout === "bento";
 
+  // Sequence everywhere: Purchase → Sale → Expenses → Gross → Net.
   return (
-    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 mb-6">
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-          <CardTitle className="text-xs sm:text-sm font-medium truncate">
-            Total Sale
-          </CardTitle>
-          <TrendingUp className="h-4 w-4 shrink-0 text-blue-600" />
-        </CardHeader>
-        <CardContent className="min-w-0">
-          <KpiValue display={sale} className="text-blue-700">
-            {sale}
-          </KpiValue>
-          <p className="text-xs text-muted-foreground mt-1">
-            {kpis.activeSalesCount} sales invoices {periodHint}
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-          <CardTitle className="text-xs sm:text-sm font-medium truncate">
-            Total Purchase
-          </CardTitle>
-          <ShoppingCart className="h-4 w-4 shrink-0 text-orange-600" />
-        </CardHeader>
-        <CardContent className="min-w-0">
-          <KpiValue display={purchase} className="text-orange-700">
-            {purchase}
-          </KpiValue>
-          <p className="text-xs text-muted-foreground mt-1">
-            Purchase challan purchases {periodHint}
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-          <CardTitle className="text-xs sm:text-sm font-medium truncate">
-            Total Expenses
-          </CardTitle>
-          <Receipt className="h-4 w-4 shrink-0 text-amber-600" />
-        </CardHeader>
-        <CardContent className="min-w-0">
-          <KpiValue display={expenses} className="text-amber-700">
-            {expenses}
-          </KpiValue>
-          <p className="text-xs text-muted-foreground mt-1">
-            Expense entries {periodHint}
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-          <CardTitle className="text-xs sm:text-sm font-medium truncate">
-            Gross Amount
-          </CardTitle>
-          <Scale className="h-4 w-4 shrink-0 text-purple-600" />
-        </CardHeader>
-        <CardContent className="min-w-0">
-          <KpiValue
-            display={gross}
-            className={kpis.grossAmount >= 0 ? "text-purple-700" : "text-red-600"}
-          >
-            {gross}
-          </KpiValue>
-          <p className="text-xs text-muted-foreground mt-1">Sale − Purchase</p>
-        </CardContent>
-      </Card>
-
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-          <CardTitle className="text-xs sm:text-sm font-medium truncate">
-            Net Amount
-          </CardTitle>
-          <Wallet className="h-4 w-4 shrink-0 text-green-600" />
-        </CardHeader>
-        <CardContent className="min-w-0">
-          <KpiValue
-            display={net}
-            className={kpis.netAmount >= 0 ? "text-green-700" : "text-red-600"}
-          >
-            {net}
-          </KpiValue>
-          <p className="text-xs text-muted-foreground mt-1">Gross − Expenses</p>
-        </CardContent>
-      </Card>
+    <div
+      className={
+        bento
+          ? "bi-bento grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1.3fr]"
+          : "grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5"
+      }
+    >
+      <BiKpi
+        index={indexOffset}
+        label="Total Purchase"
+        icon={<ShoppingCart />}
+        display={fmt(kpis.totalPurchase)}
+        accent="var(--bi-orange)"
+        trend={trends?.purchase}
+        sparkHeight={bento ? 28 : undefined}
+        hint={`Purchase challan purchases ${periodHint}`}
+      />
+      <BiKpi
+        index={indexOffset + 1}
+        label="Total Sale"
+        icon={<TrendingUp />}
+        display={fmt(kpis.totalSale)}
+        accent="var(--bi-blue)"
+        trend={trends?.sale}
+        sparkHeight={bento ? 28 : undefined}
+        hint={`${kpis.activeSalesCount} sales invoices ${periodHint}`}
+      />
+      <BiKpi
+        index={indexOffset + 2}
+        label="Total Expenses"
+        icon={<Receipt />}
+        display={fmt(kpis.totalExpenses)}
+        accent="var(--bi-pink)"
+        trend={trends?.expenses}
+        sparkHeight={bento ? 28 : undefined}
+        hint={`Expense entries ${periodHint}`}
+      />
+      <BiKpi
+        index={indexOffset + 3}
+        label="Gross Amount"
+        icon={<Scale />}
+        display={fmt(kpis.grossAmount)}
+        accent="var(--bi-indigo)"
+        negative={kpis.grossAmount < 0}
+        trend={trends?.gross}
+        sparkHeight={bento ? 28 : undefined}
+        hint="Sale − Purchase"
+      />
+      {/* Net closes the sequence; in the bento it is the tall tile on the right. */}
+      <BiKpi
+        variant="hero"
+        size={bento ? "lg" : undefined}
+        index={indexOffset + 4}
+        className={
+          bento
+            ? "sm:col-span-2 xl:col-span-1 xl:col-start-3 xl:row-start-1 xl:row-span-2"
+            : "sm:col-span-2 lg:col-span-1"
+        }
+        label="Net Amount"
+        icon={<Wallet />}
+        display={fmt(kpis.netAmount)}
+        accent="var(--bi-green)"
+        negative={kpis.netAmount < 0}
+        trend={trends?.net}
+        trendLabel={trendLabel}
+        sparkHeight={bento ? 72 : undefined}
+        hint="Gross − Expenses"
+      />
     </div>
   );
 }
@@ -235,13 +230,11 @@ export default async function DashboardPage({
   } = resolveReportMonthYear(params);
   const fyStartMonth = fyRange.start.slice(0, 7);
   const fyEndMonth = fyRange.end.slice(0, 7);
-  const today = new Date();
 
   const expenseEntrySelect =
     "id, total_amount, status, entry_month, issue_date, notes, description, expense_categories(slug)";
 
   const [
-    clientsCountResult,
     fyInvoices,
     fyPayments,
     fyPurchaseInvoices,
@@ -251,12 +244,9 @@ export default async function DashboardPage({
     monthPurchaseInvoices,
     monthExpensesByMonth,
     monthExpensesLegacy,
-    allClientsResult,
-    allInvoices,
     paidSalaries,
     linkedExpenseIds,
   ] = await Promise.all([
-    supabase.from("clients").select("id", { count: "exact", head: true }),
     fetchAllPages(async (from, to) => {
       const { data, error } = await supabase
         .from("invoices")
@@ -280,7 +270,7 @@ export default async function DashboardPage({
     fetchAllPages(async (from, to) => {
       const { data, error } = await supabase
         .from("purchase_invoices")
-        .select("total_amount, status, invoice_type")
+        .select("total_amount, status, invoice_type, issue_date")
         .or("invoice_type.eq.challan,invoice_type.is.null")
         .gte("issue_date", fyRange.start)
         .lte("issue_date", fyRange.end)
@@ -370,15 +360,6 @@ export default async function DashboardPage({
       const { data, error } = await query;
       return { data, error };
     }),
-    supabase.from("clients").select("id, name").order("name", { ascending: true }),
-    fetchAllPages(async (from, to) => {
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("*, clients(name, email)")
-        .order("created_at", { ascending: false })
-        .range(from, to);
-      return { data, error };
-    }),
     profile?.organization_id
       ? fetchAllPages<{ net_payable: string | number; salary_month: string }>(
           async (from, to) => {
@@ -410,10 +391,6 @@ export default async function DashboardPage({
         })
       : Promise.resolve([] as { expense_entry_id: string }[]),
   ]);
-
-  const totalClients = clientsCountResult.count || 0;
-
-  const msInDay = 1000 * 60 * 60 * 24;
 
   const linkedExpenseEntryIds = new Set(
     linkedExpenseIds.map((row) => row.expense_entry_id),
@@ -452,66 +429,6 @@ export default async function DashboardPage({
     expenses: monthExpensesForKpi,
   });
 
-  // Core KPIs
-  const totalRevenue = fyPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-  const totalInvoiced = fyKpis.totalSale;
-  const totalOutstanding = fyInvoices
-    .filter((inv) => inv.status !== "paid" && inv.status !== "cancelled")
-    .reduce(
-      (sum, inv) => sum + (Number(inv.total_amount) - Number(inv.amount_paid)),
-      0,
-    );
-
-  // Invoice status counts
-  const paidInvoices = fyInvoices.filter((inv) => inv.status === "paid").length;
-  const overdueInvoices = fyInvoices.filter((inv) => {
-    const balance = Number(inv.total_amount) - Number(inv.amount_paid);
-    const daysOverdue = Math.floor(
-      (today.getTime() - new Date(inv.due_date).getTime()) / msInDay,
-    );
-    return balance > 0 && daysOverdue > 0;
-  }).length;
-  const draftInvoices = fyInvoices.filter(
-    (inv) => inv.status === "draft",
-  ).length;
-
-  // Overdue breakdown by days
-  const overdueBreakdown: Record<
-    string,
-    { count: number; invoices: typeof fyInvoices }
-  > = {
-    "0-7": { count: 0, invoices: [] },
-    "8-14": { count: 0, invoices: [] },
-    "15-30": { count: 0, invoices: [] },
-    "31-60": { count: 0, invoices: [] },
-    "60+": { count: 0, invoices: [] },
-  };
-
-  fyInvoices.forEach((inv) => {
-    const balance = Number(inv.total_amount) - Number(inv.amount_paid);
-    const daysOverdue = Math.floor(
-      (today.getTime() - new Date(inv.due_date).getTime()) / msInDay,
-    );
-    if (balance > 0 && daysOverdue > 0) {
-      if (daysOverdue <= 7) {
-        overdueBreakdown["0-7"].invoices.push(inv);
-        overdueBreakdown["0-7"].count++;
-      } else if (daysOverdue <= 14) {
-        overdueBreakdown["8-14"].invoices.push(inv);
-        overdueBreakdown["8-14"].count++;
-      } else if (daysOverdue <= 30) {
-        overdueBreakdown["15-30"].invoices.push(inv);
-        overdueBreakdown["15-30"].count++;
-      } else if (daysOverdue <= 60) {
-        overdueBreakdown["31-60"].invoices.push(inv);
-        overdueBreakdown["31-60"].count++;
-      } else {
-        overdueBreakdown["60+"].invoices.push(inv);
-        overdueBreakdown["60+"].count++;
-      }
-    }
-  });
-
   // Top clients by revenue
   const clientRevenue = fyInvoices.reduce(
     (acc, invoice) => {
@@ -540,6 +457,14 @@ export default async function DashboardPage({
   const recentInvoices = fyInvoices.slice(0, 10);
   const recentPayments = fyPayments.slice(0, 10);
 
+  // FY month-wise Purchase / Sale / Expenses / Gross / Net
+  const fyMonthly = buildFyMonthlyRows({
+    fy: fyRange.fy,
+    invoices: fyInvoices,
+    purchases: fyPurchaseInvoices,
+    expenses: fyExpensesForKpi,
+  });
+
   // Shape data for DashboardCharts
   const chartsInvoices = fyInvoices.map((inv) => ({
     id: inv.id,
@@ -549,428 +474,258 @@ export default async function DashboardPage({
     amount_paid: inv.amount_paid,
     status: inv.status,
   }));
-  const chartsPayments = fyPayments.map((p) => ({
-    amount: p.amount,
-    payment_date: p.payment_date,
-  }));
+
+  // Sparklines run through the current month only (future months are empty).
+  const trendRows = fyMonthly.rows.filter(
+    (r) => r.monthKey <= getIndianCurrentMonth(),
+  );
+  const fyTrends = {
+    sale: trendRows.map((r) => r.sale),
+    purchase: trendRows.map((r) => r.purchase),
+    expenses: trendRows.map((r) => r.expenses),
+    gross: trendRows.map((r) => r.gross),
+    net: trendRows.map((r) => r.net),
+  };
+  // Revenue trend: invoiced (sale) amount per FY month, through this month.
+  const monthlyInvoiced = trendRows.map((r) => {
+    const [mon, yr] = r.label.split(" ");
+    return { month: `${mon} ${yr.slice(2)}`, amount: r.sale };
+  });
+  const firstTrend = trendRows[0]?.label;
+  const lastTrend = trendRows[trendRows.length - 1]?.label;
+  const fyTrendLabel =
+    firstTrend && lastTrend && firstTrend !== lastTrend
+      ? firstTrend.split(" ")[1] === lastTrend.split(" ")[1]
+        ? `${firstTrend.split(" ")[0]} – ${lastTrend}`
+        : `${firstTrend} – ${lastTrend}`
+      : undefined;
+
 
   return (
     <DashboardPageWrapper title="Dashboard Overview">
-      <div className="w-full p-4 sm:p-6 lg:p-8">
+      <div className="bi w-full p-4 sm:p-6 lg:p-8 space-y-8">
         {/* Header row */}
-        <div className="mb-6 flex items-center justify-between">
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Financial Year:{" "}
-            <span className="font-semibold text-foreground">{fyRange.fy}</span>
-          </p>
+        <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0">
+            <p className="bi-hero-title">
+              Financial Year{" "}
+              {fyRange.fy.replace("-", "–")}
+            </p>
+            <p className="bi-hero-sub">
+              {formatIndianDate(fyRange.start, { day: "numeric", month: "short", year: "numeric" })}
+              {" – "}
+              {formatIndianDate(fyRange.end, { day: "numeric", month: "short", year: "numeric" })}
+              <span aria-hidden> · </span>
+              Monthly view: <strong>{monthLabel}</strong>
+            </p>
+          </div>
           <DashboardRefresh />
-        </div>
+        </header>
 
-        {/* FY Financial summary: Sale, Purchase, Expenses, Gross, Net */}
-        <FinancialKpiCards kpis={fyKpis} periodHint="this FY" />
+        {/* FY Financial summary: Purchase, Sale, Expenses, Gross, Net */}
+        <section>
+          <h2 className="bi-eyebrow">Financial year</h2>
+          <FinancialKpiCards
+            layout="bento"
+            kpis={fyKpis}
+            periodHint="this FY"
+            trends={fyTrends}
+            trendLabel={fyTrendLabel}
+          />
+        </section>
 
         {/* Monthly Financial summary */}
-        <DashboardMonthlyHeader
-          reportYear={reportYear}
-          reportMonth={reportMonth}
-          monthLabel={monthLabel}
-        />
-        <FinancialKpiCards kpis={monthKpis} periodHint={`in ${monthLabel}`} />
+        <section>
+          <DashboardMonthlyHeader
+            reportYear={reportYear}
+            reportMonth={reportMonth}
+            monthLabel={monthLabel}
+          />
+          <FinancialKpiCards
+            kpis={monthKpis}
+            periodHint={`in ${monthLabel}`}
+            indexOffset={5}
+          />
+        </section>
 
-        {/* Row 2: Collections & clients */}
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-6">
-          <Card className="min-w-0 overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium truncate">
-                Total Revenue
-              </CardTitle>
-              <DollarSign className="h-4 w-4 shrink-0 text-green-600" />
-            </CardHeader>
-            <CardContent className="min-w-0">
-              <KpiValue display={`₹${formatINR(totalRevenue)}`}>
-                ₹{formatINR(totalRevenue)}
-              </KpiValue>
-              <p className="text-xs text-muted-foreground mt-1">
-                FY {fyRange.fy} payments received
-              </p>
-            </CardContent>
-          </Card>
+        {/* FY month-wise table */}
+        <FyMonthlyTable fy={fyRange.fy} rows={fyMonthly.rows} total={fyMonthly.total} />
 
-          <Card className="min-w-0 overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium truncate">
-                Outstanding
-              </CardTitle>
-              <AlertCircle className="h-4 w-4 shrink-0 text-orange-600" />
-            </CardHeader>
-            <CardContent className="min-w-0">
-              <KpiValue display={`₹${formatINR(totalOutstanding)}`}>
-                ₹{formatINR(totalOutstanding)}
-              </KpiValue>
-              <p className="text-xs text-muted-foreground mt-1">
-                Pending payment collection
-              </p>
-            </CardContent>
-          </Card>
+        {/* Charts: revenue / status / daily charts */}
+        <DashboardCharts invoices={chartsInvoices} monthlyInvoiced={monthlyInvoiced} />
 
-          <Card className="min-w-0 overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium truncate">
-                Active Clients
-              </CardTitle>
-              <Users className="h-4 w-4 shrink-0 text-purple-600" />
-            </CardHeader>
-            <CardContent className="min-w-0">
-              <KpiValue display={String(totalClients)}>{totalClients}</KpiValue>
-              <p className="text-xs text-muted-foreground mt-1">
-                Total clients in system
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Row 3: Invoice Status */}
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
-                Paid Invoices
-              </CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">{paidInvoices}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Successfully completed
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
-                Overdue Invoices
-              </CardTitle>
-              <AlertCircle className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold text-red-600">
-                {overdueInvoices}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Require immediate attention
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium">
-                Blank/Cancelled
-              </CardTitle>
-              <Clock className="h-4 w-4 text-gray-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">{draftInvoices}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Incomplete invoices to finish later
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Charts: Pending/Outstanding/Collection Rate/Avg Invoice + 3 charts */}
-        <DashboardCharts invoices={chartsInvoices} payments={chartsPayments} />
-
-        {/* Tabs: Client View | Overdue by Days | Top Clients | Recent Activity */}
-        <Tabs defaultValue="client" className="mt-8 space-y-6">
-          <TabsList>
-            <TabsTrigger value="client">Client View</TabsTrigger>
-            <TabsTrigger value="overdues">Overdue by Days</TabsTrigger>
-            <TabsTrigger value="top-clients">Top Clients</TabsTrigger>
-            <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+        {/* Tabs: Top Clients | Recent Activity */}
+        <Tabs defaultValue="top-clients" className="space-y-5">
+          <TabsList className="bi-tabs-list">
+            <TabsTrigger className="bi-tabs-trigger" value="top-clients">
+              Top Clients
+            </TabsTrigger>
+            <TabsTrigger className="bi-tabs-trigger" value="activity">
+              Recent Activity
+            </TabsTrigger>
           </TabsList>
 
-          {/* Client View tab */}
-          <TabsContent value="client">
-            <DashboardClient
-              clients={allClientsResult.data || []}
-              invoices={allInvoices}
-            />
-          </TabsContent>
-
-          {/* Overdue by Days tab */}
-          <TabsContent value="overdues" className="space-y-6">
-            <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-6">
-              {Object.entries(overdueBreakdown).map(([range, data]) => (
-                <Card key={range}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs sm:text-sm font-medium">
-                      {range} Days
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-lg sm:text-2xl font-bold text-red-600">
-                      {data.count}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {data.count === 1 ? "invoice" : "invoices"}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Overdue Invoices Breakdown</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {fyInvoices.filter((inv) => {
-                  const balance =
-                    Number(inv.total_amount) - Number(inv.amount_paid);
-                  const daysOverdue = Math.floor(
-                    (today.getTime() - new Date(inv.due_date).getTime()) /
-                      msInDay,
-                  );
-                  return balance > 0 && daysOverdue > 0;
-                }).length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    No overdue invoices — great job!
-                  </p>
-                ) : (
-                  <div className="space-y-6">
-                    {Object.entries(overdueBreakdown).map(([range, data]) => (
-                      <div key={range}>
-                        <h4 className="font-semibold text-sm mb-3">
-                          {range} Days Overdue ({data.count})
-                        </h4>
-                        {data.invoices.length > 0 ? (
-                          <div className="border rounded-lg overflow-hidden">
-                            <Table>
-                              <TableHeader>
-                                <TableRow className="bg-muted/50">
-                                  <TableHead className="text-xs">
-                                    Invoice #
-                                  </TableHead>
-                                  <TableHead className="text-xs">
-                                    Client
-                                  </TableHead>
-                                  <TableHead className="text-xs text-right">
-                                    Amount
-                                  </TableHead>
-                                  <TableHead className="text-xs text-right">
-                                    Balance
-                                  </TableHead>
-                                  <TableHead className="text-xs text-right">
-                                    Due Date
-                                  </TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {data.invoices.slice(0, 5).map((inv) => {
-                                  const balance =
-                                    Number(inv.total_amount) -
-                                    Number(inv.amount_paid);
-                                  const dueDate = new Date(inv.due_date);
-                                  const daysOverdue = Math.floor(
-                                    (today.getTime() - dueDate.getTime()) /
-                                      msInDay,
-                                  );
-                                  return (
-                                    <TableRow key={inv.id}>
-                                      <TableCell className="text-xs font-medium">
-                                        #{inv.invoice_number}
-                                      </TableCell>
-                                      <TableCell className="text-xs">
-                                        {(inv.clients as { name: string } | null)?.name ?? "—"}
-                                      </TableCell>
-                                      <TableCell className="text-xs text-right">
-                                        ₹
-                                        {Number(inv.total_amount).toFixed(2)}
-                                      </TableCell>
-                                      <TableCell className="text-xs text-right font-semibold text-red-600">
-                                        ₹{balance.toFixed(2)}
-                                      </TableCell>
-                                      <TableCell className="text-xs text-right">
-                                        {dueDate.toLocaleDateString("en-IN")}
-                                        <br />
-                                        <span className="text-red-600 font-semibold">
-                                          {daysOverdue}d
-                                        </span>
-                                      </TableCell>
-                                    </TableRow>
-                                  );
-                                })}
-                              </TableBody>
-                            </Table>
-                            {data.invoices.length > 5 && (
-                              <div className="px-4 py-2 bg-muted/50 text-xs text-muted-foreground border-t">
-                                +{data.invoices.length - 5} more invoice
-                                {data.invoices.length - 5 > 1 ? "s" : ""}
-                              </div>
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
           {/* Top Clients tab */}
-          <TabsContent value="top-clients" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Top 10 Clients by Revenue</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {topClients.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    No client data available
-                  </p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Client Name</TableHead>
-                        <TableHead className="text-right">
-                          Total Invoiced
-                        </TableHead>
-                        <TableHead className="text-right">Amount Paid</TableHead>
-                        <TableHead className="text-right">Outstanding</TableHead>
-                        <TableHead className="text-right">Invoices</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {topClients.map(([clientName, data]) => (
-                        <TableRow key={clientName}>
-                          <TableCell className="font-medium">
-                            {clientName}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ₹{data.total.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-right text-green-600">
-                            ₹{data.paid.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-right text-orange-600">
-                            ₹{data.outstanding.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {data.invoiceCount}
-                          </TableCell>
-                        </TableRow>
+          <TabsContent value="top-clients" className="space-y-5">
+            <BiPanel
+              icon={<Users />}
+              accent="var(--bi-orange)"
+              title="Top 10 Clients by Revenue"
+              subtitle={`Financial year ${fyRange.fy}`}
+              flush={topClients.length > 0}
+            >
+              {topClients.length === 0 ? (
+                <BiEmpty icon={<Users />}>No client data available</BiEmpty>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="bi-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Client Name</th>
+                        <th className="num">Total Invoiced</th>
+                        <th className="num">Amount Paid</th>
+                        <th className="num">Outstanding</th>
+                        <th className="num">Invoices</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topClients.map(([clientName, data], i) => (
+                        <tr key={clientName}>
+                          <td className="text-[var(--bi-ink-3)] tabular-nums">
+                            {i + 1}
+                          </td>
+                          <td className="font-medium">
+                            <span className="flex items-center gap-3">
+                              <BiAvatar name={clientName} />
+                              {clientName}
+                            </span>
+                          </td>
+                          <td className="num font-medium">
+                            {inrAmount(data.total)}
+                          </td>
+                          <td className="num text-[var(--bi-ink-2)]">
+                            {inrAmount(data.paid)}
+                          </td>
+                          <td
+                            className={
+                              data.outstanding > 0
+                                ? "num"
+                                : "num text-[var(--bi-ink-3)]"
+                            }
+                          >
+                            {inrAmount(data.outstanding)}
+                          </td>
+                          <td className="num">{data.invoiceCount}</td>
+                        </tr>
                       ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </BiPanel>
           </TabsContent>
 
           {/* Recent Activity tab */}
-          <TabsContent value="activity" className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Invoices</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {recentInvoices.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">
-                      No invoices yet
-                    </p>
-                  ) : (
-                    <div className="space-y-4">
-                      {recentInvoices.map((invoice) => (
-                        <div
-                          key={invoice.id}
-                          className="flex items-center justify-between border-b pb-3 last:border-0"
-                        >
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">
-                              {invoice.invoice_number}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {(invoice.clients as { name: string } | null)?.name ?? "—"}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm font-medium">
-                              ₹{Number(invoice.total_amount).toFixed(2)}
-                            </span>
-                            <Badge
-                              variant="secondary"
-                              className={
-                                invoice.status === "paid"
-                                  ? "bg-green-100 text-green-800"
-                                  : invoice.status === "overdue"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-blue-100 text-blue-800"
-                              }
-                            >
-                              {invoice.status}
-                            </Badge>
+          <TabsContent value="activity" className="space-y-5">
+            <div className="grid gap-5 lg:grid-cols-2">
+              <BiPanel
+                title="Recent Invoices"
+                icon={<FileText />}
+                accent="var(--bi-blue)"
+                flush={recentInvoices.length > 0}
+                bodyClassName={recentInvoices.length > 0 ? "pt-2 pb-2" : undefined}
+              >
+                {recentInvoices.length === 0 ? (
+                  <BiEmpty icon={<Inbox />}>No invoices yet</BiEmpty>
+                ) : (
+                  <ul className="divide-y divide-[var(--bi-line)]">
+                    {recentInvoices.map((invoice) => (
+                      <li key={invoice.id} className="bi-row">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <BiAvatar
+                            name={(invoice.clients as { name: string } | null)?.name ?? "—"}
+                          />
+                          <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {invoice.invoice_number}
+                          </p>
+                          <p className="text-xs text-[var(--bi-ink-3)] truncate">
+                            {(invoice.clients as { name: string } | null)?.name ?? "—"}
+                          </p>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-sm font-semibold tabular-nums">
+                            {inrAmount(invoice.total_amount)}
+                          </span>
+                          <span
+                            className="bi-pill"
+                            data-tone={
+                              invoice.status === "paid"
+                                ? "good"
+                                : invoice.status === "overdue"
+                                  ? "crit"
+                                  : "info"
+                            }
+                          >
+                            {statusLabel(invoice.status)}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </BiPanel>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Payments</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {recentPayments.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">
-                      No payments yet
-                    </p>
-                  ) : (
-                    <div className="space-y-4">
-                      {recentPayments.map((payment) => (
-                        <div
-                          key={payment.id}
-                          className="flex items-center justify-between border-b pb-3 last:border-0"
-                        >
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium capitalize">
-                              {payment.payment_method?.replace("_", " ") ?? "—"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(
-                                payment.payment_date,
-                              ).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm font-medium text-green-600">
-                              ₹{Number(payment.amount).toFixed(2)}
-                            </span>
-                            <Badge
-                              variant="secondary"
-                              className={
-                                payment.status === "completed"
-                                  ? "bg-green-100 text-green-800"
-                                  : payment.status === "failed"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-yellow-100 text-yellow-800"
-                              }
-                            >
-                              {payment.status}
-                            </Badge>
+              <BiPanel
+                title="Recent Payments"
+                icon={<ArrowDownLeft />}
+                accent="var(--bi-green)"
+                flush={recentPayments.length > 0}
+                bodyClassName={recentPayments.length > 0 ? "pt-2 pb-2" : undefined}
+              >
+                {recentPayments.length === 0 ? (
+                  <BiEmpty icon={<Inbox />}>No payments yet</BiEmpty>
+                ) : (
+                  <ul className="divide-y divide-[var(--bi-line)]">
+                    {recentPayments.map((payment) => (
+                      <li key={payment.id} className="bi-row">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <BiIcon accent="var(--bi-green)" round>
+                            <ArrowDownLeft />
+                          </BiIcon>
+                          <div className="min-w-0">
+                          <p className="text-sm font-medium capitalize truncate">
+                            {payment.payment_method?.replace("_", " ") ?? "—"}
+                          </p>
+                          <p className="text-xs text-[var(--bi-ink-3)]">
+                            {shortDate(payment.payment_date)}
+                          </p>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-sm font-semibold tabular-nums text-[var(--bi-good)]">
+                            {inrAmount(payment.amount)}
+                          </span>
+                          <span
+                            className="bi-pill"
+                            data-tone={
+                              payment.status === "completed"
+                                ? "good"
+                                : payment.status === "failed"
+                                  ? "crit"
+                                  : "warn"
+                            }
+                          >
+                            {statusLabel(payment.status)}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </BiPanel>
             </div>
           </TabsContent>
         </Tabs>

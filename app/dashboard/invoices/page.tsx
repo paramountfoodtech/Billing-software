@@ -6,6 +6,10 @@ import Link from "next/link";
 import { InvoicesPageClient } from "./invoices-page-client";
 import { DashboardPageWrapper } from "@/components/dashboard-page-wrapper";
 import { MissedInvoiceNumbers } from "@/components/missed-invoice-numbers";
+import {
+  BlankCancelledInvoices,
+  type BlankCancelledInvoice,
+} from "@/components/blank-cancelled-invoices";
 import { findMissedInvoiceNumbers, groupMissedInvoices } from "@/lib/invoice-gaps";
 import { excludeDiscardedMissedNumbers } from "@/lib/discarded-invoice-numbers";
 
@@ -78,10 +82,25 @@ export default async function InvoicesPage() {
   );
   const missedRanges = groupMissedInvoices(missedNumbers);
 
+  const blankCancelledInvoices: BlankCancelledInvoice[] = (invoices || [])
+    .filter((inv) => inv.status === "draft" || inv.status === "cancelled")
+    .map((inv) => ({
+      id: inv.id,
+      invoiceNumber: inv.invoice_number,
+      clientName:
+        (inv.clients as { name: string } | null)?.name ?? "—",
+      issueDate: inv.issue_date,
+      totalAmount: Number(inv.total_amount || 0),
+      status: inv.status as "draft" | "cancelled",
+    }));
+
   return (
     <DashboardPageWrapper title="Invoices">
       <div className="w-full p-4 sm:p-6 lg:p-8 space-y-4">
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3">
+          {blankCancelledInvoices.length > 0 && (
+            <BlankCancelledInvoices invoices={blankCancelledInvoices} />
+          )}
           {userRole === "super_admin" &&
             (missedNumbers.length > 0 || discardedNumbers.length > 0) && (
             <MissedInvoiceNumbers

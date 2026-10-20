@@ -31,7 +31,7 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: signIn, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
@@ -44,11 +44,14 @@ export default function LoginPage() {
         throw error
       }
       
-      // Get user profile to determine redirect based on role and active state
+      // Get the signed-in user's own profile to determine redirect and active state.
+      // Filter by id: admins can read every profile in the org, so an unfiltered
+      // .single() returns no row for them.
       const { data: profile } = await supabase
         .from("profiles")
         .select("role, is_active")
-        .single()
+        .eq("id", signIn.user.id)
+        .maybeSingle()
 
       // If user is deactivated, immediately sign out and block access
       if (profile && profile.is_active === false) {
@@ -64,8 +67,11 @@ export default function LoginPage() {
       // Redirect based on role - spinner will stay visible during navigation
       if (profile?.role === "accountant") {
         router.push("/dashboard/clients")
+      } else if (profile?.role === "super_admin") {
+        // Super Admin lands on the Daily Activity Report
+        router.push("/dashboard/dar")
       } else {
-        // Super Admin and Admin go to dashboard
+        // Admin goes to dashboard
         router.push("/dashboard")
       }
       // Note: setIsLoading(false) is intentionally not called here

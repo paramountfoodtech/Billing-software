@@ -184,3 +184,854 @@
     background-position: 200% 0;
   }
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Dashboard design system (scoped to .bi)
+   Apple-style surfaces with a vivid, disciplined palette: every metric owns
+   one system color (icon tile, soft wash, sparkline); the bottom line (Net)
+   is a gradient hero; red is reserved for problems.
+   Light is default; dark follows .dark.
+   ─────────────────────────────────────────────────────────────────────────── */
+.bi {
+  /* Apple system colors (light) */
+  --bi-blue: #007aff;
+  --bi-indigo: #5856d6;
+  --bi-purple: #af52de;
+  --bi-pink: #ff2d55;
+  --bi-red: #ff3b30;
+  --bi-orange: #ff9500;
+  --bi-yellow: #ffcc00;
+  --bi-green: #34c759;
+  --bi-mint: #00c7be;
+  --bi-teal: #30b0c7;
+  --bi-cyan: #32ade6;
+
+  --bi-canvas: #f5f5f7;
+  --bi-surface: #ffffff;
+  --bi-surface-2: #f9f9fb;
+  --bi-ink: #1d1d1f;
+  --bi-ink-2: #6e6e73;
+  --bi-ink-3: #8e8e93;
+  --bi-line: rgba(0, 0, 0, 0.07);
+  --bi-axis: rgba(0, 0, 0, 0.14);
+  --bi-ring: rgba(0, 0, 0, 0.05);
+  --bi-hover: rgba(0, 0, 0, 0.025);
+  --bi-fill: rgba(118, 118, 128, 0.12);
+  --bi-accent: var(--bi-blue);
+  --bi-accent-soft: #9cc8f5;
+  --bi-spark: #c7c7cc;
+  --bi-s1: var(--bi-blue);
+  --bi-s2: var(--bi-orange);
+  --bi-s3: var(--bi-pink);
+  --bi-good: #248a3d;
+  --bi-good-solid: #34c759;
+  --bi-good-bg: rgba(52, 199, 89, 0.13);
+  --bi-crit: #d70015;
+  --bi-crit-bg: rgba(255, 59, 48, 0.1);
+  --bi-warn: #a05a00;
+  --bi-warn-solid: #ff9500;
+  --bi-warn-bg: rgba(255, 149, 0, 0.14);
+  /* Overdue severity: yellow → orange → red → deep red */
+  --bi-sev-1: #ffcc00;
+  --bi-sev-2: #ff9500;
+  --bi-sev-3: #ff3b30;
+  --bi-sev-4: #c4001d;
+  --bi-focus: rgba(0, 122, 255, 0.45);
+  --bi-shadow: 0 0 0 1px var(--bi-ring), 0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 24px -12px rgba(0, 0, 0, 0.1);
+  --bi-shadow-hover: 0 0 0 1px var(--bi-ring), 0 2px 4px rgba(0, 0, 0, 0.04),
+    0 18px 40px -16px rgba(0, 0, 0, 0.18);
+  --bi-radius: 20px;
+
+  color: var(--bi-ink);
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  background: var(--bi-canvas);
+}
+.dark .bi {
+  --bi-blue: #0a84ff;
+  --bi-indigo: #5e5ce6;
+  --bi-purple: #bf5af2;
+  --bi-pink: #ff375f;
+  --bi-red: #ff453a;
+  --bi-orange: #ff9f0a;
+  --bi-yellow: #ffd60a;
+  --bi-green: #30d158;
+  --bi-mint: #63e6e2;
+  --bi-teal: #40c8e0;
+  --bi-cyan: #64d2ff;
+
+  --bi-canvas: #000000;
+  --bi-surface: #1c1c1e;
+  --bi-surface-2: #232325;
+  --bi-ink: #f5f5f7;
+  --bi-ink-2: #a1a1a6;
+  --bi-ink-3: #8e8e93;
+  --bi-line: rgba(255, 255, 255, 0.08);
+  --bi-axis: rgba(255, 255, 255, 0.16);
+  --bi-ring: rgba(255, 255, 255, 0.07);
+  --bi-hover: rgba(255, 255, 255, 0.035);
+  --bi-fill: rgba(118, 118, 128, 0.24);
+  --bi-accent-soft: #1d5a99;
+  --bi-spark: #48484a;
+  --bi-good: #30d158;
+  --bi-good-solid: #30d158;
+  --bi-good-bg: rgba(48, 209, 88, 0.16);
+  --bi-crit: #ff453a;
+  --bi-crit-bg: rgba(255, 69, 58, 0.16);
+  --bi-warn: #ffb340;
+  --bi-warn-solid: #ff9f0a;
+  --bi-warn-bg: rgba(255, 159, 10, 0.16);
+  --bi-sev-1: #ffd60a;
+  --bi-sev-2: #ff9f0a;
+  --bi-sev-3: #ff453a;
+  --bi-sev-4: #ff6961;
+  --bi-focus: rgba(10, 132, 255, 0.55);
+  --bi-shadow: 0 0 0 1px var(--bi-ring);
+  --bi-shadow-hover: 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 18px 40px -16px rgba(0, 0, 0, 0.7);
+}
+
+/* ── Page header ─────────────────────────────────────────────────────────── */
+.bi-hero-title {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--bi-ink);
+}
+@media (max-width: 639px) {
+  .bi-hero-title {
+    font-size: 24px;
+  }
+}
+.bi-hero-sub {
+  margin-top: 6px;
+  font-size: 15px;
+  color: var(--bi-ink-2);
+}
+.bi-hero-sub strong {
+  color: var(--bi-ink);
+  font-weight: 600;
+}
+
+/* Section heading */
+.bi-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--bi-ink);
+  margin: 0 0 14px;
+}
+
+/* ── Icon tile: flat tint, coloured glyph ─────────────────────────────────── */
+.bi-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--accent, var(--bi-blue));
+  background: color-mix(in srgb, var(--accent, var(--bi-blue)) 12%, transparent);
+}
+.bi-icon svg {
+  width: 16px;
+  height: 16px;
+  color: var(--accent, var(--bi-blue));
+  stroke-width: 2;
+}
+.bi-icon-sm {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+.bi-icon-sm svg {
+  width: 14px;
+  height: 14px;
+}
+.bi-icon[data-round] {
+  border-radius: 999px;
+}
+
+/* Initials avatar */
+.bi-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--accent) 78%, var(--bi-ink));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* Small color dot (table headers, legends) */
+.bi-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 999px;
+  vertical-align: 1px;
+  background: var(--accent, var(--bi-blue));
+}
+
+/* ── Panels ──────────────────────────────────────────────────────────────── */
+.bi-panel {
+  background: var(--bi-surface);
+  border-radius: var(--bi-radius);
+  box-shadow: var(--bi-shadow);
+  min-width: 0;
+  overflow: hidden;
+}
+.bi-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 18px 22px 4px;
+}
+.bi-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--bi-ink);
+  line-height: 1.3;
+}
+.bi-panel-sub {
+  font-size: 13px;
+  color: var(--bi-ink-3);
+  margin-top: 1px;
+  line-height: 1.35;
+}
+.bi-panel-body {
+  padding: 16px 22px 20px;
+}
+
+/* Chips */
+.bi-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bi-surface) 70%, transparent);
+  box-shadow: 0 0 0 1px var(--bi-ring);
+  backdrop-filter: saturate(1.6) blur(12px);
+  font-size: 13px;
+  color: var(--bi-ink-2);
+  line-height: 1.2;
+}
+.bi-chip strong {
+  color: var(--bi-ink);
+  font-weight: 600;
+}
+.bi-chip[data-tone="accent"] {
+  background: color-mix(in srgb, var(--bi-blue) 12%, transparent);
+  box-shadow: none;
+  color: var(--bi-blue);
+}
+.bi-chip[data-tone="accent"] strong {
+  color: inherit;
+}
+.bi-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--bi-green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bi-green) 22%, transparent);
+}
+
+/* ── KPI card ────────────────────────────────────────────────────────────── */
+.bi-kpi {
+  --accent: var(--bi-blue);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  container-type: inline-size;
+  min-width: 0;
+  min-height: 124px;
+  padding: 18px 20px;
+  overflow: hidden;
+  border-radius: var(--bi-radius);
+  box-shadow: var(--bi-shadow);
+  background: var(--bi-surface);
+  transition: box-shadow 0.2s ease;
+}
+.bi-kpi:hover {
+  box-shadow: var(--bi-shadow-hover);
+}
+.bi-kpi-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.bi-kpi-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--bi-ink-2);
+}
+.bi-kpi-value {
+  margin-top: 12px;
+  /* Scales with the card width so long ₹ amounts stay on one line. */
+  font-size: clamp(21px, 11.5cqi, 32px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  color: var(--bi-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bi-kpi-value[data-neg="true"] {
+  color: var(--bi-crit);
+}
+.bi-kpi-foot {
+  margin-top: auto;
+  padding-top: 8px;
+}
+.bi-kpi-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--bi-ink-2);
+  line-height: 1.35;
+}
+.bi-kpi-hint > span:last-child:not(:first-child) {
+  flex: none;
+  color: var(--bi-ink-3);
+}
+/* Sparkline bleeds to the card edges. */
+.bi-spark {
+  position: relative;
+  margin: 12px -20px -18px;
+  pointer-events: none;
+}
+.bi-spark svg {
+  height: 100%;
+}
+
+/* Hero variant (Net): pale tint of green (or red when negative), dark text */
+.bi-kpi[data-variant="hero"] {
+  --hero: var(--bi-green);
+  background: color-mix(in srgb, var(--hero) 6%, var(--bi-surface));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--hero) 22%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.bi-kpi[data-variant="hero"][data-tone="neg"] {
+  --hero: var(--bi-red);
+}
+.bi-kpi[data-variant="hero"] .bi-kpi-value,
+.bi-kpi[data-variant="hero"] .bi-kpi-value[data-neg="true"] {
+  color: color-mix(in srgb, var(--hero) 72%, var(--bi-ink));
+}
+.bi-kpi[data-variant="hero"][data-tone="neg"] .bi-icon {
+  --accent: var(--bi-red) !important;
+}
+.bi-kpi[data-variant="hero"] .bi-kpi-value {
+  font-size: clamp(26px, 12.5cqi, 44px);
+}
+/* The tall sparkline only makes sense in the xl bento tile. */
+@media (max-width: 1279px) {
+  .bi-kpi[data-size="lg"] .bi-spark {
+    height: 72px !important;
+  }
+}
+.bi-kpi[data-variant="hero"][data-size="lg"] .bi-kpi-value {
+  margin-top: 10px;
+  font-size: clamp(22px, 8.5cqi, 32px);
+}
+
+/* FY bento: a notch tighter than the standard cards */
+.bi-bento .bi-kpi {
+  min-height: 0;
+  padding: 13px 15px;
+}
+.bi-bento .bi-kpi-label {
+  font-size: 13px;
+}
+.bi-bento .bi-kpi-hint {
+  font-size: 12px;
+}
+.bi-bento .bi-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+.bi-bento .bi-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.bi-bento .bi-kpi-value {
+  margin-top: 7px;
+  font-size: clamp(18px, 8cqi, 21px);
+}
+.bi-bento .bi-kpi-foot {
+  padding-top: 6px;
+}
+.bi-bento .bi-spark {
+  margin: 6px -15px -13px;
+}
+
+/* Entrance: a single soft rise */
+@keyframes bi-rise {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.bi-rise {
+  animation: bi-rise 0.25s ease-out both;
+}
+
+/* ── Tabs: Apple segmented control ───────────────────────────────────────── */
+.bi-tabs-list {
+  display: inline-flex;
+  align-self: flex-start;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--bi-fill);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.bi-tabs-trigger {
+  flex: none;
+  height: auto;
+  padding: 7px 16px;
+  border: 0;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bi-ink);
+  background: transparent;
+  box-shadow: none;
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.bi-tabs-trigger:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+.bi-tabs-trigger[data-state="active"] {
+  background: var(--bi-surface);
+  font-weight: 600;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.1),
+    0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
+.dark .bi-tabs-trigger[data-state="active"] {
+  background: #636366;
+  box-shadow: none;
+}
+.bi-tabs-trigger:focus-visible {
+  outline: 2px solid var(--bi-focus);
+  outline-offset: 1px;
+}
+.bi-tabs-count {
+  margin-left: 6px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: var(--bi-red);
+  color: #fff;
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+.bi-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+.bi-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  /* Frosted glass: rows stay faintly visible as they scroll underneath. */
+  background: color-mix(in srgb, var(--bi-surface) 80%, transparent);
+  -webkit-backdrop-filter: saturate(1.8) blur(14px);
+  backdrop-filter: saturate(1.8) blur(14px);
+  color: var(--bi-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 12px 22px 10px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--bi-line);
+}
+.bi-table td {
+  padding: 11px 22px;
+  border-bottom: 1px solid var(--bi-line);
+  color: var(--bi-ink);
+  white-space: nowrap;
+}
+.bi-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.bi-table thead th.num {
+  text-align: right;
+}
+.bi-table tbody tr {
+  transition: background 0.12s ease;
+}
+.bi-table tbody tr:hover td {
+  background: var(--bi-hover);
+}
+.bi-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.bi-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  background: color-mix(in srgb, var(--bi-surface-2) 82%, transparent);
+  -webkit-backdrop-filter: saturate(1.8) blur(14px);
+  backdrop-filter: saturate(1.8) blur(14px);
+  font-weight: 700;
+  border-top: 1px solid var(--bi-line);
+  border-bottom: 0;
+}
+.bi-table tbody tr[data-muted="true"] td {
+  color: var(--bi-ink-3);
+}
+.bi-table tbody tr[aria-current="date"] td {
+  background: color-mix(in srgb, var(--bi-blue) 7%, var(--bi-surface));
+  font-weight: 600;
+}
+.bi-table-pin-first th:first-child,
+.bi-table-pin-first td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bi-surface);
+}
+.bi-table-pin-first thead th:first-child {
+  z-index: 2;
+}
+.bi-table-pin-first tfoot td:first-child {
+  z-index: 2;
+  background: var(--bi-surface-2);
+}
+.bi-table-pin-first tbody tr[aria-current="date"] td:first-child {
+  z-index: 2;
+  background: color-mix(in srgb, var(--bi-blue) 7%, var(--bi-surface));
+  box-shadow: inset 3px 0 0 var(--bi-blue);
+}
+.bi-table-pin-first tbody tr:hover td:first-child {
+  background: color-mix(in srgb, var(--bi-ink) 2.5%, var(--bi-surface));
+}
+.bi-table-compact thead th,
+.bi-table-compact td {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.bi-table-compact td {
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+/* Fixed row heights so the scroll box shows exactly 10 rows. */
+.bi-table-compact {
+  --bi-th-h: 40px;
+  --bi-row-h: 54px;
+  --bi-tf-h: 42px;
+}
+.bi-table-compact thead tr {
+  height: var(--bi-th-h);
+}
+.bi-table-compact tbody tr {
+  height: var(--bi-row-h);
+}
+.bi-table-compact tfoot tr {
+  height: var(--bi-tf-h);
+}
+.bi-table-scroll {
+  margin-top: 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  /* header (40 + 1px rule) + 10 rows (54 + 1px rule) + total (42) */
+  max-height: calc(41px + 10 * 55px + 42px);
+}
+.bi-table-compact th:first-child,
+.bi-table-compact td:first-child {
+  padding-left: 22px;
+}
+.bi-table-compact th:last-child,
+.bi-table-compact td:last-child {
+  padding-right: 22px;
+}
+.bi-table-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 22px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--bi-ink);
+}
+
+/* Status pills */
+.bi-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-transform: capitalize;
+  background: var(--bi-fill);
+  color: var(--bi-ink-2);
+}
+.bi-pill[data-tone="good"] {
+  background: var(--bi-good-bg);
+  color: var(--bi-good);
+}
+.bi-pill[data-tone="crit"] {
+  background: var(--bi-crit-bg);
+  color: var(--bi-crit);
+}
+.bi-pill[data-tone="info"] {
+  background: color-mix(in srgb, var(--bi-blue) 12%, transparent);
+  color: var(--bi-blue);
+}
+.bi-pill[data-tone="warn"] {
+  background: var(--bi-warn-bg);
+  color: var(--bi-warn);
+}
+
+/* Share meter */
+.bi-meter {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bi-fill);
+  overflow: hidden;
+}
+.bi-meter > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--meter, var(--bi-blue)) 70%, #fff),
+    var(--meter, var(--bi-blue))
+  );
+  transition: width 0.5s ease;
+}
+
+/* Panel header stat */
+.bi-stat {
+  text-align: right;
+}
+.bi-stat-label {
+  font-size: 12px;
+  color: var(--bi-ink-3);
+}
+.bi-stat-value {
+  margin-top: 1px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  color: var(--bi-ink);
+}
+@media (max-width: 639px) {
+  .bi-stat {
+    text-align: left;
+  }
+}
+
+/* List rows (recent activity) */
+.bi-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 22px;
+  transition: background 0.12s ease;
+}
+.bi-row:hover {
+  background: var(--bi-hover);
+}
+
+/* Empty state */
+.bi-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 36px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--bi-ink-3);
+}
+.bi-empty svg {
+  width: 22px;
+  height: 22px;
+  color: var(--bi-spark);
+}
+
+/* ── Recharts ────────────────────────────────────────────────────────────── */
+.bi .recharts-cartesian-grid line {
+  stroke: var(--bi-line);
+  stroke-dasharray: none;
+}
+.bi .recharts-cartesian-axis-tick-value {
+  fill: var(--bi-ink-3);
+  font-size: 11px;
+}
+.bi .recharts-tooltip-wrapper {
+  outline: none;
+}
+.bi .recharts-surface:focus,
+.bi .recharts-sector:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bi-rise,
+  .bi-spark svg {
+    animation: none;
+  }
+  .bi-kpi,
+  .bi-tabs-trigger,
+  .bi-table tbody tr,
+  .bi-row,
+  .bi-meter > span {
+    transition: none;
+  }
+  .bi-kpi:hover {
+    transform: none;
+  }
+}
+
+/* ── Date navigator: pill with prev / date / next / today ───────────────── */
+.bi-datenav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bi-surface);
+  box-shadow: var(--bi-shadow);
+}
+.bi-datenav-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  color: var(--bi-ink-2);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.bi-datenav-btn:hover:not(:disabled) {
+  background: var(--bi-fill);
+  color: var(--bi-ink);
+}
+.bi-datenav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.bi-datenav-btn:focus-visible,
+.bi-datenav-today:focus-visible {
+  outline: 2px solid var(--bi-focus);
+  outline-offset: 1px;
+}
+.bi .bi-datenav-input {
+  width: auto;
+  height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--bi-ink);
+}
+.bi .bi-datenav-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--bi-focus);
+}
+/* Solid accent pill (no gradient) */
+.bi-datenav-today {
+  height: 34px;
+  padding: 0 14px;
+  margin-left: 2px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--bi-blue);
+}
+
+/* Form fields inside dashboard panels */
+.bi .bi-field {
+  height: 42px;
+  border-radius: 12px;
+  border-color: var(--bi-line);
+  background: var(--bi-surface-2);
+  box-shadow: none;
+  font-variant-numeric: tabular-nums;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+.bi textarea.bi-field {
+  height: auto;
+  min-height: 64px;
+}
+.bi .bi-field:focus-visible {
+  border-color: var(--bi-blue);
+  background: var(--bi-surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bi-blue) 18%, transparent);
+}
+.bi-field-suffix {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--bi-ink-3);
+  pointer-events: none;
+}
+.bi .bi-panel label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bi-ink-2);
+}

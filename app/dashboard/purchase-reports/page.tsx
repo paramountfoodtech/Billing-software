@@ -5,8 +5,8 @@ import { PurchaseReportsPageClient } from "@/components/purchase-reports-page-cl
 import type {
   PurchaserReportRow,
   ChallanTrackingRow,
-  MortalityReportRow,
 } from "@/components/purchase-reports-table"
+import { buildMortalityRows } from "@/lib/mortality-report"
 
 export const revalidate = 0
 
@@ -230,118 +230,7 @@ export default async function PurchaseReportsPage({
     }
   })
 
-  const challanLabelByInvoice = new Map<string, string>()
-  for (const c of challans) {
-    if (!c.purchase_invoice_id) continue
-    const existing = challanLabelByInvoice.get(c.purchase_invoice_id)
-    challanLabelByInvoice.set(
-      c.purchase_invoice_id,
-      existing ? `${existing}, ${c.challan_number}` : c.challan_number,
-    )
-  }
-
-  const challanById = new Map<string, (typeof challans)[number]>()
-  for (const c of challans) {
-    challanById.set(c.id, c)
-  }
-
-  const invoicedChallanIds = new Set<string>()
-  const mortalityRows: MortalityReportRow[] = []
-
-  for (const inv of monthInvoices) {
-    const mortBirds = Number(inv.mortality_birds || 0)
-    const mortWeight = Number(inv.mortality_weight_kg || 0)
-    const hasDisc = Boolean(inv.has_discrepancy)
-    const discBirds = Number(inv.discrepancy_birds || 0)
-    const discWeight = Number(inv.discrepancy_weight_kg || 0)
-
-    if (mortBirds > 0 || mortWeight > 0 || hasDisc) {
-      const isAccepted = Boolean(inv.is_mortality_accepted)
-      const rate = Number(inv.price_per_kg || 0)
-      const billableWeight = Number(inv.total_weight_kg || 0)
-      const billableBirds = Number(inv.total_birds || 0)
-      const grossWeight = isAccepted
-        ? billableWeight + mortWeight
-        : billableWeight
-      const grossBirds = isAccepted
-        ? billableBirds + mortBirds
-        : billableBirds
-
-      const lossAmount = !isAccepted
-        ? Number(inv.mortality_loss_amount || mortWeight * rate)
-        : 0
-      const deductedAmount = isAccepted
-        ? Math.round((mortWeight * rate + Number.EPSILON) * 100) / 100
-        : 0
-
-      const linkedChallanLabel =
-        challanLabelByInvoice.get(inv.id) ||
-        (inv.challan_id
-          ? challanById.get(inv.challan_id)?.challan_number
-          : null) ||
-        "—"
-
-      if (inv.challan_id) invoicedChallanIds.add(inv.challan_id)
-
-      const purchaserObj = inv.purchasers as unknown as { name: string } | null
-
-      mortalityRows.push({
-        id: inv.id,
-        invoice_id: inv.id,
-        invoice_number: inv.invoice_number,
-        purchaser_invoice_number: inv.purchaser_invoice_number,
-        challan_number: linkedChallanLabel,
-        date: inv.issue_date,
-        purchaser_id: inv.purchaser_id,
-        purchaser_name: purchaserObj?.name || "Unknown",
-        gross_birds: grossBirds,
-        gross_weight_kg: grossWeight,
-        mortality_birds: mortBirds,
-        mortality_weight_kg: mortWeight,
-        rate_per_kg: rate,
-        is_mortality_accepted: isAccepted,
-        status: isAccepted ? "accepted" : "neglected",
-        billable_birds: billableBirds,
-        billable_weight_kg: billableWeight,
-        loss_amount: lossAmount,
-        deducted_amount: deductedAmount,
-        has_discrepancy: hasDisc,
-        discrepancy_birds: discBirds,
-        discrepancy_weight_kg: discWeight,
-        discrepancy_notes: inv.discrepancy_notes,
-      })
-    }
-  }
-
-  for (const c of challans) {
-    if (c.purchase_invoice_id || invoicedChallanIds.has(c.id)) continue
-    const mortBirds = Number(c.mortality_birds || 0)
-    const mortWeight = Number(c.mortality_weight_kg || 0)
-    if (mortBirds > 0 || mortWeight > 0) {
-      const purchaserObj = c.purchasers as unknown as { name: string } | null
-      mortalityRows.push({
-        id: c.id,
-        invoice_id: null,
-        invoice_number: null,
-        purchaser_invoice_number: null,
-        challan_number: c.challan_number,
-        date: c.challan_date,
-        purchaser_id: c.purchaser_id,
-        purchaser_name: purchaserObj?.name || "Unknown",
-        gross_birds: Number(c.total_birds || 0),
-        gross_weight_kg: Number(c.total_weight_kg || 0),
-        mortality_birds: mortBirds,
-        mortality_weight_kg: mortWeight,
-        rate_per_kg: 0,
-        is_mortality_accepted: false,
-        status: "pending",
-        billable_birds: Number(c.total_birds || 0),
-        billable_weight_kg: Number(c.total_weight_kg || 0),
-        loss_amount: 0,
-        deducted_amount: 0,
-      })
-    }
-  }
+  const mortalityRows = buildMortalityRows({ invoices: monthInvoices, challans })
 
   return (
     <DashboardPageWrapper title="Purchase Reports">

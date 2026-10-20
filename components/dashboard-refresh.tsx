@@ -29,16 +29,21 @@ export function DashboardRefresh() {
   };
 
   return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      {lastUpdated && (
-        <span>Updated {formatIndianTime(lastUpdated)}</span>
+    <div className="bi-chip">
+      <span className="bi-live-dot" aria-hidden />
+      {lastUpdated ? (
+        <span>
+          Updated <strong>{formatIndianTime(lastUpdated)}</strong>
+        </span>
+      ) : (
+        <span>Live</span>
       )}
       <IconTooltip label="Refresh data">
         <Button
           variant="ghost"
           size="sm"
           onClick={handleManualRefresh}
-          className="h-7 w-7 p-0"
+          className="-mr-1.5 h-6 w-6 rounded-full p-0"
         >
           <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
         </Button>

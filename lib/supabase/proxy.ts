@@ -41,8 +41,14 @@ export async function updateSession(request: NextRequest) {
     (request.nextUrl.pathname.startsWith("/auth/login") || request.nextUrl.pathname.startsWith("/auth/sign-up")) &&
     user
   ) {
+    // Super Admin lands on the Daily Activity Report; everyone else on /dashboard
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle()
     const url = request.nextUrl.clone()
-    url.pathname = "/dashboard"
+    url.pathname = profile?.role === "super_admin" ? "/dashboard/dar" : "/dashboard"
     return NextResponse.redirect(url)
   }
 

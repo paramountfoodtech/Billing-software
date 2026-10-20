@@ -1,7 +1,6 @@
-import { Activity, PackageCheck, Scale, TrendingUp } from "lucide-react"
+import { Activity, Package, PackageCheck, Scale, TrendingUp } from "lucide-react"
 import type { ReactNode } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { KpiValue } from "@/components/kpi-value"
+import { BiKpi } from "@/components/bi-ui"
 import { createClient } from "@/lib/supabase/server"
 import { getIndianToday } from "@/lib/date-time"
 import { fmtPercent } from "@/lib/material-calculations"
@@ -22,25 +21,29 @@ function OpsKpiCard({
   title,
   icon,
   display,
+  accent,
+  negative,
+  index,
   className,
 }: {
   title: string
   icon: ReactNode
   display: string
+  accent: string
+  negative?: boolean
+  index?: number
   className?: string
 }) {
   return (
-    <Card className="min-w-0 overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-        <CardTitle className="text-xs sm:text-sm font-medium truncate">{title}</CardTitle>
-        {icon}
-      </CardHeader>
-      <CardContent className="min-w-0">
-        <KpiValue display={display} className={className}>
-          {display}
-        </KpiValue>
-      </CardContent>
-    </Card>
+    <BiKpi
+      index={index}
+      className={className}
+      label={title}
+      icon={icon}
+      display={display}
+      accent={accent}
+      negative={negative}
+    />
   )
 }
 
@@ -100,74 +103,84 @@ export async function MaterialDashboardWidgets() {
   const monthYield = `${fmtPercent(monthlyAverageYield)}%`
 
   return (
-    <div className="mt-8 space-y-6">
-      <div>
-        <h2 className="mb-3 text-lg font-semibold">Today&apos;s Operations</h2>
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="space-y-8">
+      <section>
+        <h2 className="bi-eyebrow">Today&apos;s operations</h2>
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
           <OpsKpiCard
+            index={0}
             title="Purchased Weight"
-            icon={<Scale className="h-4 w-4 shrink-0 text-blue-600" />}
+            icon={<Scale />}
             display={formatKg(todayPurchasedWeight)}
-            className="text-blue-700"
+            accent="var(--bi-blue)"
           />
           <OpsKpiCard
+            index={1}
             title="Processed Weight"
-            icon={<PackageCheck className="h-4 w-4 shrink-0 text-green-600" />}
+            icon={<PackageCheck />}
             display={formatKg(Number(todayProcessing?.processed_weight_kg || 0))}
-            className="text-green-700"
+            accent="var(--bi-teal)"
           />
           <OpsKpiCard
+            index={2}
             title="Mortality Weight"
-            icon={<Activity className="h-4 w-4 shrink-0 text-red-600" />}
+            icon={<Activity />}
             display={formatKg(Number(todayProcessing?.mortality_weight_kg || 0))}
-            className="text-red-600"
+            accent="var(--bi-red)"
           />
           <OpsKpiCard
+            index={3}
             title="Leftover Weight"
-            icon={<Scale className="h-4 w-4 shrink-0 text-amber-600" />}
+            icon={<Package />}
             display={formatKg(
               Number(todayProcessing?.actual_leftover_weight_kg || 0),
             )}
-            className="text-amber-700"
+            accent="var(--bi-orange)"
           />
           <OpsKpiCard
+            index={4}
+            className="col-span-2 lg:col-span-1"
             title="Yield %"
-            icon={<TrendingUp className="h-4 w-4 shrink-0 text-purple-600" />}
+            icon={<TrendingUp />}
             display={todayYield}
-            className="text-purple-700"
+            accent="var(--bi-green)"
           />
         </div>
-      </div>
+      </section>
 
-      <div>
-        <h2 className="mb-3 text-lg font-semibold">Monthly Operations</h2>
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <section>
+        <h2 className="bi-eyebrow">Monthly operations</h2>
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           <OpsKpiCard
+            index={0}
             title="Purchase Weight"
-            icon={<Scale className="h-4 w-4 shrink-0 text-blue-600" />}
+            icon={<Scale />}
             display={formatKg(monthlyPurchaseWeight)}
-            className="text-blue-700"
+            accent="var(--bi-blue)"
           />
           <OpsKpiCard
+            index={1}
             title="Processing Weight"
-            icon={<PackageCheck className="h-4 w-4 shrink-0 text-green-600" />}
+            icon={<PackageCheck />}
             display={formatKg(monthlyProcessingWeight)}
-            className="text-green-700"
+            accent="var(--bi-teal)"
           />
           <OpsKpiCard
+            index={2}
             title="Mortality Weight"
-            icon={<Activity className="h-4 w-4 shrink-0 text-red-600" />}
+            icon={<Activity />}
             display={formatKg(monthlyMortalityWeight)}
-            className="text-red-600"
+            accent="var(--bi-red)"
           />
           <OpsKpiCard
+            index={3}
             title="Average Yield %"
-            icon={<TrendingUp className="h-4 w-4 shrink-0 text-purple-600" />}
+            icon={<TrendingUp />}
             display={monthYield}
-            className="text-purple-700"
+            accent="var(--bi-green)"
           />
         </div>
-      </div>
+      </section>
     </div>
   )
 }

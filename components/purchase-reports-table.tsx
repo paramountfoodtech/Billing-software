@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { MortalityReportRow } from "@/lib/mortality-report";
 import {
   Table,
   TableBody,
@@ -59,31 +60,7 @@ export interface ChallanTrackingRow {
   invoice_number: string | null;
 }
 
-export interface MortalityReportRow {
-  id: string;
-  invoice_id: string | null;
-  invoice_number: string | null;
-  purchaser_invoice_number?: string | null;
-  challan_number: string;
-  date: string;
-  purchaser_id?: string | null;
-  purchaser_name: string;
-  gross_birds: number;
-  gross_weight_kg: number;
-  mortality_birds: number;
-  mortality_weight_kg: number;
-  rate_per_kg: number;
-  is_mortality_accepted: boolean;
-  status: "accepted" | "neglected" | "pending";
-  billable_birds: number;
-  billable_weight_kg: number;
-  loss_amount: number;
-  deducted_amount: number;
-  has_discrepancy?: boolean;
-  discrepancy_birds?: number;
-  discrepancy_weight_kg?: number;
-  discrepancy_notes?: string | null;
-}
+export type { MortalityReportRow } from "@/lib/mortality-report";
 
 interface PurchaseReportsTableProps {
   purchaserRows: PurchaserReportRow[];

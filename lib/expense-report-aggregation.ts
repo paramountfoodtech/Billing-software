@@ -133,17 +133,27 @@ export function buildExpenseCategoryRows(
 
 /** Build KPI expense amounts (non-salary expenses + paid payroll). */
 export function buildExpenseAmountsForKpi(
-  entries: ExpenseEntryForSalaryFilter & {
-    id?: string;
-    total_amount: string | number;
-  }[],
+  entries: Array<
+    ExpenseEntryForSalaryFilter & {
+      id?: string;
+      total_amount: string | number;
+      entry_month?: string | null;
+      issue_date?: string | null;
+    }
+  >,
   paidSalaries: PaidSalaryForReport[],
   linkedExpenseEntryIds?: Set<string>,
-): Array<{ total_amount: string | number }> {
+): Array<{ total_amount: string | number; month: string | null }> {
   return [
     ...entries
       .filter((entry) => !isLegacySalaryExpenseEntry(entry, linkedExpenseEntryIds))
-      .map((entry) => ({ total_amount: entry.total_amount })),
-    ...paidSalaries.map((row) => ({ total_amount: row.net_payable })),
+      .map((entry) => ({
+        total_amount: entry.total_amount,
+        month: entry.entry_month ?? entry.issue_date?.slice(0, 7) ?? null,
+      })),
+    ...paidSalaries.map((row) => ({
+      total_amount: row.net_payable,
+      month: row.salary_month ?? null,
+    })),
   ];
 }
